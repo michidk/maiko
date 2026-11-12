@@ -43,7 +43,7 @@ Gate: reproducible reference scenario and evidence-backed initial runtime map. N
 
 ## Task 2: Introduce a valid native entry adapter
 
-Files: add runtime/native_entry.asm, runtime/native_main.c, runtime/guest_abi.h, tests/abi_harness.asm and tests/abi_harness.c; modify pipeline.py and build_windows.py for an explicitly named native target.
+Files: add runtime/native_entry.asm, runtime/native_main.c, runtime/guest_abi.h, tests/abi_harness.asm and tests/abi_harness.c; modify tools/pipeline.py and tools/build_windows.py for an explicitly named native target.
 
 Interfaces: guest pointers are uint32_t; native pointers are never silently truncated. Define guest argument storage and guest-stack allocation in guest_abi.h after confirming the original convention. Native entry accepts argc/argv through the verified original registers, not the Windows calling convention.
 
@@ -72,7 +72,7 @@ Gate: original engine successfully opens and parses its startup configuration/as
 
 ## Task 4: Prove and connect a reusable Glide backend
 
-Files: add glide/README.md, glide/backend_smoke.c, glide/guest_glide.h and glide/bridge.c; extend build_windows.py and metadata mappings.
+Files: add glide/README.md, glide/backend_smoke.c, glide/guest_glide.h and glide/bridge.c; extend tools/build_windows.py and metadata mappings.
 
 - [ ] Evaluate OpenGLide as a source-build candidate, including relevant SDL2/64-bit forks. Record pinned revision, license and build changes. Treat nGlide/dgVoodoo as possible Windows comparison backends only after checking binary architecture and exposed API; do not assume a bundled 32-bit DLL loads into the x64 host.
 - [ ] Build a standalone native smoke test that creates a window, draws a textured triangle, swaps buffers, locks/unlocks the framebuffer and exits. Verify pixels or captures as well as return codes.

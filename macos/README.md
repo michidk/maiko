@@ -5,7 +5,7 @@ M-HT/SR's [Albion build configuration](https://github.com/M-HT/SR/blob/ac690ddf3
 From the repository root:
 
 ```sh
-python3 check_macos_backend.py
+python3 -m tools.check_macos_backend
 ```
 
 Requires Python 3.11 or newer, Docker and the pinned SR/OpenGLide checkouts already used by the experiment, under `.cache/`. The script downloads the SDK and SDL frameworks if absent. The SDK comes from the third-party joseluisq/macosx-sdks mirror; its hash matches that mirror's published checksum, not an Apple-signed checksum. SDL downloads use official release URLs with locally pinned content hashes. These checks detect changed bytes; they do not independently authenticate the initial downloads. The SDK stays in local build tooling and is excluded from runtime packages.
@@ -20,6 +20,6 @@ The triangle test needs the matching `libredguard-glide-ARCH.dylib` renamed to `
 
 `assemble.py` retains the initial isolated NASM ABI experiment. The original game's 32-bit absolute relocations do not assemble through that adapter, so it is not the selected game backend.
 
-See [the implementation checkpoint](../MACOS_PLAN.md) for the remaining game translation, CPU-state adapter, guest arena and real Mac checks. Existing Windows/Linux game builds continue using their established backend.
+See [the implementation checkpoint](../docs/development/MACOS_PLAN.md) for the remaining game translation, CPU-state adapter, guest arena and real Mac checks. Existing Windows/Linux game builds continue using their established backend.
 
 The requested game delivery is a separate Mac ZIP linked from the preview download page. It must include the original game files under `game/`, required Mac runtime dependencies and a `RUN.command` that resolves its game directory relative to itself. The user should be able to extract and launch without copying a Windows installation. This package does not exist yet; the current backend diagnostics do not satisfy that requirement. Game assets belong only in the requested test download, not Git or source archives.

@@ -10,10 +10,10 @@ import subprocess
 import time
 import uuid
 import sys
-from build_windows import IMAGE, ROOT, run, ensure_tool_image
-from sr_heap import stage_sr_heap
-from sr_audio import stage_sr_audio
-from windows_sdl import stage_windows_sdl
+from .build_windows import IMAGE, ROOT, run, ensure_tool_image
+from .sr_heap import stage_sr_heap
+from .sr_audio import stage_sr_audio
+from .windows_sdl import stage_windows_sdl
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)

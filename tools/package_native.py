@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import zipfile
 
-ROOT=Path(__file__).resolve().parent
+ROOT=Path(__file__).resolve().parents[1]
 BACKEND='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
 
 def main():

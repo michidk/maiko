@@ -15,10 +15,10 @@ import time
 import struct
 import tempfile
 
-from le_image import Image
+from .le_image import Image
 from glide.imports import emit as emit_glide
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / '.cache'
 SR_COMMIT = 'ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3'
 

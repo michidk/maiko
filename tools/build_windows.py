@@ -9,7 +9,7 @@ import subprocess
 import time
 import uuid
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 IMAGE = 'redguard-recomp-tools:bookworm'
 
 

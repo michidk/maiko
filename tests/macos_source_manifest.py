@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('macos_backend', ROOT / 'check_macos_backend.py')
+spec = importlib.util.spec_from_file_location('macos_backend', ROOT / 'tools/check_macos_backend.py')
 backend = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(backend)
 
@@ -14,7 +14,7 @@ class SourceManifest(unittest.TestCase):
     def test_changed_and_added_sources_are_rejected_but_bytecode_is_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ['check_macos_backend.py', 'macos/test.c', 'runtime/test.h',
+            for name in ['tools/check_macos_backend.py', 'macos/test.c', 'runtime/test.h',
                          *('patches/' + name for name in backend.PATCHES)]:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)

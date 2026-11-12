@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import urllib.request
-from build_windows import ROOT
+from .build_windows import ROOT
 
 PACKAGES=[
  ('SDL','2.30.11','SDL2','0590db0a47b564aab92499ed03eaa75db9aee17c371080caa3b05df9d49d9ff9'),
