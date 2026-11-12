@@ -44,3 +44,6 @@ Island continuation: ordinary input now reaches Brennan, selects the original Dr
 
 
 Separate-process Continue now restores the post-conversation island position and health, displays Brennan's original saved directions in the journal, and opens/closes the original inventory before clean Quit. This establishes journal persistence, not all quest state. Following the directions and activating a real door/scene transition remain next. The cabin-door diagnostic selected Brennan instead and is not counted as a door pass.
+
+
+The post-conversation route now clears the mast, crosses the authored gangway and reaches the harbour dock through original movement, preserving health and quitting cleanly. Next continue up the harbour steps toward an actual entrance. The warehouse diagnostic needs a complete selected-player observation before resuming; it has not established a scene transition.
