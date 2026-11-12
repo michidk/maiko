@@ -1,6 +1,6 @@
 # Third-party components
 
-The project-specific source retains the MIT licensing declared by the original redguard-preservation package. LICENSE records that license for this extraction. Upstream components retain their own licenses and notices. The build fetches these components into ignored .cache directories.
+Maiko's own source is MIT licensed (see LICENSE). Upstream components retain their own licenses and notices. The build fetches these components into ignored .cache directories.
 
 | Component | Source / revision | License / use |
 |---|---|---|

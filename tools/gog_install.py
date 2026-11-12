@@ -1,5 +1,6 @@
 """Stage the owned installed GOG layout for isolated runtime checks."""
 from pathlib import Path
+from .toolchain import MOUNT_ROOT, is_mountable
 
 def movie_bundle(install):
     root=Path(install).resolve()
@@ -8,7 +9,7 @@ def movie_bundle(install):
         if len(candidates)>1:raise ValueError('Ambiguous GOG movie data: '+str(directory))
         if candidates:
             bundle=candidates[0].resolve()
-            if not bundle.is_relative_to('/home/vibepod/workspaces'):
-                raise ValueError('Docker movie data must resolve under /home/vibepod/workspaces')
+            if not is_mountable(bundle):
+                raise ValueError(f'Docker movie data must resolve under {MOUNT_ROOT}')
             return bundle
     raise ValueError('No installed GOG movie data beside the selected game folder')

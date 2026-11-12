@@ -8,7 +8,7 @@ import subprocess
 import time
 import tempfile
 import uuid
-from .build_windows import ROOT, IMAGE, run, ensure_tool_image
+from .toolchain import ROOT, IMAGE, run, ensure_tool_image
 from .le_image import Image
 from .sr_heap import stage_sr_heap
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime

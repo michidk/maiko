@@ -4,7 +4,7 @@ Original: SR's x86-64 backend (SR/SR_full_x64_instr.c) does not translate BSF, J
 Replacement: adds those instructions to the x64 translator (SCAS now covers all three widths with the repeat prefix mapped to the right form), makes a fixup alias respect the no-code list, and prints the address of an unsupported jump.
 Effect: the full engine translates to x86-64 without hand-written stubs for these instructions. The generated assembly for a given input is deterministic; tools/pipeline.py compares it when this patch changes.
 Why: stock SR targets 32-bit output; the native Windows and Linux builds are 64-bit.
-Evidence: docs/development/PLATFORM.md; the Wine and Linux runs record the translated engine executing.
+Evidence: docs/architecture.md; the Wine and Linux runs record the translated engine executing.
 
 diff --git a/SR/SR_full_win32.c b/SR/SR_full_win32.c
 index 90961bc..40b5b67 100644

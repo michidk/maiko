@@ -3,7 +3,7 @@ import argparse
 import json
 from .pipeline import ROOT
 
-PRODUCTION = ('runtime', 'linux', 'audio', 'glide', 'diagnostic')
+PRODUCTION = ('runtime', 'linux', 'audio', 'glide')
 
 
 def inventory():

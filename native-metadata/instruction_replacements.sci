@@ -7,6 +7,9 @@
 # the image at that address differs. Comment lines and blank lines are removed before the
 # file is given to the translator (tools/pipeline.py, read_replacements).
 #
+# Evidence written as `history:<commit>:<path>` names a file removed from the tree before
+# publication; read it with `git show <commit>:<path>`.
+#
 # Keep this documentation current: a new entry needs Original, Replacement, Effect, Why and
 # Evidence lines and a sha256 line, or the build stops. Entries that share one comment block
 # are separated from the next block by a blank line.
@@ -16,7 +19,7 @@
 # Replacement: calls host service 9 or 10, which clears the same bit in the host's own lock state.
 # Effect: the game keeps its original lock-state logic; a native process cannot write BIOS memory or raise INT 9.
 # Why: the DOS BIOS data area and software interrupts do not exist natively.
-# Evidence: runtime/host/lib.rs services 9 and 10; docs/research/RESEARCH.md keyboard section.
+# Evidence: runtime/host/lib.rs services 9 and 10; history:aad2c0c:docs/research/RESEARCH.md keyboard section.
 # sha256: 6b503dd400ddcfbea3b5262026602b372f091e2252d7dcedcbf295435982bb5b
 loc_20DCD,20,CALL host_clear_scroll_lock
 # sha256: 6c649aedb7444e65b41d586347d927c05fc616e66ceb9b348df75d59077e2708
@@ -58,7 +61,7 @@ loc_B9D2F,9,CALL host_prepare_graphics
 # Replacement: returns zero from the conversion when EAX is null (TEST EAX,EAX; JZ to the function's zero-result path), otherwise executes the original MOV.
 # Effect: null input converts to 0. Every non-null conversion path is unchanged.
 # Why: DOS4GW lets a null read return low memory; a native process faults. The game reaches this with a null configuration string while parsing the attack/defence/taunt tables.
-# Evidence: docs/research/RESEARCH.md ('native-only byte-checked guard at original 0xEB55D'); docs/research/decisions.tsv 2026-11-11T16:15:37Z.
+# Evidence: history:aad2c0c:docs/research/RESEARCH.md ('native-only byte-checked guard at original 0xEB55D'); history:aad2c0c:docs/research/decisions.tsv 2026-11-11T16:15:37Z.
 # sha256: f07aeb88b7e724ef0713d76dbd681acc2c11e4b1fe9d7500770ded65b29bd9a5
 loc_EB55D,2,test eax,eax|jz loc_EB5C3|mov dl,[eax]
 
@@ -67,7 +70,7 @@ loc_EB55D,2,test eax,eax|jz loc_EB5C3|mov dl,[eax]
 # Replacement: RG_VARIANT_JUMP takes the variant-1 jump only when the executable hash selected variant 1 at startup; otherwise the original instruction runs.
 # Effect: both known executables behave as they do natively in their own builds.
 # Why: both must run. Which one is the unmodified release is not established.
-# Evidence: metadata/image_variants.json; docs/research/RESEARCH.md ('exactly three changed bytes').
+# Evidence: metadata/image_variants.json; history:aad2c0c:docs/research/RESEARCH.md ('exactly three changed bytes').
 # sha256: 57a97cadea0452df11971965cf92e9e279b06b4b5b2806b94dc1174a4fa06871
 loc_55441,2,RG_VARIANT_JUMP loc_5544F|jz loc_5544F
 # sha256: 86c50ee89b1749fd3d78aafa56fe1abe55d39899809d5f2cf0908a56fc213149
@@ -78,7 +81,7 @@ loc_AD96B,5,RG_VARIANT_JUMP loc_AD9E0|mov ecx,2
 # Replacement: when EDX is null, jump to the function's normal exit (loc_D5726); otherwise the original CMP.
 # Effect: an empty scan cleans up without reading memory at address 4.
 # Why: DOS can read address 4 harmlessly; a native process faults.
-# Evidence: docs/research/decisions.tsv 2026-11-11T17:34:55Z; docs/research/RESEARCH.md ('cleanup null dereference at original 0xD5963').
+# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T17:34:55Z; history:aad2c0c:docs/research/RESEARCH.md ('cleanup null dereference at original 0xD5963').
 # sha256: a2e0ef9208b2e1d50c6859cecbc4b780c6cbb4f1edb1d9347d81abbcdae81f4c
 loc_D5963,3,test edx,edx|jz loc_D5726|cmp ecx,[edx+4]
 
@@ -87,7 +90,7 @@ loc_D5963,3,test edx,edx|jz loc_D5726|cmp ecx,[edx+4]
 # Replacement: RG_FONT10_METRIC (runtime/font_metric.inc): the same read for a non-null source; 0xF000 for null. Flags are saved and restored and the upper half of EDX is preserved.
 # Effect: reproduces what the DOS reference showed for this one site.
 # Why: the DOS reference read 0xF000 from the interrupt-table high word at DS:null+0x46; native Windows faults.
-# Evidence: docs/research/decisions.tsv 2026-11-11T17:56:23Z (reference observation); docs/research/RESEARCH.md. This models the observed DOS reference, not every BIOS or every null read.
+# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T17:56:23Z (reference observation); history:aad2c0c:docs/research/RESEARCH.md. This models the observed DOS reference, not every BIOS or every null read.
 # sha256: 5007d7e7615549b9d4dd169698d7401f35a90756ce557248e6e40ae7b61cd559
 loc_BDCAD,4,RG_FONT10_METRIC
 
@@ -96,7 +99,7 @@ loc_BDCAD,4,RG_FONT10_METRIC
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/development/PLATFORM.md.
+# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_ABC0A,8,CALL host_poll_input|cmp word [loc_2055C2],0
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
@@ -129,7 +132,7 @@ loc_B5833,8,CALL host_poll_input|cmp word [loc_2055C2],0
 # Replacement: TEST EAX,EAX, a pointer check.
 # Effect: the allocation's existence is tested rather than its uninitialized content.
 # Why: the original relied on DOS memory that is not zero-filled; native pages are zero-filled and that content would reject a valid buffer.
-# Evidence: docs/research/decisions.tsv 2026-11-11T21:05:47Z (root-cause row).
+# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T21:05:47Z (root-cause row).
 # sha256: a47fe7f6ec040a966cb24a4799930b575501c9fc0592cc5f2bb577ee74f7cdda
 loc_117C5B,3,test eax,eax
 
@@ -138,7 +141,7 @@ loc_117C5B,3,test eax,eax
 # Replacement: after the load, TEST EAX,EAX and jump to the generic path (loc_9AC81 or loc_394D0) when the pointer is null.
 # Effect: objects with no animation skip the animation-type comparisons and take the generic flag clearing, without a fake record being allocated.
 # Why: the DOS reference reads a null record as the word 0xCA60, which fails both comparisons, so the generic path is what DOS takes.
-# Evidence: docs/research/decisions.tsv 2026-11-11T21:19:54Z and 21:21:53Z.
+# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T21:19:54Z and 21:21:53Z.
 # sha256: af292594c8f7811f1da7be096cbbb95241d21a79ad79d2090077259e020515dd
 loc_9AC64,6,mov eax,[eax+0x247]|test eax,eax|jz loc_9AC81
 # sha256: af292594c8f7811f1da7be096cbbb95241d21a79ad79d2090077259e020515dd
@@ -149,7 +152,7 @@ loc_3924E,6,mov eax,[eax+0x247]|test eax,eax|jz loc_394D0
 # Replacement: when EAX is null, skip to the function's no-op exit (loc_46687); otherwise the original compare.
 # Effect: with no selected player the setter returns 0 and writes nothing.
 # Why: the DOS reference reads DS:null+0x272 as 0, so the original returns 0 without writing.
-# Evidence: docs/research/decisions.tsv 2026-11-11T21:26:06Z; tests/original_attribute.c.
+# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T21:26:06Z; tests/original_attribute.c.
 # sha256: ec6a8365e3706b686e8fbeab4454c39169ae8c8b63b8e87e2e22fe94ae08a3e0
 loc_4667E,7,test eax,eax|jz loc_46687|cmp dword [eax+0x272],0
 
@@ -178,7 +181,7 @@ loc_11A380,168,CALL host_movie_clock_init|RET
 # Replacement: loc_C84C0 keeps the original call to loc_C85F4, then calls host_audio_init (service 0x3000) and returns. loc_CB580 and loc_D03A0 become host_audio_startup (0x3011) and host_audio_cd_open (0x3012), each followed by RET.
 # Effect: sample audio goes through the native mixer; the CD-audio open takes the original no-device path. CD music is not implemented.
 # Why: the Miles driver, DOS audio hardware and a CD-ROM device are not available natively.
-# Evidence: runtime/host/lib.rs service 0x3000; runtime/rust/audio.rs; docs/development/PLATFORM.md.
+# Evidence: runtime/host/lib.rs service 0x3000; runtime/rust/audio.rs; docs/architecture.md.
 # sha256: 0235edcd76b8bb6e428c3fe36bc889a383a502520068e9f2cdaedbbe4643d37e
 loc_C84C0,305,CALL loc_C85F4|CALL host_audio_init|RET
 # sha256: 4b065669e47a4cb45505bace1c278a15421fba8813ffeb939cc9a175f2d7a2b0
@@ -200,7 +203,45 @@ loc_F1EE3,6,CALL host_audio_callbacks_prepare|mov edx,[loc_1AA258]
 # Replacement: after the load, TEST EAX,EAX and jump to loc_BCB4F, the 'not within range' result, when the shape is null. The guard sits before the first x87 push so the floating-point stack stays balanced.
 # Effect: an object with no shape is never within range, instead of faulting. Fixes the crash on entering CATACOMB.RGM.
 # Why: DOS4GW reads address 0xC as the interrupt table. The result there is not measured. A DOS-reference read of that dword is a BIOS pointer, a huge float, which would make the test return 'within range'; 'not within range' is the conservative choice.
-# Evidence: docs/development/VALIDATION.md 'Catacomb null-shape guard'; reproduces with entry markers 0 and 2.
+# Evidence: history:aad2c0c:docs/development/VALIDATION.md 'Catacomb null-shape guard'; reproduces with entry markers 0 and 2.
 # Open: measure the DOS reference at address 0xC and replace this guess with the observed value, as RG_FONT10_METRIC does.
 # sha256: 736aaffccc35e5ac4a9c0d7b2f64ae9ed7ead848f3eb93c8ad4b50b9b76b5e39
 loc_BCB2D,2,mov eax,[eax]|test eax,eax|jz loc_BCB4F
+
+# == Unsupported 16-bit transitions (fatal trap)
+# Original: a far jump (66 EA offset:selector) from 32-bit code into 16-bit code.
+# Replacement: UD2.
+# Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on, instead of continuing with wrong behavior.
+# Why: neither the translator nor the runtime has a 16-bit execution model. These four sites are in unsupported mixed-mode system code and are not reached during normal play.
+# Evidence: tests/check_original_fault.py; tests/entry_fault.asm; twelve such traps remain in the native build.
+# sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
+loc_135EEC,6,ud2 ; unsupported transition to 16-bit code; must fail if executed
+# sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
+loc_136137,6,ud2 ; unsupported 16-bit transition
+# sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
+loc_13619A,6,ud2 ; unsupported 16-bit transition
+# sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
+loc_1361F2,6,ud2 ; unsupported 16-bit transition
+
+# == Descriptor-table and privileged instructions (fatal trap)
+# Original: LSL, LAR, SIDT or HLT in the original's system-level code.
+# Replacement: UD2.
+# Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
+# Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
+# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
+loc_127C9A,3,ud2 ; LSL needs a guest descriptor model
+# sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
+loc_127EB1,3,ud2 ; LSL needs a guest descriptor model
+# sha256: 2017ff3461395672aa0aa4f64894fd2f95a4b120e2690e8951656d79adc2eed2
+loc_128CEB,1,ud2 ; unsupported hlt
+# sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
+loc_135543,3,ud2 ; unsupported lsl
+# sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
+loc_1356B5,3,ud2 ; unsupported lsl
+# sha256: 820240448fc9d0e855c61584ed04a8a069253d608b84bab4083cd4887b6b6423
+loc_135999,3,ud2 ; unsupported lar
+# sha256: 4ffa76f274cd3d76b27484c42f305e09c1acf96665195a5f6ed98557783f6b6f
+loc_144CA7,3,ud2 ; unsupported lsl
+# sha256: 17204d99c7f0f84dccfc4b09f720a13bacc4af033aa234d7a39210584f35662a
+loc_13BD6B,4,ud2 ; unsupported sidt

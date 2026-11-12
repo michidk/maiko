@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the SR translation experiment. Generated game code stays local."""
+"""Translate the original executable with the pinned SR translator. Generated game code stays local."""
 import argparse
 import datetime
 import hashlib
@@ -51,7 +51,7 @@ def build():
     Patch: patches/sr-x64.patch plus the OUTPUT_TYPE switch below (documented in the patch header).
     Effect: SR emits x86-64 NASM source instead of 32-bit.
     Why: the native Windows and Linux builds are 64-bit; stock SR targets 32-bit output.
-    Evidence: docs/development/PLATFORM.md. The stamp file refuses a changed patch on a cached checkout.
+    Evidence: docs/architecture.md. The stamp file refuses a changed patch on a cached checkout.
     """
     CACHE.mkdir(exist_ok=True)
     venv = CACHE / 'venv'
@@ -127,7 +127,7 @@ def check_replacements(entries, image):
             raise ValueError(f'Original bytes changed at {label} ({length} bytes)')
 
 
-def metadata(image, work, probe):
+def metadata(image, work):
     for file in (ROOT / 'metadata').glob('*.sci'):
         if file.name == 'instruction_replacements.sci':
             entries = read_replacements(file)
@@ -145,27 +145,6 @@ def metadata(image, work, probe):
     if len(names) != 130:
         raise ValueError('Unexpected Glide import-name inventory')
     (work / 'fixup_do_not_interpret_as_code.sci').write_text(''.join(f'loc_{code.base+m.start():X}\n' for m in names))
-    if probe:
-        expected = {
-            0x135eec: '66ea04000000', 0x136137: '66ea04000000',
-            0x13619a: '66ea04000000', 0x1361f2: '66ea04000000',
-            0x127c9a: '0f03c0', 0x127eb1: '0f03c0', 0x128ceb: 'f4',
-            0x135543: '0f03c0', 0x1356b5: '0f03c0', 0x135999: '0f02c0',
-            0x144ca7: '0f03c2', 0x13bd6b: '0f010c24',
-        }
-        seen = set()
-        probe_entries = read_replacements(ROOT / 'probe-only/instruction_replacements.sci', require_hash=False)
-        for label, length, replacement, _, _ in probe_entries:
-            if not replacement.startswith('ud2'):
-                continue
-            address = int(label.removeprefix('loc_'), 16)
-            original = bytes.fromhex(expected[address])
-            if address in seen or int(length) != len(original) or image.at(address, len(original)) != original:
-                raise ValueError(f'Invalid diagnostic substitution at {address:#x}')
-            seen.add(address)
-        if seen != expected.keys():
-            raise ValueError('Diagnostic substitution inventory changed')
-        (work / 'instruction_replacements.sci').write_text(replacement_text(probe_entries))
     return len(names)
 
 
@@ -240,7 +219,7 @@ def split_mixed_section(work, number):
     Effect: no behavior change. Data runs go to non-executable writable sections and code to executable
     read-only ones; the original's own writes to its embedded data still work.
     Why: modern platforms refuse writable-and-executable memory and the translator emits one section.
-    Evidence: docs/development/PLATFORM.md (operating-system bindings).
+    Evidence: docs/architecture.md (operating-system bindings).
     """
     file=work/f'seg{number:02}.inc'
     output=[];pending=[];active='code'
@@ -271,7 +250,7 @@ def native_startup_book(image, text):
     no-op path. MENU.INI `ignore_autosave=1` keeps its original direct-world path.
     Effect: a new player sees the book menu first. This deliberately differs from the original.
     Why: reported on real Windows: starting straight into the game bypassed the book.
-    Evidence: docs/development/VALIDATION.md (fresh start, Continue disabled); tests/check_startup_override.py.
+    Evidence: history:aad2c0c:docs/development/VALIDATION.md (fresh start, Continue disabled); tests/check_startup_override.py.
     Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.
     """
     original = bytes.fromhex('e840ed02006685c0741cc705a31d030001000000')
@@ -400,7 +379,7 @@ def native_startup_clock(image, text):
     Effect: the 12 Hz loading warm-up advances at its fixed rate instead of as fast as the host runs.
     Simulation arithmetic is untouched.
     Why: reported on real Windows: a burst of fast movement at the start.
-    Evidence: docs/development/VALIDATION.md (startup pacing); the Linux and Wine runs record the countdowns.
+    Evidence: history:aad2c0c:docs/development/VALIDATION.md (startup pacing); the Linux and Wine runs record the countdowns.
     Guards: the 12 original bytes are checked and the call must occur exactly once and not already be present.
     """
     if image.at(0x5f6bc, 12) != bytes.fromhex('e8a0000000833d2446030000'):
@@ -415,8 +394,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['inspect', 'build', 'translate'])
     parser.add_argument('--install', type=Path, default=os.environ.get('REDGUARD_DIR'))
-    parser.add_argument('--probe-traps', action='store_true', help='Diagnostic only: unresolved DOS boundaries become fatal UD2 traps')
-    parser.add_argument('--native', action='store_true', help='Experimental native CRT/main target with explicit runtime replacements')
     parser.add_argument('--sr', type=Path, help='Use an already built patched SR executable')
     args = parser.parse_args()
     if args.action == 'build':
@@ -427,131 +404,125 @@ def main():
     image = Image(install / 'RGFX.EXE')
     if args.action == 'inspect':
         print(json.dumps(image.report(), indent=2)); return
-    if args.native and args.probe_traps:
-        parser.error('--native and --probe-traps are separate targets')
-    mode = 'native' if args.native else 'probe' if args.probe_traps else 'strict'
+    mode = 'native'
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     work = ROOT / 'artifacts' / f'{stamp}-{mode}'
     work.mkdir(parents=True)
     sr, build_seconds = (args.sr.resolve(), None) if args.sr else build()
     report = dict(image=image.report(), sr_commit=SR_COMMIT, mode=mode, build_seconds=build_seconds,
                   menu_verified=False, native_windows_verified=False, status='started')
-    report['import_names'] = metadata(image, work, args.probe_traps or args.native)
-    if args.native:
-        report['unresolved_instruction_sites'] = 12
-        report['native_runtime_complete'] = False
-        for file in (ROOT / 'native-metadata').glob('*.sci'):
-            if file.name in ['global_aliases.sci','fixup_do_not_interpret_as_code.sci']:
-                with (work / file.name).open('a') as out:
-                    out.write(file.read_text())
-            elif file.name == 'instruction_replacements.sci':
-                entries = read_replacements(file)
-                check_replacements(entries, image)
-                with (work / file.name).open('a') as out:
-                    out.write(replacement_text(entries))
-            else:
-                shutil.copyfile(file, work / file.name)
-    if args.native:
-        emit_glide(image,work)
-        # Object5 begins with lookup tables. SR's no-code SCI accepts exact
-        # fixup targets only, so expand this byte range in generated metadata.
-        # Excluding just named labels misses references to table interiors.
-        with (work/'fixup_do_not_interpret_as_code.sci').open('a') as out:
-            for address in range(0x160000,0x163000):
-                out.write(f'loc_{address:X}\n')
+    report['import_names'] = metadata(image, work)
+    report['unresolved_instruction_sites'] = 12
+    report['native_runtime_complete'] = False
+    for file in (ROOT / 'native-metadata').glob('*.sci'):
+        if file.name in ['global_aliases.sci','fixup_do_not_interpret_as_code.sci']:
+            with (work / file.name).open('a') as out:
+                out.write(file.read_text())
+        elif file.name == 'instruction_replacements.sci':
+            entries = read_replacements(file)
+            check_replacements(entries, image)
+            with (work / file.name).open('a') as out:
+                out.write(replacement_text(entries))
+        else:
+            shutil.copyfile(file, work / file.name)
+    emit_glide(image,work)
+    # Object5 begins with lookup tables. SR's no-code SCI accepts exact
+    # fixup targets only, so expand this byte range in generated metadata.
+    # Excluding just named labels misses references to table interiors.
+    with (work/'fixup_do_not_interpret_as_code.sci').open('a') as out:
+        for address in range(0x160000,0x163000):
+            out.write(f'loc_{address:X}\n')
     began = time.monotonic()
     try:
         with tempfile.TemporaryDirectory(prefix='translation-',dir=CACHE) as directory:
             translator_input=install/'RGFX.EXE'
-            if args.native:
-                # Objects5/7 contain original 32-bit assembly helpers despite
-                # lacking LE's executable bit. Object5 includes the ROB decoder.
-                raw=bytearray(translator_input.read_bytes())
-                le=struct.unpack_from('<I',raw,0x3c)[0]
-                table=struct.unpack_from('<I',raw,le+64)[0]
-                overrides=[]
-                for number in [5,7]:
-                    flag_offset=le+table+(number-1)*24+8
-                    flags=struct.unpack_from('<I',raw,flag_offset)[0]
-                    if flags!=0x2043:
-                        raise ValueError(f'Object{number} classification changed')
-                    struct.pack_into('<I',raw,flag_offset,flags|4)
-                    overrides.append(dict(object=number,original_flags=hex(flags),translator_flags=hex(flags|4)))
-                translator_input=Path(directory)/'RGFX.EXE'
-                translator_input.write_bytes(raw)
-                report['translation_header_overrides']=overrides
-                report['translator_input_sha256']=hashlib.sha256(raw).hexdigest()
+            # Objects5/7 contain original 32-bit assembly helpers despite
+            # lacking LE's executable bit. Object5 includes the ROB decoder.
+            raw=bytearray(translator_input.read_bytes())
+            le=struct.unpack_from('<I',raw,0x3c)[0]
+            table=struct.unpack_from('<I',raw,le+64)[0]
+            overrides=[]
+            for number in [5,7]:
+                flag_offset=le+table+(number-1)*24+8
+                flags=struct.unpack_from('<I',raw,flag_offset)[0]
+                if flags!=0x2043:
+                    raise ValueError(f'Object{number} classification changed')
+                struct.pack_into('<I',raw,flag_offset,flags|4)
+                overrides.append(dict(object=number,original_flags=hex(flags),translator_flags=hex(flags|4)))
+            translator_input=Path(directory)/'RGFX.EXE'
+            translator_input.write_bytes(raw)
+            report['translation_header_overrides']=overrides
+            report['translator_input_sha256']=hashlib.sha256(raw).hexdigest()
             command([sr, translator_input, 'rgfx.asm'], cwd=work, log=work / 'translation.log', timeout=60)
         relax_branches(work)
         for file in (ROOT / 'runtime').glob('*.inc'):
             shutil.copyfile(file, work / file.name)
-        if args.native:
-            shutil.copyfile(ROOT / 'native-metadata/extern.inc', work / 'extern.inc')
-            report['glide_imports']=emit_glide(image,work,write_mappings=False)
-            source=work/'seg02.inc'
-            source.write_text(native_startup_book(image, source.read_text()))
-            source.write_text(native_startup_clock(image, source.read_text()))
-            report['native_startup_clock_pacing'] = dict(
-                original_fixed_step_hz=12,
-                active='original warm-up counter nonzero, including loading fade resets',
-                simulation='original scale, deltas and movement arithmetic unchanged')
-            report['native_startup_book'] = dict(
-                autosave_validation='original loc_4F33B',
-                continue_available='only with a valid original autosave',
-                presentation='startup book fade-in independent of autosave availability',
-                no_autosave='native book, then original New Game return path',
-                ignore_autosave='original direct-world override preserved',
-                fresh_selection='New Game', no_save_escape='remain in book')
-            pattern=r'^mov (dword \[ebp-0x[0-9a-f]+\]|eax|esi|edi), 0x46c$'
-            text,count=re.subn(pattern,r'mov \1, rg_bios_ticks',source.read_text(),flags=re.M)
-            if count!=27:
-                raise ValueError(f'BIOS tick pointer inventory changed: {count}')
-            source.write_text(text)
-            report['native_bios_tick_pointer_rewrites']=count
-            with (work/'extern.inc').open('a') as out:
-                out.write('extern rg_bios_ticks\nextern host_startup_clock_pace\n')
-            # Address-taken handwritten clipping helpers were previously emitted as
-            # raw x86 bytes. Each must use the translated stack and call target.
-            roots=[0xd933c,0xd93cc,0xd945c,0xd94ec,0xd9578,0xd9604]
-            translated=source.read_text()
-            for address in roots:
-                label=f'loc_{address:X}:\n'
-                if translated.count(label)!=1:
-                    raise ValueError(f'Missing clipping helper: {address:#x}')
-                body=translated.split(label,1)[1].split('\nRET',1)[0]
-                if (re.search(r'^(?:db|dw|dd) ',body,re.M) or
-                    'sub r11d, 0x4' not in body or 'CALL loc_D92D0' not in body):
-                    raise ValueError(f'Clipping helper was not translated: {address:#x}')
-            report['native_checked_clip_roots']=[hex(address) for address in roots]
-            movie_roots=[(0xf1f80,0xf1ff0,'host_audio_sample_pan'),
-                         (0xf2010,0xf2090,'host_audio_stream_release'),
-                         (0xf2090,0xf20c0,'host_audio_sample_end'),
-                         (0xf20c0,0xf22b0,'host_audio_stream_allocate'),
-                         (0xf22b0,0xf2340,'host_audio_sample_type'),
-                         (0xf2340,0xf2390,'loc_F2390'),
-                         (0xf2390,0xf24a0,'host_audio_stream_load')]
-            for address,end,target in movie_roots:
-                label=f'loc_{address:X}:\n'
-                if translated.count(label)!=1:
-                    raise ValueError(f'Missing Smacker callback root: {address:#x}')
-                end_label=f'loc_{end:X}:\n'
-                if translated.count(end_label)!=1:
-                    raise ValueError(f'Missing Smacker callback end: {end:#x}')
-                # Cover every return path; padding after the last return is data.
-                body=translated.split(label,1)[1].split(end_label,1)[0].rsplit('\nRET',1)[0]
-                if (re.search(r'^(?:db|dw|dd) ',body,re.M) or 'r11d' not in body or
-                    f'CALL {target}' not in body):
-                    raise ValueError(f'Smacker callback translation contract failed: {address:#x}')
-            report['native_checked_movie_roots']=[hex(address) for address,_,_ in movie_roots]
-            for number in [5,7]:
-                split_mixed_section(work,number)
-            report['native_mixed_sections_split']=[5,7]
-            instrument_native(work)
-            with (work/'macros.inc').open('a') as out:
-                out.write((ROOT/'runtime/call_trace.inc').read_text())
-                out.write((ROOT/'runtime/image_variant.inc').read_text())
-                out.write((ROOT/'runtime/font_metric.inc').read_text())
-        report['status'] = 'native_assembly_emitted' if args.native else 'assembly_emitted_with_fatal_traps' if args.probe_traps else 'assembly_emitted'
+        shutil.copyfile(ROOT / 'native-metadata/extern.inc', work / 'extern.inc')
+        report['glide_imports']=emit_glide(image,work,write_mappings=False)
+        source=work/'seg02.inc'
+        source.write_text(native_startup_book(image, source.read_text()))
+        source.write_text(native_startup_clock(image, source.read_text()))
+        report['native_startup_clock_pacing'] = dict(
+            original_fixed_step_hz=12,
+            active='original warm-up counter nonzero, including loading fade resets',
+            simulation='original scale, deltas and movement arithmetic unchanged')
+        report['native_startup_book'] = dict(
+            autosave_validation='original loc_4F33B',
+            continue_available='only with a valid original autosave',
+            presentation='startup book fade-in independent of autosave availability',
+            no_autosave='native book, then original New Game return path',
+            ignore_autosave='original direct-world override preserved',
+            fresh_selection='New Game', no_save_escape='remain in book')
+        pattern=r'^mov (dword \[ebp-0x[0-9a-f]+\]|eax|esi|edi), 0x46c$'
+        text,count=re.subn(pattern,r'mov \1, rg_bios_ticks',source.read_text(),flags=re.M)
+        if count!=27:
+            raise ValueError(f'BIOS tick pointer inventory changed: {count}')
+        source.write_text(text)
+        report['native_bios_tick_pointer_rewrites']=count
+        with (work/'extern.inc').open('a') as out:
+            out.write('extern rg_bios_ticks\nextern host_startup_clock_pace\n')
+        # Address-taken handwritten clipping helpers were previously emitted as
+        # raw x86 bytes. Each must use the translated stack and call target.
+        roots=[0xd933c,0xd93cc,0xd945c,0xd94ec,0xd9578,0xd9604]
+        translated=source.read_text()
+        for address in roots:
+            label=f'loc_{address:X}:\n'
+            if translated.count(label)!=1:
+                raise ValueError(f'Missing clipping helper: {address:#x}')
+            body=translated.split(label,1)[1].split('\nRET',1)[0]
+            if (re.search(r'^(?:db|dw|dd) ',body,re.M) or
+                'sub r11d, 0x4' not in body or 'CALL loc_D92D0' not in body):
+                raise ValueError(f'Clipping helper was not translated: {address:#x}')
+        report['native_checked_clip_roots']=[hex(address) for address in roots]
+        movie_roots=[(0xf1f80,0xf1ff0,'host_audio_sample_pan'),
+                     (0xf2010,0xf2090,'host_audio_stream_release'),
+                     (0xf2090,0xf20c0,'host_audio_sample_end'),
+                     (0xf20c0,0xf22b0,'host_audio_stream_allocate'),
+                     (0xf22b0,0xf2340,'host_audio_sample_type'),
+                     (0xf2340,0xf2390,'loc_F2390'),
+                     (0xf2390,0xf24a0,'host_audio_stream_load')]
+        for address,end,target in movie_roots:
+            label=f'loc_{address:X}:\n'
+            if translated.count(label)!=1:
+                raise ValueError(f'Missing Smacker callback root: {address:#x}')
+            end_label=f'loc_{end:X}:\n'
+            if translated.count(end_label)!=1:
+                raise ValueError(f'Missing Smacker callback end: {end:#x}')
+            # Cover every return path; padding after the last return is data.
+            body=translated.split(label,1)[1].split(end_label,1)[0].rsplit('\nRET',1)[0]
+            if (re.search(r'^(?:db|dw|dd) ',body,re.M) or 'r11d' not in body or
+                f'CALL {target}' not in body):
+                raise ValueError(f'Smacker callback translation contract failed: {address:#x}')
+        report['native_checked_movie_roots']=[hex(address) for address,_,_ in movie_roots]
+        for number in [5,7]:
+            split_mixed_section(work,number)
+        report['native_mixed_sections_split']=[5,7]
+        instrument_native(work)
+        with (work/'macros.inc').open('a') as out:
+            out.write((ROOT/'runtime/call_trace.inc').read_text())
+            out.write((ROOT/'runtime/image_variant.inc').read_text())
+            out.write((ROOT/'runtime/font_metric.inc').read_text())
+        report['status'] = 'native_assembly_emitted'
     except (ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         report['status'] = 'blocked'; report['error'] = str(exc)
         raise

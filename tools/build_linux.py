@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import time
 import uuid
-from .build_windows import ROOT,run,ensure_tool_image
+from .toolchain import ROOT,run,ensure_tool_image,is_mountable,MOUNT_ROOT
 from .sr_heap import stage_sr_heap
 from .sr_audio import stage_sr_audio
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
@@ -41,17 +41,17 @@ def main():
     if a.installed_gog and a.cd_image:p.error('Choose installed GOG or explicit media')
     if a.installed_gog and not a.movie_skip:p.error('--installed-gog requires --movie-skip')
     if a.movie_skip and not (a.cd_image or a.installed_gog):p.error('--movie-skip requires --installed-gog or --cd-image')
-    if a.cd_image and not str(a.cd_image.resolve()).startswith('/home/vibepod/workspaces/'):
-        p.error('CD image mount must be under /home/vibepod/workspaces')
+    if a.cd_image and not is_mountable(a.cd_image):
+        p.error(f'CD image mount must be under {MOUNT_ROOT}')
     if a.exercise and (not a.gameplay or a.world_controls):p.error('--exercise requires --gameplay without --world-controls')
     if a.world_controls and a.gameplay not in ['continue','both']:p.error('--world-controls requires --gameplay continue or both')
     if not 1<=a.gameplay_seconds<=180:p.error('--gameplay-seconds must be between1 and180')
     source=a.translation.resolve();install=a.install.resolve()
     media=movie_bundle(install) if a.installed_gog else a.cd_image.resolve() if a.cd_image else None
-    if not str(install).startswith('/home/vibepod/workspaces/'):
-        p.error('Game mount must be under /home/vibepod/workspaces')
+    if not is_mountable(install):
+        p.error(f'Game mount must be under {MOUNT_ROOT}')
     original=json.loads((source/'report.json').read_text())
-    if original.get('status')!='native_assembly_emitted':p.error('Requires python3 -m tools.pipeline translate --native output')
+    if original.get('status')!='native_assembly_emitted':p.error('Requires python3 -m tools.pipeline translate output')
     variants=json.loads((ROOT/'metadata/image_variants.json').read_text())
     if original['image']['sha256']!=variants['translated_image_sha256']:p.error('Translation image hash mismatch')
     sr_head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT/'.cache/sr',text=True).strip()

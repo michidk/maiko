@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import time
 import uuid
-from .build_windows import ROOT,IMAGE,ensure_tool_image,run
+from .toolchain import ROOT,IMAGE,ensure_tool_image,run,is_mountable,MOUNT_ROOT
 from .gog_install import movie_bundle
 
 def main():
@@ -33,8 +33,8 @@ def main():
     if a.window_close and not a.jump_cycle:p.error('--window-close requires --jump-cycle')
     if a.fresh_start and (not a.jump_cycle or a.jump_action!='new' or a.cd_image or a.loose_movie or a.installed_gog):p.error('--fresh-start requires --jump-cycle --jump-action new without movie media')
     for path in [a.install]+([a.cd_image] if a.cd_image else []):
-        if not path.resolve().is_relative_to('/home/vibepod/workspaces'):
-            p.error('Docker mounts must resolve under /home/vibepod/workspaces')
+        if not is_mountable(path):
+            p.error(f'Docker mounts must resolve under {MOUNT_ROOT}')
     reference=json.loads(a.pcm_reference.read_text()) if a.pcm_reference else None
     media=movie_bundle(a.install) if a.installed_gog else a.cd_image.resolve() if a.cd_image else None
     if reference and (reference.get('original_pcm_reference_verified') is not True or reference.get('bytes_compared')!=32768):

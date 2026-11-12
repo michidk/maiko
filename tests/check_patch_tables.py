@@ -1,7 +1,6 @@
 """Check the annotated byte-replacement tables without the game.
 
-Every entry must parse, carry its documentation fields and (outside the probe table) a
-sha256 line; malformed tables must be rejected. Run: python3 tests/check_patch_tables.py
+Every entry must parse and carry its documentation fields and a sha256 line; malformed tables must be rejected. Run: python3 tests/check_patch_tables.py
 """
 import sys, tempfile
 from pathlib import Path
@@ -10,8 +9,7 @@ sys.path.insert(0, str(ROOT))
 from tools.pipeline import read_replacements, replacement_text
 
 TABLES = {'native-metadata/instruction_replacements.sci': True,
-          'metadata/instruction_replacements.sci': True,
-          'probe-only/instruction_replacements.sci': False}
+          'metadata/instruction_replacements.sci': True}
 for name, hashed in TABLES.items():
     entries = read_replacements(ROOT / name, require_hash=hashed)
     assert entries, name

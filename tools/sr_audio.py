@@ -2,7 +2,7 @@
 import hashlib
 import re
 import subprocess
-from .build_windows import ROOT
+from .toolchain import ROOT
 from .pipeline import SR_COMMIT
 
 def stage_sr_audio(container,patched=True):

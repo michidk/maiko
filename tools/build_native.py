@@ -10,7 +10,7 @@ import subprocess
 import time
 import uuid
 import sys
-from .build_windows import IMAGE, ROOT, run, ensure_tool_image, collect_tool_notices
+from .toolchain import IMAGE, ROOT, run, ensure_tool_image, collect_tool_notices, is_mountable, MOUNT_ROOT
 from .sr_heap import stage_sr_heap
 from .sr_audio import stage_sr_audio
 from .windows_sdl import stage_windows_sdl
@@ -39,15 +39,15 @@ def main():
     if a.installed_gog and a.cd_image:p.error('Choose installed GOG or explicit media')
     if a.installed_gog and not a.movie_skip:p.error('--installed-gog requires --movie-skip')
     if a.movie_skip and not (a.cd_image or a.installed_gog):p.error('--movie-skip requires --installed-gog or --cd-image')
-    if a.cd_image and not str(a.cd_image.resolve()).startswith('/home/vibepod/workspaces/'):
-        p.error('CD image mount must be under /home/vibepod/workspaces')
+    if a.cd_image and not is_mountable(a.cd_image):
+        p.error(f'CD image mount must be under {MOUNT_ROOT}')
     if a.gameplay and not a.menu_autosave:p.error('--gameplay requires --menu-autosave')
     work = a.work.resolve()
     report = json.loads((work / 'report.json').read_text())
-    if report['status'] != 'native_assembly_emitted': p.error('Requires --native translation')
+    if report['status'] != 'native_assembly_emitted': p.error('Requires output of python3 -m tools.pipeline translate')
     install = a.install.resolve()
     media=movie_bundle(install) if a.installed_gog else a.cd_image.resolve() if a.cd_image else None
-    if not str(install).startswith('/home/vibepod/workspaces/'): p.error('Docker game mount must be under /home/vibepod/workspaces')
+    if not is_mountable(install): p.error(f'Docker game mount must be under {MOUNT_ROOT}')
     name = 'rg-native-' + uuid.uuid4().hex[:10]
     report.update(native_build_status='started', native_crt_verified=False,
                   native_config_verified=False, native_glide_window_verified=False, menu_verified=False, native_windows_verified=False,full_game_verified=False)

@@ -3,7 +3,7 @@ import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
-from .build_windows import ROOT
+from .toolchain import ROOT
 from .pipeline import SR_COMMIT
 
 

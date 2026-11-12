@@ -4,7 +4,7 @@ Original: Compare_Samples decides whether a cached sample matches a new one by c
 Replacement: Compare_Samples compares every format field and then the full kept original data with memcmp; pan and volume go through the shared Game_AIL_set_sample_pan and Game_AIL_set_sample_volume helpers (runtime/rust/audio.rs); sample copies reserve room for the original data so the comparison has it.
 Effect: sample identity no longer depends on a 28-byte signature, and the Rust runtime owns pan and volume so the native mixer and the original Miles calls stay consistent.
 Why: the native audio path (runtime/rust/audio.rs) has to share pan and volume state with SR's cached samples.
-Evidence: docs/development/RUST_PLAN.md; tests/audio_samples.c; the sample-audio regression in the Linux and Wine runs.
+Evidence: docs/architecture.md; tests/audio_samples.c; the sample-audio regression in the Linux and Wine runs.
 
 --- a/Albion-sound.c
 +++ b/Albion-sound.c

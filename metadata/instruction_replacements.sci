@@ -1,4 +1,4 @@
-# Byte-level replacements applied to every build, native and probe.
+# Byte-level replacements applied to every build.
 #
 # Format and rules are the same as native-metadata/instruction_replacements.sci: the comment
 # block above an entry documents it, `# sha256:` pins the original bytes, and comments are
@@ -9,7 +9,7 @@
 # Replacement: the first instruction as TEST AX,0xCF89 and an explicit JMP to the address two bytes later, so the translator sees two separate instructions instead of overlapping ones.
 # Effect: identical to the original at both entry points; no behavior change.
 # Why: the translator cannot represent one byte range that is two instructions. pipeline.py also checks all four original bytes before applying this expansion.
-# Evidence: tools/pipeline.py metadata(); the same five sites exist in the probe table.
+# Evidence: tools/pipeline.py metadata().
 # sha256: 9d15c509a33550f45d3012567ef607e1cf7fcf65747932f0ea3bc532bcbd19b0
 loc_F70B6,2,test ax, 0xcf89|jmp loc_F70BA
 # sha256: 9d15c509a33550f45d3012567ef607e1cf7fcf65747932f0ea3bc532bcbd19b0

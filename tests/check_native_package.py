@@ -54,9 +54,10 @@ def setting(source,name,value):
 def write_cmd(source):
     cmd.write_bytes(source.replace('\r\n','\n').replace('\n','\r\n').encode())
 
-# Check the shipped preset, then exercise it unchanged at a real Wine D: path.
-default_game=r'D:\Games\GOG Galaxy\Redguard\Redguard'
-assert f'set "GAME_DIR={default_game}"' in canonical
+# The launcher ships with GAME_DIR empty (folder dialog). Configure it the way a user does, by
+# editing only that line, and exercise it at a real Wine D: path.
+example_game=r'D:\Games\GOG Galaxy\Redguard\Redguard'
+assert 'set "GAME_DIR="' in canonical
 assert 'CD_IMAGE' not in canonical and '--cd-image' not in canonical
 configured=canonical
 if a.game_on_drive_d:
@@ -81,11 +82,12 @@ if a.game_on_drive_d:
         (selected.parent/'game.gog').symlink_to('/media/owned CD image.gog')
         assert not selected.is_symlink() and selected.parent.joinpath('game.gog').is_file()
     drive.symlink_to(drive_root)
+    configured=setting(configured,'GAME_DIR',example_game)
 else:
     configured=setting(configured,'GAME_DIR','Z:\\work\\menu scenario\\')
 if configured!=canonical:
     write_cmd(configured)
-assert not a.game_on_drive_d or cmd.read_bytes()==canonical_bytes
+assert not a.game_on_drive_d or cmd.read_bytes().decode()==setting(canonical,'GAME_DIR',example_game).replace('\r\n','\n').replace('\n','\r\n')
 
 environment=dict(os.environ,WINEDEBUG='-all',WINEPREFIX='/tmp/rg-package-wine',
                  LIBGL_ALWAYS_SOFTWARE='1',SDL_AUDIODRIVER='dummy',RG_CAPTURE_DIR='Z:\\work')
@@ -138,7 +140,7 @@ if a.expected_exit==0:
     assert 'Original DOS termination status=0; exiting native process' in log
 report=dict(zip_sha256=hashlib.sha256(Path('/work/runtime.zip').read_bytes()).hexdigest(),
             exe_sha256=hashlib.sha256((root/'redguard-native.exe').read_bytes()).hexdigest(),
-            host_game_drive_d=a.game_on_drive_d,shipped_default_game_dir=default_game,unmodified_cmd_verified=cmd.read_bytes()==canonical_bytes,requested_cd_image=a.cd_image,launcher_cd_image_mounted='Native CD image mounted' in log,cd_image_mounted=False,uploaded_image_recognized=True,cmd_exit_code=result.returncode,
+            host_game_drive_d=a.game_on_drive_d,shipped_default_game_dir='',launcher_edited_only_in_game_dir=a.game_on_drive_d,requested_cd_image=a.cd_image,launcher_cd_image_mounted='Native CD image mounted' in log,cd_image_mounted=False,uploaded_image_recognized=True,cmd_exit_code=result.returncode,
             frame_exported=Path('/work/game-frame-latest.ppm').exists(),
             wine_menu_sequence_verified=True,menu_verified=False,native_windows_verified=False)
 if a.game_on_drive_d:
