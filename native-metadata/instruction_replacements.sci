@@ -34,3 +34,4 @@ loc_2418D,8,CALL host_poll_input|cmp word [eax+loc_2055C0],0
 loc_2419C,2,CALL host_poll_input|xor eax,eax
 loc_B5833,8,CALL host_poll_input|cmp word [loc_2055C2],0
 loc_F1EE3,6,CALL host_audio_callbacks_prepare|mov edx,[loc_1AA258]
+loc_BCB2D,2,mov eax,[eax]|test eax,eax|jz loc_BCB4F
