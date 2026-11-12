@@ -3,6 +3,7 @@
 artifacts/
 __pycache__/
 *.py[cod]
+/target/
 
 # Local agent state and game/runtime data
 .serena/

@@ -3,8 +3,8 @@ HOST_SERVICE host_free, 2
 HOST_SERVICE host_debug_clear, 3
 HOST_SERVICE host_debug_char, 4
 HOST_SERVICE x86_int, INTERRUPT
-HOST_SERVICE probe_boundary, 255
-%include "probe_helpers.inc"
+HOST_SERVICE host_unsupported_hardware, 255
+%include "hardware_boundaries.inc"
 HOST_SERVICE host_signal, 5
 HOST_SERVICE host_getcwd, 6
 HOST_SERVICE host_chdir, 7

@@ -26,4 +26,5 @@ x86_int:
     mov ecx, r9d
     call probe_interrupt
     ud2
-%include "probe_helpers.inc"
+%define host_unsupported_hardware probe_boundary
+%include "hardware_boundaries.inc"

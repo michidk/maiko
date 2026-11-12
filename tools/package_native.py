@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 import subprocess
 import zipfile
+import shutil
+from .package_media import movie_evidence
 
 ROOT=Path(__file__).resolve().parents[1]
 BACKEND='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
@@ -28,8 +30,10 @@ def main():
     steps={x['step']:x.get('state',{}) for x in exercise.get('exercise_snapshots',[])}
     if exercise.get('blocked',True) or not exercise.get('exercise_inputs_delivered') or steps.get('inventory',{}).get('ui_mode')!=28 or steps.get('inventory-close',{}).get('ui_mode')!=31:
         parser.error('Requires observed original inventory open/close through game input')
-    if not report.get('movie_video_skip_to_ship_verified') or not report.get('cd_image_files_verified') or not report.get('movie_audio_mixed_verified'):
-        parser.error('Requires original movie PCM/video/skip/ship evidence through the CD image adapter')
+    try:
+        media=movie_evidence(report)
+    except ValueError as error:
+        parser.error(str(error))
     executable=work/'redguard-native.exe'
     if hashlib.sha256(executable.read_bytes()).hexdigest()!=report.get('native_exe_sha256'):
         parser.error('Executable does not match the observed build')
@@ -45,7 +49,7 @@ def main():
     args.output.mkdir(parents=True,exist_ok=True)
     destination=args.output/'redguard-native-startup-test.zip'
     launcher=(ROOT/'runtime/RUN.cmd').read_text().replace('\n','\r\n')
-    notices=sorted((ROOT/'artifacts/launcher-check/notices').glob('*.txt'))
+    notices=sorted((work/'notices').glob('*.txt'))
     if len(notices)!=6:
         parser.error('Expected the complete SR, GCC/MinGW and LGPL notices')
     licence='Redguard native experiment. Personal test; requires original game assets.\n'
@@ -56,6 +60,11 @@ def main():
     for project in ['SDL2','SDL2_mixer']:
         notice=ROOT/'.cache/sdl-windows'/(project+'-LICENSE.txt')
         licence+='===== '+project+' =====\n'+notice.read_text()+'\n\n'
+    if report.get('rust_runtime'):
+        rustc=shutil.which('rustc') or str(Path.home()/'.cargo/bin/rustc')
+        sysroot=Path(subprocess.check_output([rustc,'--print','sysroot'],cwd=ROOT,text=True).strip())
+        library_notice=sysroot/'share/doc/rust/COPYRIGHT-library.html'
+        licence+='===== Rust standard library and bundled dependencies =====\n'+library_notice.read_text()+'\n\n'
     with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as package:
         for filename in ['redguard-native.exe','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
             package.write(work/filename,filename)
@@ -84,9 +93,10 @@ def main():
 <p><a href="RUN.cmd" download>Download the editable RUN.cmd separately</a></p>
 <p>Extract into a separate writable folder and run RUN.cmd. GAME_DIR is preset to D:\Games\GOG Galaxy\Redguard\Redguard, the folder containing RGFX.EXE. Keep all extracted runtime files together. Edit GAME_DIR only if your installation moves. Both inspected executable variants are supported. USER_DIR controls the separate save/config location.</p>
 <p>Send back native-test.log after one short jump on the opening ship. This update adds bounded original jump and frame-timing samples and fixes native window-close cleanup. Endless rising reported on Windows, startup acceleration, combat completion and distant fog artifacts remain under investigation. The original startup can go straight into a fresh game when no usable autosave is found; the book-menu tests use a copied autosave.</p>
-<p>RUN.cmd imports saves and settings once into its own user-data folder and writes there. Installed menu artwork and textures load directly from GAME_DIR. CD_IMAGE is empty by default. On Windows, root-level D: movie requests also search for loose SMK files in GAME_DIR and its MOVIES, ANIMS and VIDEO folders. The log reports missing files. This does not establish which cinematic files exist in your installation, and the package supplies no movie assets. The optional image adapter remains available for owners of compatible media. Original movie PCM mixes through SDL audio in the Linux and Wine tests. Audible hardware quality and synchronization remain unverified. CD music remains unsupported. Twelve diagnostic CPU traps remain in untranslated mixed-mode system code; reaching one stops the test. The graphics wrapper may write OpenGLid.ini/OpenGLid.log in the selected game folder.</p>
+<p>RUN.cmd imports saves and settings once into its own user-data folder and writes there. Installed menu artwork and textures load directly from GAME_DIR. The normal launcher requires only the installed game folder. Bundled GOG movie data is detected in the selected game folder or its parent automatically. No media setting is needed. On both platforms, root-level DOS D: movie requests also search for loose SMK files in GAME_DIR and its MOVIES, ANIMS and VIDEO folders. The log reports missing files. The runtime package supplies no movie assets; it reads those already installed by GOG. The optional image adapter remains available for owners of compatible media. Movie acceptance is recorded separately from this runtime package; a package without tested movie media does not claim cinematic playback. Audible hardware quality and synchronization remain unverified. CD music remains unsupported. Twelve diagnostic CPU traps remain in untranslated mixed-mode system code; reaching one stops the test. The graphics wrapper may write OpenGLid.ini/OpenGLid.log in the selected game folder.</p>
 <p><a href="redguard-development.zip">Optional renderer source and build evidence</a></p>
 <p><a href="SHA256SUMS.txt">ZIP SHA-256 checksum</a></p>''')
+    (args.output/'movie-evidence.json').write_text(json.dumps(media,indent=2)+'\n')
     print(destination)
     print(digest)
 

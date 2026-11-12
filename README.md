@@ -10,7 +10,7 @@ This project started as an experiment in [redguard-preservation](https://github.
 
 - Windows x64 runs original game code. User testing confirms movement, sound and music, but reports endless rising after one jump on the opening ship, startup bypassing the book, initial acceleration, missing movies and distant fog artifacts. Combat progression and full-game completion remain unverified.
 - Linux x64 development tests cover the original book menu, bounded ship/island movement, inventory/logbook, isolated save/reload and sample audio. Broader gameplay, hardware audio and distribution support remain unverified.
-- Original intro video and a bounded decoded-audio prefix pass Linux and Wine checks with compatible owned movie media. This does not establish movies in the user's installation, full playback or audio/video synchronization.
+- Original intro video, configured skips into the ship and a bounded decoded-audio prefix pass Linux and Wine checks using our installed GOG layout, without a runtime media argument. This does not establish movies in the user's installation, full playback or audio/video synchronization.
 
 Build success, Wine execution and real-platform acceptance are recorded separately. Twelve diagnostic traps remain in unsupported mixed-mode system code and stop execution if reached.
 
@@ -19,7 +19,9 @@ See [the build and runtime notes](#reproduce), [the gameplay plan](docs/developm
 ## Repository layout
 
 - `tools/`: translation, build, verification and packaging commands. Run entry points as `python3 -m tools.<name>` from the repository root.
-- `runtime/`, `linux/`, `glide/`, `audio/`: native runtime and platform adapters.
+- `runtime/rust/`: shared Rust host services, with the Cargo package at the repository root.
+- `runtime/`, `linux/`, `glide/`, `audio/`: assembly ABI and adapters being migrated to Rust.
+- `diagnostic/`: the separate early translated-entry probe, not the game runtime.
 - `metadata/`, `native-metadata/`, `probe-only/`, `patches/`: translator inputs and upstream changes.
 - `tests/`: synthetic checks and game-backed development probes.
 - `docs/development/`: implementation plans and validation notes.
@@ -31,9 +33,12 @@ See [the build and runtime notes](#reproduce), [the gameplay plan](docs/developm
 Run the source-only checks without game data or Docker:
 
 ```sh
+cargo test --locked
+cargo clippy --all-targets -- -D warnings
 sh tests/check_portable.sh
 ```
 
+Install Rust through rustup; `rust-toolchain.toml` pins the compiler and Windows GNU standard library. Cargo uses its configured shared target directory; the scripts do not override it. The Rust migration is incomplete, with remaining work tracked in [RUST_PLAN.md](docs/development/RUST_PLAN.md).
 
 Use Linux, Python 3.11 with venv support, GCC/G++, Git and Docker. The Docker game builds and package verifier currently require bind-mounted inputs to resolve below `/home/vibepod/workspaces`. This applies to `tools/build_native.py`, `tools/build_linux.py` and `tools/verify_native_package.py`, including selected game, CD-image and verifier input paths. The scripts retain this development-environment restriction; a clone elsewhere can run the source-only checks, but must stage those inputs under that directory for Docker runs. The source build installs pinned SCons into a local virtual environment. Everything downloaded or generated is ignored under `.cache/` and `artifacts/`.
 
@@ -69,6 +74,8 @@ The native build runs synthetic adapter, file and platform tests before the orig
 
 ## Windows startup test
 
+The Rust runtime requires Windows 10 or newer on x64.
+
 Extract the runtime ZIP into its own writable folder. Edit the `GAME_DIR` setting near the top of `RUN.cmd` to the directory containing the original `RGFX.EXE`, then run it. Leaving the setting empty opens a folder selector. `RUN.cmd "C:\path\to\Redguard"` and `redguard-native.exe --game-dir "C:\path\to\Redguard"` also select a directory. Nothing needs to be copied into the game installation. `RUN.cmd` uses its own `user-data` folder for saves and settings. Edit `USER_DIR` to select another location outside the original installation. Existing saves/settings are imported once; later changes and deletions remain local to that folder.
 
 The runtime ZIP contains seven files: the executable, four required DLLs, the editable CMD and consolidated licence notices. Renderer sources, build reports and reference logs are in a separate optional development ZIP. Return `native-test.log` and describe New Game, movement, inventory, sound and saving. Bounded original gameplay passes on Linux and under Wine; full-game completion and full Windows acceptance remain unverified.
@@ -81,7 +88,7 @@ Without `--user-dir`, the game-file adapter denies writes. With that option, ori
 
 The [platform boundary and continuation plan](docs/development/PLATFORM.md) describes shared code and remaining host differences.
 
-SDL2 provides the shared window, input and timer modules in `runtime/input_sdl.c` and `runtime/timing_sdl.c`. OpenGLide's SDL2 backend provides the graphics context and Glide implementation. The Windows test currently retains its tested Win32 backend; switching Windows to the shared SDL path is a separate follow-up.
+The Rust runtime provides the same monotonic clock and DOS BIOS tick updates on both hosts. SDL2 provides the Linux window and input implementation in `runtime/input_sdl.c`. OpenGLide's SDL2 backend provides the graphics context and Glide implementation. Windows input still uses Win32 while the Rust migration proceeds; input/window consolidation is a separate step.
 
 The Linux x86-64 host uses the same native SR output and original startup code. Its OS adapters provide low-address memory, read-only DOS file/path/search behavior, executable hashing and signal diagnostics. These are compatibility services that SDL does not supply.
 
@@ -90,6 +97,8 @@ python3 -m tools.build_linux artifacts/TIMESTAMP-native \
   --install /path/to/Redguard \
   --menu-autosave /path/to/SAVEGAME.SAV
 ```
+
+Add `--installed-gog --movie-skip --sound` to verify automatic movie discovery from the installed GOG layout as well as the original intro/skip-to-ship sequence. These are development-test options; the normal runtime needs only `--game-dir`.
 
 The install must resolve below `/home/vibepod/workspaces` for the Docker mount. The command creates a separate Linux artifact directory and leaves the input translation and install unchanged. It builds an ELF64 executable and replaceable Glide library, runs original-function and adapter regressions, then exercises Options, Escape and original Quit through X11 keyboard events under Xvfb/Mesa. No Wine is involved. The scenario uses a copied autosave and disables sound/CD audio by default. Add `--sound --redbook` to test sample audio and the explicit absent-CD-device path. Use `--test-image /path/to/RGFX.EXE` to check either inspected image in that disposable scenario.
 
@@ -112,7 +121,7 @@ The game now uses SR's pooled below2GiB heap through a shared native wrapper. Th
 - `tools/pipeline.py`: pinned dependency build, metadata validation, translation and assembly compaction.
 - `metadata/`: exact-build roots and overlapping-instruction adaptations.
 - `probe-only/`: explicit fatal substitutions for unsupported boundaries.
-- `runtime/`: shared startup/ABI contracts, SDL input/timers and Windows host adapters. Every unimplemented service terminates.
+- `runtime/`: shared startup/ABI contracts, SDL input/timing ABI and Windows host adapters. Every unimplemented service terminates.
 - `linux/` and `tools/build_linux.py`: Linux host adapters and reusable native ELF build/menu verification.
 - `tools/build_glide.py` and `glide/`: pinned native renderer build, pixel smoke tests, guest layouts and original-stub mapping.
 - `tools/build_native.py`: native runtime integration, ABI/input/file tests and original startup tracing.
@@ -128,9 +137,9 @@ The game now uses SR's pooled below2GiB heap through a shared native wrapper. Th
 
 The original translated book menu must draw, respond to input and exit in a normal Windows window. A linked executable, a recreated menu, or an emulator-assisted run does not satisfy that milestone. Wine evidence now includes the original book, Options navigation, Escape recovery and clean original Quit from the actual extracted ZIP. The user has exercised gameplay on real Windows; full menu, other menu paths and focus acceptance remain open. Do not ship the diagnostic substitutions as game support.
 
-Launcher default: `RUN.cmd` presets `GAME_DIR=D:\Games\GOG Galaxy\Redguard\Redguard` and leaves `CD_IMAGE` empty. Keep the runtime outside the game directory. Installed menu artwork and textures load from `GAME_DIR` without a CD image. The user reports no image in their GOG installation; the image present in our local extracted installer does not establish their layout. Cyrus supports installed artwork independently, and its movie adapter can read loose SMK files when `animation_drive` is configured as a relative path. Both file adapters use a shared policy to map root-level DOS D: SMK reads to matching loose files in GAME_DIR, MOVIES, ANIMS or VIDEO. It reports the exact missing request. This does not establish whether the user installation contains those files. Image-backed movies remain supported.
+Launcher default: `RUN.cmd` presets `GAME_DIR=D:\Games\GOG Galaxy\Redguard\Redguard`. Keep the runtime outside the game directory. Assets load directly from that installation. Shared Rust code discovers GOG movie data named `game.gog` in the selected game directory or its parent automatically. Root-level DOS D: SMK reads also support matching loose files in GAME_DIR, MOVIES, ANIMS or VIDEO. No media setting is needed for the tested installed GOG layout. The runtime reads installed movie data without extracting or modifying it. A missing bundle preserves loose-file lookup; a present but invalid or ambiguous bundle stops startup with a diagnostic.
 
-Optional movie media: Pass `--game-dir PATH --user-dir SAVE_PATH --cd-image PATH_TO_GAME_GOG` to use movies from the owned CD image. The optional `CD_IMAGE` setting in `RUN.cmd` passes the same path. The adapter accepts ordinary ISO2048 and MODE1/2352 images, supports root files required by the shipped movie layout, and denies writes. It does not implement CD music, general MSCDEX or nested ISO directories.
+Optional movie media: Pass `--game-dir PATH --user-dir SAVE_PATH --cd-image PATH_TO_GAME_GOG` to use movies from the owned CD image. This advanced command-line option is separate from the normal launcher. The adapter accepts ordinary ISO2048 and MODE1/2352 images, supports root files required by the shipped movie layout, and denies writes. It does not implement CD music, general MSCDEX or nested ISO directories.
 
 Report fields: `movie_video_skip_to_ship_verified` covers observed intro frames, skip points and world entry. `movie_playback_verified` requires broader movie acceptance including audio, and remains false. `cd_playback_verified` means CD music playback, not reading files from the image.
 

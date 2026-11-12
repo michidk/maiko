@@ -17,12 +17,24 @@ def run(args, **kwargs):
     return subprocess.run(args, check=True, text=True, **kwargs)
 
 
+def collect_tool_notices(container, support, destination):
+    destination.mkdir(parents=True,exist_ok=True)
+    (destination/'SR-MIT.txt').write_text((support/'asm_call.inc').read_text().split('%macro')[0])
+    for package in ['mingw-w64-common','gcc-mingw-w64-x86-64-posix-runtime']:
+        run(['docker','cp',container+':/usr/share/doc/'+package+'/copyright',str(destination/(package+'.txt'))])
+    for license in ['GPL-3','LGPL-2','LGPL-2.1']:
+        run(['docker','cp',container+':/usr/share/common-licenses/'+license,str(destination/(license+'.txt'))])
+
+
 def ensure_tool_image():
     """Restore the disposable toolchain after external Docker cache cleanup."""
     began=time.monotonic()
     inspected=subprocess.run(['docker','image','inspect','--format','{{.Id}}',IMAGE],
                              stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
     rebuilt=inspected.returncode!=0
+    if not rebuilt:
+        labels=subprocess.check_output(['docker','image','inspect','--format','{{json .Config.Labels}}',IMAGE],text=True)
+        rebuilt=(json.loads(labels) or {}).get('org.maiko.wine-version')!='10.0'
     logfile=None
     if rebuilt:
         logfile=ROOT/'.cache'/f'toolchain-build-{time.time_ns()}.log'
@@ -64,6 +76,7 @@ def main():
                 run(['docker', 'cp', str(file), name + ':/work/' + file.name])
         run(['docker', 'cp', str(args.support.resolve()), name + ':/support'])
         run(['docker', 'cp', str(ROOT / 'runtime') + '/.', name + ':/work/'])
+        run(['docker', 'cp', str(ROOT / 'diagnostic') + '/.', name + ':/work/'])
         shell = '''set -e
 nasm -O1 -f win64 -I/support/ rgfx.asm -o rgfx.obj
 nasm -I/support/ -f win64 probe.asm -o probe.obj
@@ -75,15 +88,8 @@ x86_64-w64-mingw32-objdump -p redguard-probe.exe
         run(['docker', 'cp', name + ':/work/redguard-probe.exe', str(work / 'redguard-probe.exe')])
         report['windows_probe'] = 'PE32+_linked'
         report['exe_sha256'] = hashlib.sha256((work / 'redguard-probe.exe').read_bytes()).hexdigest()
-        report['tool_versions'] = subprocess.check_output(['docker', 'exec', name, 'dpkg-query', '-W', 'nasm', 'gcc-mingw-w64-x86-64-posix', 'mingw-w64-common', 'wine64'], text=True).splitlines()
-        notices = work / 'notices'
-        notices.mkdir(exist_ok=True)
-        support_notice = (args.support / 'asm_call.inc').read_text().split('%macro')[0]
-        (notices / 'SR-MIT.txt').write_text(support_notice)
-        for package in ['mingw-w64-common', 'gcc-mingw-w64-x86-64-posix-runtime']:
-            run(['docker', 'cp', name + ':/usr/share/doc/' + package + '/copyright', str(notices / (package + '.txt'))])
-        for license in ['GPL-3', 'LGPL-2', 'LGPL-2.1']:
-            run(['docker', 'cp', name + ':/usr/share/common-licenses/' + license, str(notices / (license + '.txt'))])
+        report['tool_versions'] = subprocess.check_output(['docker', 'exec', name, 'dpkg-query', '-W', 'nasm', 'gcc-mingw-w64-x86-64-posix', 'mingw-w64-common', 'wine-stable-amd64'], text=True).splitlines()
+        collect_tool_notices(name,args.support,work/'notices')
         if args.wine:
             result = subprocess.run(['docker', 'exec', name, 'timeout', '60', 'env', 'WINEDEBUG=-all', 'WINEPREFIX=/tmp/rg-wine', '/usr/lib/wine/wine64', 'redguard-probe.exe'], capture_output=True, text=True)
             output = result.stdout + result.stderr

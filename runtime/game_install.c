@@ -1,4 +1,5 @@
 #include "game_install.h"
+#include "installed_media.h"
 #include "cd_image.h"
 #include "game_build.h"
 #include "windows_storage.h"
@@ -77,6 +78,7 @@ int rg_install_select(int argc, char **argv) {
     if(user && !rg_user_storage_init(root,user)) {fprintf(stderr,"User storage failed error=%lu\n",GetLastError());return 0;}
     if(cd && !rg_cd_mount(cd)) return 0;
     if(!SetCurrentDirectoryA(root)) return 0;
+    if(!cd && rg_gog_movies_mount(rg_cd_mount)<0) return 0;
     fprintf(stderr,"Verified original game directory: %s\n",root);
     return 1;
 }

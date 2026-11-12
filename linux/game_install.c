@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "game_install.h"
+#include "installed_media.h"
 #include "cd_image.h"
 #include "game_build.h"
 #include "paths.h"
@@ -35,5 +36,7 @@ int rg_install_select(int argc,char **argv) {
     if(!strcmp(hex,RGFX_SHA256)) rg_exe_variant=0;
     else if(!strcmp(hex,RGFX_ALTERNATE_SHA256)) rg_exe_variant=1;
     else {fprintf(stderr,"Unsupported RGFX.EXE sha256=%s\n",hex);return 0;}
-    fprintf(stderr,"Recognized RGFX.EXE variant=%u sha256=%s\n",rg_exe_variant,hex);return 1;
+    fprintf(stderr,"Recognized RGFX.EXE variant=%u sha256=%s\n",rg_exe_variant,hex);
+    if(!cd && rg_gog_movies_mount(rg_cd_mount)<0) return 0;
+    return 1;
 }

@@ -155,7 +155,19 @@ with prefix.with_suffix('.log').open('w') as log:
                     while process.poll() is None and state() is None and time.monotonic()<until:time.sleep(.2)
                     report['world_after_movie']=state()
                     assert report['world_after_movie'],'Original movie did not return to world'
-                    key('Escape');time.sleep(3);key('Up');key('Return')
+                    # World rendering can be slower than a150ms key tap under
+                    # software GL. Wait for the actual book mode before Quit.
+                    key('Escape',.6)
+                    until=time.monotonic()+10
+                    while process.poll() is None and time.monotonic()<until:
+                        current=state()
+                        if current and current['ui_mode']==30:break
+                        time.sleep(.1)
+                    assert current and current['ui_mode']==30,'Original book did not open after movie'
+                    report['movie_quit_book_observed']=True
+                    # Menu navigation runs faster and repeats held directions.
+                    # Use one short tap after its camera/page transition settles.
+                    time.sleep(3);key('Up');key('Return')
                     assert process.wait(timeout=15)==0
                     report['movie_skip_to_world_verified']=True
                     break
