@@ -1,0 +1,20 @@
+# Downloaded dependencies, translated game code and test output
+.cache/
+artifacts/
+__pycache__/
+*.py[cod]
+
+# Local agent state and game/runtime data
+.serena/
+.codex/
+.claude/
+.superpowers/
+.env
+.env.*
+user-data/
+game/
+*.exe
+*.dll
+*.gog
+*.iso
+*.sav
