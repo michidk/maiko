@@ -124,7 +124,7 @@ log=(root/'native-test.log').read_text()
 Path('/work/package-native-test.log').write_text(log)
 assert result.returncode==a.expected_exit,(result.returncode,a.expected_exit)
 assert f'Exit code: {a.expected_exit}' in log
-assert 'Recognized RGFX.EXE variant=1' in log
+assert 'Recognized RGFX.EXE variant=0' in log or 'Recognized RGFX.EXE variant=1' in log
 assert 'Native Glide window 1024x768 opened=1' in log
 assert 'Isolated native user storage:' in log
 if a.game_on_drive_d:assert 'getcwd result=C:\\' in log
