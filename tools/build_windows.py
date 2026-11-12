@@ -69,6 +69,8 @@ def main():
     report.pop('exe_sha256', None)
     report['toolchain_image'] = subprocess.check_output(['docker', 'image', 'inspect', '--format', '{{.Id}}', IMAGE], text=True).strip()
     try:
+        from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
+        rust_probe=build_rust_runtime('x86_64-pc-windows-gnu',component='probe')
         run(['docker', 'run', '-d', '--network', 'none', '--memory', '4g', '--memory-swap', '4g', '--cpus', '2', '--name', name, IMAGE, 'sleep', 'infinity'], stdout=subprocess.DEVNULL)
         # Only generated assembly and host sources enter the container. No install is mounted.
         for pattern in ['*.asm', 'seg*.inc']:
@@ -77,10 +79,12 @@ def main():
         run(['docker', 'cp', str(args.support.resolve()), name + ':/support'])
         run(['docker', 'cp', str(ROOT / 'runtime') + '/.', name + ':/work/'])
         run(['docker', 'cp', str(ROOT / 'diagnostic') + '/.', name + ':/work/'])
+        report['rust_runtime']=stage_rust_runtime(name,rust_probe)
         shell = '''set -e
 nasm -O1 -f win64 -I/support/ rgfx.asm -o rgfx.obj
 nasm -I/support/ -f win64 probe.asm -o probe.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 probe.c probe.obj rgfx.obj -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -o redguard-probe.exe
+nasm -f win64 main.asm -o main.obj
+x86_64-w64-mingw32-gcc main.obj probe.obj rgfx.obj /work/libmaiko_probe.a -Wl,--gc-sections -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -lwinpthread -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -o redguard-probe.exe
 x86_64-w64-mingw32-objdump -p redguard-probe.exe
 '''
         with (work / 'windows-build.log').open('w') as log:
@@ -91,6 +95,8 @@ x86_64-w64-mingw32-objdump -p redguard-probe.exe
         report['tool_versions'] = subprocess.check_output(['docker', 'exec', name, 'dpkg-query', '-W', 'nasm', 'gcc-mingw-w64-x86-64-posix', 'mingw-w64-common', 'wine-stable-amd64'], text=True).splitlines()
         collect_tool_notices(name,args.support,work/'notices')
         if args.wine:
+            run(['docker','cp',str(ROOT/'tests/init_wine.sh'),name+':/work/init_wine.sh'])
+            run(['docker','exec',name,'sh','/work/init_wine.sh','/tmp/rg-wine'])
             result = subprocess.run(['docker', 'exec', name, 'timeout', '60', 'env', 'WINEDEBUG=-all', 'WINEPREFIX=/tmp/rg-wine', '/usr/lib/wine/wine64', 'redguard-probe.exe'], capture_output=True, text=True)
             output = result.stdout + result.stderr
             (work / 'wine.log').write_text(output)

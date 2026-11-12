@@ -4,14 +4,16 @@
 #include <windows.h>
 #include "game_install.h"
 static int picker_calls, picker_cancel;
-int rg_choose_game_directory(char *path, size_t capacity) {
+static int mock_picker(char *path, size_t capacity) {
     ++picker_calls;
     if (picker_cancel) return 0;
     assert(capacity > strlen("Z:\\game"));
     strcpy(path,"Z:\\game");
     return 1;
 }
+extern void rg_install_set_picker(int (*picker)(char *,size_t));
 int main(void) {
+    rg_install_set_picker(mock_picker);
     char *explicit_dir[]={"test","--game-dir","Z:\\game"};
     assert(rg_install_select(3,explicit_dir) && rg_exe_variant==0);
     char current[MAX_PATH];

@@ -1,24 +1,23 @@
 # Windows and Linux host boundary
 
-Maiko runs the same translated engine, native service dispatcher, guest-register contract, pooled heap, Glide bridge and SDL audio on Windows and Linux. Game behavior belongs in this shared code or the original translation metadata. Platform adapters implement operating-system operations behind the headers in `runtime/`.
+Maiko runs the same translated engine and Rust runtime on Windows and Linux. Game behavior belongs in the original translation metadata or shared Rust services. The ABI headers in `runtime/` define the contract used by the assembly and independent C test programs.
 
-The boundary is sufficient for continued gameplay work, but equal interfaces do not yet mean equal implementations. Timing is now shared Rust code using std::time::Instant. Windows input still uses Win32; Linux input uses SDL. File handles, path casing, save storage and crash reporting also have separate host implementations. The host tests must exercise the same observable contracts before either implementation changes.
+Rust std provides files, paths, threads, installation hashing and monotonic clocks. `cap-std` and `cap-fs-ext` confine save/config operations to an independently opened user directory. SDL Rust bindings provide one window, keyboard, mouse and audio implementation for both platforms. The Rust Glide bridge preserves native host pointers while translating the original game's 32-bit argument layouts.
 
-## Installed movie files
+Operating-system bindings remain necessary for below-4-GiB memory, memory protection queries, disk information, folder selection and fatal reporting. Windows receives an HWND from SDL; Linux passes SDL's window pointer to the patched OpenGLide backend. Windows uses SEH and Linux uses signals. These operations share Rust interfaces but have explicit platform implementations.
 
-`runtime/rust/movies.rs` owns the common request validation and folder precedence. A root-level DOS `D:` request for an SMK file searches the selected game directory, then `MOVIES`, `ANIMS` and `VIDEO`. The operating-system callback resolves the candidate and checks that it is a file. On Windows, this alias applies to requests outside the configured game root; paths already inside that root retain normal file resolution. On Linux, eligible DOS D: requests use the alias. The file adapters retain their read-only rules for game assets.
+## Installed movies and storage
 
-Both host builds compile `tests/installed_movies.c` against their actual file and storage adapters. It checks read/attributes, case handling, folder precedence, missing movies, immutable files and path boundaries without game data or an image. `sh tests/check_portable.sh` runs the Linux version. The Windows native-build checks run the same fixture under Wine. Neither establishes playback of movies in a particular installation. Mounted-image precedence and a Windows game root on drive D: are not yet covered together with this fixture. Linux case collisions and Windows path-length errors can also produce different errors between the adapters.
+`runtime/rust/movies.rs` owns root-level DOS D: movie request validation and folder precedence. Loose SMK files are searched in the selected game directory, then `MOVIES`, `ANIMS` and `VIDEO`. Installed GOG data named `game.gog` is discovered in the selected game folder or its parent. An explicitly selected compatible image takes priority. The shared Rust media reader serves installed bundled data before loose-file lookup.
 
-The shared Rust installer also finds bundled GOG movie data named `game.gog` in the selected game folder or its parent. Discovery runs after selecting the native game working directory, so it preserves the host path encoding. This installed source and an explicitly selected compatible image are handled before loose-file lookup. Removing that source is separate from locating installed movies, decoding SMK content or keeping the original animation clock.
+Media and game assets are read-only. Original save/config writes are available only with an isolated `--user-dir`. Capability-based file operations, path checks and retained storage contracts protect the original installation.
 
-## Next shared work
+Discovery uses the canonical game directory. A junction or symlink therefore searches the target's parent. Invalid or ambiguous bundled movie data currently stops startup with a diagnostic. An absent bundle leaves loose-file lookup enabled.
 
-1. Bring Windows onto the shared SDL input path with explicit window-handle integration. Verify focus loss, release events, repeat, mouse movement, startup timing and clean exit before replacing the current backend.
-2. Use the same jump/timing observation scenario on both targets. The reported real-Windows endless rise is still unresolved; Linux or Wine landing is not a Windows fix.
-3. Extend shared file/save contracts as original gameplay reaches new operations. Keep native handles, memory mapping and exception or signal handling in host-specific adapters.
+## Verification and remaining limits
 
-The Rust runtime already implements the clock and movie-policy C ABI. The remaining migration is tracked in [RUST_PLAN.md](RUST_PLAN.md). It must preserve these contracts, the low-address memory requirement and platform acceptance checks.
+Both builds exercise shared services through the same C ABI fixtures. Original-function tests additionally call translated engine functions through the assembly entry interface. Real game probes cover menus, installed-GOG movie skips, inventory and save/reload. Exact results and platform limits are recorded in [VALIDATION.md](VALIDATION.md).
 
+Independent C/C++ test programs remain to detect ABI layout and calling-convention mistakes. They are not runtime implementations and do not ship in the game executable. [RUST_PLAN.md](RUST_PLAN.md) describes the workspace and source policy.
 
-Installed media discovery uses the canonical game directory. If the selected game folder is a junction or symlink, its parent means the target's parent. A discovered but invalid or ambiguous bundled movie-data file stops startup with a diagnostic; an absent bundle leaves loose-file lookup enabled. This strict failure is intentional in the current experiment.
+The reported real-Windows jump, combat, startup speed and fog issues remain unresolved. A passing Linux or Wine check does not establish a real-Windows fix. Gameplay work resumes from [GAMEPLAY_PLAN.md](GAMEPLAY_PLAN.md) after the migration acceptance checks. Mac development is excluded.

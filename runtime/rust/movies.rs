@@ -1,6 +1,6 @@
 use std::ffi::{CStr, c_char, c_int, c_void};
 
-fn leaf(request: &[u8]) -> Option<&[u8]> {
+pub(crate) fn leaf(request: &[u8]) -> Option<&[u8]> {
     if request.len() < 2 || !request[0].eq_ignore_ascii_case(&b'D') || request[1] != b':' {
         return None;
     }

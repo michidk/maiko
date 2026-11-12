@@ -3,7 +3,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import time
 
@@ -21,7 +20,28 @@ with (root/'linux-menu.log').open('w') as log:
         time.sleep(3)
         window=subprocess.check_output(['xdotool','search','--name','^Redguard native experiment$'],text=True,timeout=5).strip().splitlines()[0]
         subprocess.run(['xdotool','windowfocus','--sync',window],check=True,timeout=5)
-        def frame(name): shutil.copyfile(root/'game-frame-latest.ppm',root/f'linux-menu-{name}.ppm')
+        frame_hashes={}
+        def frame(name):
+            # Original input is disabled during book camera/page turns. Software
+            # GL can take much longer than three seconds to finish those turns.
+            deadline=time.monotonic()+18
+            previous=None;stamp=None
+            while time.monotonic()<deadline:
+                if process.poll() is not None:raise RuntimeError('Game ended while waiting for '+name)
+                latest=root/'game-frame-latest.ppm'
+                current=latest.stat().st_mtime_ns
+                if current!=stamp:
+                    data=latest.read_bytes();parts=data.split(b'\n',3)
+                    if len(parts)==4 and parts[:3]==[b'P6',b'1024 768',b'255'] and len(parts[3])==1024*768*3:
+                        digest=hashlib.sha256(data).hexdigest()
+                        print('Observed book capture',name,digest,flush=True)
+                        if digest==previous:
+                            (root/f'linux-menu-{name}.ppm').write_bytes(data)
+                            frame_hashes[name]=digest
+                            return
+                        previous=digest;stamp=current
+                time.sleep(.05)
+            raise TimeoutError('Book did not settle before '+name)
         def key(name):
             subprocess.run(['xdotool','keydown',name],check=True,timeout=5)
             time.sleep(.15)
@@ -30,6 +50,8 @@ with (root/'linux-menu.log').open('w') as log:
         frame('before')
         key('Up');key('Up');key('Return');time.sleep(3);frame('options')
         key('Escape');time.sleep(3);frame('return')
+        assert frame_hashes['before']!=frame_hashes['options']
+        assert frame_hashes['options']!=frame_hashes['return']
         key('Down');key('Down');key('Down');key('Return')
         code=process.wait(timeout=15)
         assert code==0,code
@@ -41,7 +63,8 @@ assert 'Original DOS termination status=0; exiting native process' in text
 assert 'Native Glide window 1024x768 opened=1' in text
 result=dict(exe_sha256=hashlib.sha256((root/'redguard-native').read_bytes()).hexdigest(),
             wine_used=False,original_quit_exit=code,keyboard_events='X11 XTest through SDL',
-            menu_navigation_exercised=True,visual_review_required=True,native_windows_verified=False)
+            menu_navigation_exercised=True,captured_frame_sha256=frame_hashes,
+            capture_settle='two successive complete matching back buffers',visual_review_required=True,native_windows_verified=False)
 (root/'linux-menu-verification.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result,indent=2))
 print('PASS native Linux original menu key sequence and clean original Quit without Wine')

@@ -1,21 +1,35 @@
 # Rust runtime migration
 
-The user requests Rust for Maiko-owned runtime code and shared Windows/Linux implementations. This continues the authorized recompilation experiment. SR translation and generated assembly remain intact; upstream SDL, OpenGLide and SR sources remain external dependencies. Migrating those upstream projects is a different task.
+Maiko's owned Windows/Linux runtime is implemented in Rust. The translated original engine and handwritten ABI assembly remain intact. SR's allocator and sample decoder, SDL and OpenGLide remain external C/C++ dependencies. No Mac work is included in this migration.
 
-Use one Rust runtime crate with explicit C ABI exports for the translated assembly and temporarily retained adapters. Keep guest addresses as checked 32-bit values. Rust standard-library files, paths, threads and monotonic time replace duplicate host logic. SDL Rust bindings will own the shared input, window and audio integration. Restrict OS-specific code to guest mappings, memory queries and crash dispatch. Avoid a second window/event framework beside SDL/OpenGLide.
+## Structure
 
-## Current checkpoint
+The Cargo workspace separates reusable services from libraries that require translated game globals or the renderer.
 
-The Rust crate currently owns movie request policy, installed GOG movie discovery and BIOS/elapsed timing. The three replaced C files have been removed. Remaining C/C++ adapters and tests are still present; this is an incremental migration, not a completed Rust port. Rust unit and native Linux ABI contracts pass. Windows std requires Wine10 in the development toolchain because Wine8 lacks bcryptprimitives.dll. Full-host results are recorded separately in the decision trail.
+- `maiko-runtime`, in `runtime/rust/`, owns installation validation, installed GOG media discovery, DOS files and searches, isolated save/config storage, clocks, SDL input/audio, guest allocations, operating-system services and crash reports.
+- `maiko-glide`, in `runtime/glide/`, converts the original DOS Glide arguments and pointer-bearing structures to the native renderer ABI.
+- `maiko-host`, in `runtime/host/`, owns game startup, service dispatch and keyboard callbacks into the translated engine.
+- `maiko-probe`, in `runtime/probe/`, retains the separate historical diagnostic entry program.
 
-## Deliverables and gates
+`main.asm` and `service.asm` forward to Rust exports. Shared services use Rust std, SDL bindings and capability-based filesystem operations. Platform-specific code is limited to native handles, folder selection, guest-addressable memory and OS diagnostics.
 
-1. Replace movie request policy and both clock implementations with Rust. Link the Rust library into both real hosts and run the existing file-service, timer and original movie-clock contracts. Remove replaced C sources after callers migrate.
-2. Remove CD_IMAGE from the normal CMD. Keep explicit --cd-image as an optional media source; packaging must accept installed media evidence and must not require image-backed movie evidence for a normal no-media test. Test rejection of falsely claimed movie support.
-3. Separate the early diagnostic entry program from the actual runtime. Retain shared fatal hardware stubs behind a neutral filename until dependency checks prove they are unused.
-4. Port file/save/config/install selection to Rust std with shared path policy. Preserve isolated writes, original filenames, DOS errors and user files; run both OS contracts and save/reload.
-5. Port input and audio to SDL Rust bindings, maintaining the existing renderer/window connection. Run scancode/focus/mouse/close and PCM tests on both targets.
-6. Port host dispatch/startup, memory wrapper, platform services and crash handling. Keep reviewed assembly and external allocator/audio dependencies until equivalent Rust replacements pass lifetime and original-function tests.
-7. Port remaining owned C/C++ bridges, diagnostic program and tests; remove obsolete sources/build rules. Audit remaining C inventory and clearly distinguish upstream dependencies from owned code.
+Keeping Glide separate prevents file-only binaries from importing the renderer DLL. Keeping the game host separate prevents standalone contracts from referencing translated-game globals. The diagnostic compiles the shared crash-reporting module with only its OS dependencies, so it does not link SDL or the game allocator.
 
-Each completed unit must keep Linux and Windows builds usable. Full migration remains incomplete until the owned-code inventory is clear and both original-game regressions pass. A Rust library build or Wine run alone does not establish real-Windows acceptance or fix jump/startup/fog/combat issues. Future work remains on feature branches; current main publication was explicitly requested by the user.
+## Source policy
+
+`python3 -m tools.audit_runtime --check` rejects owned production C/C++ in the runtime, Linux, audio, Glide and diagnostic directories. Replaced production implementations have been deleted.
+
+Independent C/C++ test programs remain in `tests/`. They check Rust's exported C ABI against C headers, the assembly calling convention and OpenGLide's native structures. They are not linked into the shipped game. Existing Python build and game-driving tools remain Python. Upstream dependency sources are staged from pinned revisions and are not counted as owned runtime code.
+
+## Acceptance gates
+
+- Rust formatting, workspace Clippy and unit tests.
+- Windows and Linux file, storage, media, input, audio, memory and crash-report contracts.
+- Calls into original translated functions, including normal-exit callbacks and intentional fatal exceptions.
+- Original book/Options/return/Quit sequence and installed-GOG intro/skips/ship sequence.
+- Inventory open/close and separate-process save/reload.
+- Actual release packager and extracted seven-file Windows ZIP, including the shipped game-path preset and both accepted original EXE variants.
+
+Detailed run results belong in [VALIDATION.md](VALIDATION.md) and the [decision trail](../research/decisions.tsv). A successful Wine run does not establish real-Windows acceptance. Movie checks use the SDL dummy audio device and do not establish hardware playback or audio/video synchronization.
+
+Gameplay fixes follow this migration. The reported endless jump, combat, startup burst and distant fog remain separate work in [GAMEPLAY_PLAN.md](GAMEPLAY_PLAN.md). The existing Mac branch and PR remain untouched.

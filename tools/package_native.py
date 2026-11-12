@@ -9,6 +9,7 @@ import subprocess
 import zipfile
 import shutil
 from .package_media import movie_evidence
+from .rust_licenses import notices as rust_dependency_notices
 
 ROOT=Path(__file__).resolve().parents[1]
 BACKEND='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
@@ -65,6 +66,7 @@ def main():
         sysroot=Path(subprocess.check_output([rustc,'--print','sysroot'],cwd=ROOT,text=True).strip())
         library_notice=sysroot/'share/doc/rust/COPYRIGHT-library.html'
         licence+='===== Rust standard library and bundled dependencies =====\n'+library_notice.read_text()+'\n\n'
+        licence+=rust_dependency_notices()+'\n'
     with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as package:
         for filename in ['redguard-native.exe','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
             package.write(work/filename,filename)
@@ -76,11 +78,12 @@ def main():
         package.writestr('build-report.json',json.dumps(report,indent=2)+'\n')
         package.writestr('LICENSES.txt',licence)
         package.writestr('sources/openglide-ng-'+BACKEND+'.tar.gz',gzip.compress(archive,mtime=0))
-        for filename in ['patches/openglide-x64.patch','glide/build_backend.sh','glide/backend_smoke.cpp','Dockerfile']:
+        for filename in ['patches/openglide-x64.patch','glide/build_backend.sh','tests/backend_smoke.cpp','Dockerfile']:
             package.write(ROOT/filename,'sources/'+filename)
         package.writestr('sources/README.txt','OpenGLide-ng upstream: https://github.com/eugenenuke/openglide-ng\n'
                          'Extract the source archive to /src, apply patches/openglide-x64.patch with patch -p1,\n'
-                         'place glide/*.sh and glide/*.cpp in /work, and run sh /work/build_backend.sh\n'
+                         'copy glide/build_backend.sh and tests/backend_smoke.cpp into /work, then run\n'
+                         'sh /work/build_backend.sh\n'
                          'inside the supplied Dockerfile toolchain. The build script creates the SDK header.\n')
     digest=hashlib.sha256(destination.read_bytes()).hexdigest()
     source_digest=hashlib.sha256(development.read_bytes()).hexdigest()

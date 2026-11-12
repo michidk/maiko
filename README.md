@@ -19,8 +19,9 @@ See [the build and runtime notes](#reproduce), [the gameplay plan](docs/developm
 ## Repository layout
 
 - `tools/`: translation, build, verification and packaging commands. Run entry points as `python3 -m tools.<name>` from the repository root.
-- `runtime/rust/`: shared Rust host services, with the Cargo package at the repository root.
-- `runtime/`, `linux/`, `glide/`, `audio/`: assembly ABI and adapters being migrated to Rust.
+- `runtime/rust/`: shared Rust host services, with the core Cargo package at the repository root.
+- `runtime/host/`, `runtime/glide/`, `runtime/probe/`: game dispatcher, Glide bridge and diagnostic Rust crates.
+- `runtime/`, `linux/`, `glide/`, `audio/`: assembly ABI, C ABI headers and upstream dependency build rules.
 - `diagnostic/`: the separate early translated-entry probe, not the game runtime.
 - `metadata/`, `native-metadata/`, `probe-only/`, `patches/`: translator inputs and upstream changes.
 - `tests/`: synthetic checks and game-backed development probes.
@@ -33,12 +34,12 @@ See [the build and runtime notes](#reproduce), [the gameplay plan](docs/developm
 Run the source-only checks without game data or Docker:
 
 ```sh
-cargo test --locked
-cargo clippy --all-targets -- -D warnings
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 sh tests/check_portable.sh
 ```
 
-Install Rust through rustup; `rust-toolchain.toml` pins the compiler and Windows GNU standard library. Cargo uses its configured shared target directory; the scripts do not override it. The Rust migration is incomplete, with remaining work tracked in [RUST_PLAN.md](docs/development/RUST_PLAN.md).
+Install Rust through rustup; `rust-toolchain.toml` pins the compiler and Windows GNU standard library. Cargo uses its configured shared target directory; the scripts do not override it. Source checks also require SDL2 and SDL2_mixer development libraries and pkg-config. The owned runtime implementations are Rust; migration acceptance gates and retained independent C ABI tests are described in [RUST_PLAN.md](docs/development/RUST_PLAN.md).
 
 Use Linux, Python 3.11 with venv support, GCC/G++, Git and Docker. The Docker game builds and package verifier currently require bind-mounted inputs to resolve below `/home/vibepod/workspaces`. This applies to `tools/build_native.py`, `tools/build_linux.py` and `tools/verify_native_package.py`, including selected game, CD-image and verifier input paths. The scripts retain this development-environment restriction; a clone elsewhere can run the source-only checks, but must stage those inputs under that directory for Docker runs. The source build installs pinned SCons into a local virtual environment. Everything downloaded or generated is ignored under `.cache/` and `artifacts/`.
 
@@ -70,7 +71,7 @@ python3 -m tools.pipeline translate --native --install /path/to/Redguard
 python3 -m tools.build_native artifacts/TIMESTAMP-native --install /path/to/Redguard
 ```
 
-The native build runs synthetic adapter, file and platform tests before the original game. It mounts the install read-only, uses native Win32 services, and keeps unresolved CPU instructions as explicit fatal traps. Original CRT constructors execute before the original main function. A successful build is not a successful menu run; inspect `report.json` and `native-wine.log` for the reached boundary. Automated Windows-target checks run under Wine. The user has tested the game on real Windows; full acceptance remains open.
+The native build runs synthetic adapter, file and platform tests before the original game. It mounts the install read-only, uses the shared Rust runtime and SDL services, and keeps unresolved CPU instructions as explicit fatal traps. Original CRT constructors execute before the original main function. A successful build is not a successful menu run; inspect `report.json` and `native-wine.log` for the reached boundary. Automated Windows-target checks run under Wine. The user has tested the game on real Windows; full acceptance remains open.
 
 ## Windows startup test
 
@@ -88,7 +89,7 @@ Without `--user-dir`, the game-file adapter denies writes. With that option, ori
 
 The [platform boundary and continuation plan](docs/development/PLATFORM.md) describes shared code and remaining host differences.
 
-The Rust runtime provides the same monotonic clock and DOS BIOS tick updates on both hosts. SDL2 provides the Linux window and input implementation in `runtime/input_sdl.c`. OpenGLide's SDL2 backend provides the graphics context and Glide implementation. Windows input still uses Win32 while the Rust migration proceeds; input/window consolidation is a separate step.
+The shared Rust runtime provides clocks, files, isolated save/config storage, installation validation, SDL window/input/audio integration and DOS services on both hosts. OpenGLide provides the graphics context and Glide implementation. Native bindings handle low-address memory, folder selection and fatal exception or signal reporting.
 
 The Linux x86-64 host uses the same native SR output and original startup code. Its OS adapters provide low-address memory, read-only DOS file/path/search behavior, executable hashing and signal diagnostics. These are compatibility services that SDL does not supply.
 
@@ -102,7 +103,7 @@ Add `--installed-gog --movie-skip --sound` to verify automatic movie discovery f
 
 The install must resolve below `/home/vibepod/workspaces` for the Docker mount. The command creates a separate Linux artifact directory and leaves the input translation and install unchanged. It builds an ELF64 executable and replaceable Glide library, runs original-function and adapter regressions, then exercises Options, Escape and original Quit through X11 keyboard events under Xvfb/Mesa. No Wine is involved. The scenario uses a copied autosave and disables sound/CD audio by default. Add `--sound --redbook` to test sample audio and the explicit absent-CD-device path. Use `--test-image /path/to/RGFX.EXE` to check either inspected image in that disposable scenario.
 
-This is a Linux feasibility target, not a distributable Linux release. It currently depends on Debian12 SDL2, OpenGL, OpenSSL and C/C++ runtimes. Other distributions, Wayland, other graphics drivers, audible hardware output, sustained gameplay and ARM game execution remain unverified. The report distinguishes the tested Linux menu sequence from overall menu and real Windows acceptance.
+This is a Linux feasibility target, not a distributable Linux release. It currently depends on Debian 12 SDL2, SDL_mixer, OpenGL and C/C++ runtimes. Other distributions, Wayland, other graphics drivers, audible hardware output, sustained gameplay and ARM game execution remain unverified. The report distinguishes the tested Linux menu sequence from overall menu and real Windows acceptance.
 
 The Linux test suite also exercises 9000 simultaneous guest allocations, long host filenames during DOS directory searches, keypad/extended-key mappings and a native SDL window pointer above 4 GiB. The Glide window argument preserves the full host pointer. Captures are OpenGLide back-buffer readbacks, not screenshots of the presented desktop window.
 
@@ -110,26 +111,26 @@ Remaining Linux limits include incomplete game-loading coverage, unsorted DOS se
 
 Add `--gameplay both --gameplay-seconds 30` to record bounded Continue/New Game observations. `--world-controls` measures original player position after walking and attempts in-game Quit. With `--writable-gameplay`, that stricter probe now completes original autosave and Quit. Add `--save-roundtrip` to verify exact player-position persistence in a second process, and `--exercise` for original inventory open/close and bounded action input. `--modal-ui` on Continue seeds one synthetic logbook entry in disposable storage and checks the original logbook interface. Map opening is reported separately and remains unverified in the current seed. A timeout or observation-only report is never full-game acceptance. See [whole-game plan](docs/development/GAMEPLAY_PLAN.md).
 
-The game now uses SR's pooled below2GiB heap through a shared native wrapper. The build exports and hashes the exact upstream sources from the pinned revision. DOS path and file services remain platform-specific; SDL alone does not supply them.
+The game now uses SR's pooled below2GiB heap through a shared native wrapper. The build exports and hashes the exact upstream sources from the pinned revision. DOS path and file policy is shared Rust code; native bindings handle operating-system details.
 
 ## Files
 
 - `tools/sr_audio.py`, `audio/` and `tools/windows_sdl.py`: pinned SR sample playback through SDL_mixer and official Windows SDK staging.
-- `linux/user_storage.c` and `runtime/windows_storage.c`: isolated opt-in save/config storage.
-- `tools/sr_heap.py` and `runtime/guest_memory.cpp`: pinned pooled SR heap staging and checked native allocation API.
+- `runtime/rust/storage.rs` and `runtime/rust/files.rs`: shared paths, DOS files and isolated opt-in save/config storage.
+- `tools/sr_heap.py` and `runtime/rust/memory.rs`: pinned pooled SR heap staging and checked native allocation API.
 - `tools/le_image.py`: hash-checked LE inspection and page loading.
 - `tools/pipeline.py`: pinned dependency build, metadata validation, translation and assembly compaction.
 - `metadata/`: exact-build roots and overlapping-instruction adaptations.
 - `probe-only/`: explicit fatal substitutions for unsupported boundaries.
-- `runtime/`: shared startup/ABI contracts, SDL input/timing ABI and Windows host adapters. Every unimplemented service terminates.
-- `linux/` and `tools/build_linux.py`: Linux host adapters and reusable native ELF build/menu verification.
+- `runtime/`: Rust services, game/Glide/diagnostic crates and assembly ABI contracts. Every unimplemented service terminates.
+- `linux/` and `tools/build_linux.py`: native ELF build rules and Linux game verification.
 - `tools/build_glide.py` and `glide/`: pinned native renderer build, pixel smoke tests, guest layouts and original-stub mapping.
 - `tools/build_native.py`: native runtime integration, ABI/input/file tests and original startup tracing.
 - `tools/build_windows.py`: reproducible Windows linking and Wine boundary check.
 - `tools/package_native.py`: package the observed Windows gameplay test and renderer sources/notices.
 - `tools/verify_native_package.py`: extract and run the actual seven-file ZIP under Wine with a host D: install, the shipped GAME_DIR preset, no-image menu navigation and saved path-error exits. Optional media mode also checks an independent movie PCM reference.
 - `tests/check_movie_pcm.py`: compare a bounded original Smacker source prefix byte-for-byte with FFmpeg in the Linux development image.
-- `runtime/cd_image.c` and `tests/check_cd_image.py`: shared read-only ISO/MODE1 CD root-file adapter and synthetic sector/handle tests.
+- `runtime/rust/media.rs` and `tests/check_cd_image.py`: shared read-only ISO/MODE1 CD root-file adapter and synthetic sector/handle tests.
 - `tools/package_diagnostic.py`: package a hash-matched Wine-verified diagnostic and runtime notices.
 - `Dockerfile`: isolated MinGW/NASM/Wine toolchain.
 

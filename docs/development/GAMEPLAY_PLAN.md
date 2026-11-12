@@ -2,6 +2,14 @@
 
 The user authorized continuation beyond the menu on 2026-11-11. Preserve original translated game logic, keep Cyrus separate, support both recognized RGFX images, and retain a Windows executable with an external game-directory argument and editable CMD. Linux is the fast development target; Windows remains a required delivery target.
 
+## Current user priority
+
+Finish and verify the Windows/Linux Rust migration first. Keep Mac development stopped.
+
+Then reproduce a single-tap jump on the opening ship, trace original vertical movement, collision and landing, and verify rise, fall, landing and repeated jumps. Next trace attack input, weapon state, hits, damage and enemy behavior through defeating the ship enemies and reaching the island. Correct normal book startup, New Game intro playback and the initial speed burst. Compare distant sea and fog with the original scene before choosing a translation or renderer fix. Expand island coverage through dialogue, doors, scene changes, inventory, saves and actual quest progression.
+
+The checkpoints below describe earlier work. They do not supersede this order or establish that the reported gameplay defects are fixed.
+
 ## Acceptance and sequence
 
 1. Reproduce Continue and New Game from the real menu. Record first unsupported service or translation fault with registers, original/host address and asset context. Add a reusable bounded gameplay runner with immutable evidence and hashes.
@@ -13,7 +21,7 @@ The user authorized continuation beyond the menu on 2026-11-11. Preserve origina
 
 ## Implementation rules
 
-Use the existing Python/SR/x64 C/assembly pipeline and narrow host interfaces. Build/run one at a time in bounded containers, use timeout with kill escalation, keep generated code/assets ignored, and preserve source saves. Every newly reached failure is investigated before changing behavior. Record phases and actual build/run durations in decisions.tsv and RESEARCH.md. This is the user-authorized experimental continuation; no repeated design approval or between-task permission prompts.
+Use the Python/SR translation pipeline, shared Rust runtime and assembly ABI interfaces. Build/run one at a time in bounded containers, use timeout with kill escalation, keep generated code/assets ignored, and preserve source saves. Every newly reached failure is investigated before changing behavior. Record phases and actual build/run durations in decisions.tsv and RESEARCH.md. This is the user-authorized experimental continuation; no repeated design approval or between-task permission prompts.
 
 ## Review focus
 

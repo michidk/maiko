@@ -1,5 +1,7 @@
 # Native Redguard menu implementation plan
 
+This is the historical recompilation-spike plan. Current runtime architecture and acceptance gates are in [RUST_PLAN.md](RUST_PLAN.md) and [PLATFORM.md](PLATFORM.md). Gameplay continuation is in [GAMEPLAY_PLAN.md](GAMEPLAY_PLAN.md).
+
 > **For agentic workers:** Use superpowers:executing-plans to implement this plan sequentially. Existing experimental-spike authorization applies; no additional design approval is required.
 
 **Goal:** Run the original interactive book menu in a Windows executable without a DOS emulator or launcher.

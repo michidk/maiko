@@ -14,7 +14,7 @@ from .build_windows import IMAGE, ROOT, run, ensure_tool_image, collect_tool_not
 from .sr_heap import stage_sr_heap
 from .sr_audio import stage_sr_audio
 from .windows_sdl import stage_windows_sdl
-from .rust_runtime import stage as stage_rust_runtime
+from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
 from .gog_install import movie_bundle
 
 def main():
@@ -62,6 +62,9 @@ def main():
     began = time.monotonic()
     try:
         report['toolchain']=ensure_tool_image()
+        # Cargo can wait for another project; do this before the container lease starts.
+        rust_runtime=build_rust_runtime('x86_64-pc-windows-gnu')
+        rust_host=build_rust_runtime('x86_64-pc-windows-gnu',component='host')
         run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','600'])
         for file in work.glob('*'):
@@ -78,100 +81,12 @@ def main():
             run(['docker','cp',str(backend/file),name+':/work/'+file])
         report['glide_backend']=backend_report
         collect_tool_notices(name,ROOT/'.cache/sr/SR/x64-support',work/'notices')
-        report['rust_runtime']=stage_rust_runtime(name,'x86_64-pc-windows-gnu')
+        report['rust_runtime']=stage_rust_runtime(name,rust_runtime)
+        report['rust_host']=stage_rust_runtime(name,rust_host)
         report['sr_heap']=stage_sr_heap(name)
         report['sr_audio']=stage_sr_audio(name)
         report['sdl_audio']=stage_windows_sdl(name)
-        run(['docker','cp',str(ROOT/'audio/audio_sdl.c'),name+':/audio/audio_sdl.c'])
-        commands = '''set -e
-x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -c guest_memory.cpp -o guest_memory.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 /tests/menu_keys.c -o menu-keys.exe
-mkdir -p 'native game files'
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/crash_reporting.c crash.c -o crash-reporting-test.exe
-python3 /tests/check_crash_reporting.py
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/game_install.c game_install.c -lbcrypt -Wl,--image-base,0x10000000,--disable-dynamicbase -o 'native game files/install-test.exe'
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 'native game files/install-test.exe'
-nasm -f win64 -I/support/ -DABI_TEST native_entry.asm -o abi.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 /tests/game_directory_dialog.c game_directory_dialog.c -lshell32 -lole32 -luser32 -o dialog-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 dialog-test.exe
-nasm -f win64 -I/support/ /tests/abi_harness.asm -o abi_test.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/abi_harness.c guest_memory.obj abi.obj abi_test.obj -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -o abi-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 abi-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/runtime_io.c guest_memory.obj game_files.c -Wl,--image-base,0x10000000,--disable-dynamicbase -o io-test.exe
-(cd /game && WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 /work/io-test.exe)
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/platform_services.c guest_memory.obj platform_services.c input.c -luser32 -Wl,--image-base,0x10000000,--disable-dynamicbase -o platform-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 platform-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/native_input.c platform_services.c guest_memory.obj input.c -luser32 -o input-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 input-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/native_timing.c timing.c -o timing-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 timing-test.exe
-nasm -f win64 /tests/image_variant.asm -o variant_test.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 /tests/image_variant.c variant_test.obj -o variant-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 variant-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/guest_alloc.c guest_memory.obj -o alloc-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 alloc-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/heap_lifetime.c guest_memory.obj -o heap-lifetime.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 heap-lifetime.exe
-nasm -f win64 -I/work/ /tests/font_metric.asm -o font_metric.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/font_metric.c guest_memory.obj font_metric.obj -o font-metric-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 font-metric-test.exe
-nasm -O1 -f win64 -I/support/ rgfx.asm -o rgfx.obj
-nasm -f win64 -I/support/ native_entry.asm -o native_entry.obj
-x86_64-w64-mingw32-g++ -std=c++11 -Wall -Wextra -Werror -O2 -I/work -I/glide-sdk -c bridge.cpp -o bridge.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 native_main.c crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp,-Map,native.map -lbcrypt -luser32 -lshell32 -lole32 -o redguard-native.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -Dmain=rg_unused_main -c native_main.c -o test_host.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/original_input.c test_host.obj crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -lbcrypt -luser32 -lshell32 -lole32 -o original-input-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 original-input-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/original_numeric.c test_host.obj crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -lbcrypt -luser32 -lshell32 -lole32 -o original-numeric-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 original-numeric-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/original_heap.c test_host.obj crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -lbcrypt -luser32 -lshell32 -lole32 -o original-heap-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 original-heap-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/original_directory.c test_host.obj crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -lbcrypt -luser32 -lshell32 -lole32 -o original-directory-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 original-directory-test.exe
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/original_clip.c test_host.obj crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -lbcrypt -luser32 -lshell32 -lole32 -o original-clip-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 original-clip-test.exe
-for name in rob_vertex file_read animation_flags attribute animation_advance critical movie_clock audio close; do
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/original_$name.c test_host.obj crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -lbcrypt -luser32 -lshell32 -lole32 -o original-$name-test.exe
-WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 original-$name-test.exe
-done
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work /tests/original_fault.c test_host.obj crash.c guest_memory.obj game_files.c platform_services.c input.c timing.c game_install.c game_directory_dialog.c native_entry.obj rgfx.obj bridge.obj -L/work -lredguard-glide -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -lbcrypt -luser32 -lshell32 -lole32 -o original-fault-test.exe
-python3 /tests/check_original_fault.py
-x86_64-w64-mingw32-nm -n redguard-native.exe > native-symbols.txt
-'''
-        # The original-function tests all use the same host flags. Compile each
-        # host source once so adding a function regression costs a link/run.
-        common=['movie_files','cd_image','crash','game_files','platform_services','input','timing','game_install','game_directory_dialog','windows_storage']
-        for source in common:
-            commands=commands.replace(' '+source+'.c ',' '+source+'.obj ')
-        flags='-Wall -Wextra -Werror -O2 -I/work -I/audio -I/sdl/include/SDL2 -DRG_USE_SDL_AUDIO -DSDL_MAIN_HANDLED'
-        prefix='set -e\n'+''.join('x86_64-w64-mingw32-gcc '+flags+' -c '+source+'.c -o '+source+'.obj\n' for source in common if source not in ['movie_files','timing'])
-        prefix+='x86_64-w64-mingw32-gcc '+flags+' -c /audio/audio_sdl.c -o audio_sdl.obj\n'
-        prefix+='x86_64-w64-mingw32-gcc '+flags+' -c /audio/stream_pcm.c -o stream_pcm.obj\n'
-        prefix+='x86_64-w64-mingw32-gcc '+flags+' -Wno-unused-parameter -c /audio/Albion-sound.c -o sr_audio.obj\n'
-        commands=commands.replace('x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 ',
-                                  'x86_64-w64-mingw32-gcc '+flags+' ')
-        commands=prefix+commands.removeprefix('set -e\n')
-        commands=commands.replace(' bridge.obj -L/work',' bridge.obj audio_sdl.obj stream_pcm.obj sr_audio.obj -L/sdl/lib -lSDL2_mixer -lSDL2 -L/work')
-        commands='\n'.join(line.replace(' -o ', ' windows_storage.obj cd_image.obj movie_files.obj -o ') if line.startswith('x86_64-w64-mingw32-gcc ') and (' game_files.obj ' in line or ' game_install.obj ' in line) else line for line in commands.split('\n'))
-        commands=commands.replace('WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 original-$name-test.exe',
-                                  'SDL_AUDIODRIVER=dummy WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 original-$name-test.exe')
-        sample_tests='x86_64-w64-mingw32-gcc '+flags+' /tests/audio_samples.c guest_memory.obj sr_audio.obj -L/sdl/lib -lSDL2_mixer -lSDL2 -o audio-samples.exe\n'
-        sample_tests+='for sample_case in pan loop volume cache; do SDL_AUDIODRIVER=dummy WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 audio-samples.exe "$sample_case"; done\n'
-        sample_tests+='x86_64-w64-mingw32-gcc '+flags+' /tests/audio_stream.c audio_sdl.obj stream_pcm.obj sr_audio.obj guest_memory.obj -L/sdl/lib -lSDL2_mixer -lSDL2 -o audio-stream.exe\n'
-        sample_tests+='SDL_AUDIODRIVER=dummy WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 audio-stream.exe\n'
-        sample_tests+='x86_64-w64-mingw32-gcc '+flags+' /tests/stream_pcm.c stream_pcm.obj -L/sdl/lib -lSDL2 -o stream-pcm.exe\n'
-        sample_tests+='WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 stream-pcm.exe\n'
-        commands=commands.replace('nasm -O1 -f win64',sample_tests+'nasm -O1 -f win64')
-        cd_tests='x86_64-w64-mingw32-gcc '+flags+' /tests/cd_image.c cd_image.obj -Wl,--image-base,0x10000000,--disable-dynamicbase -o cd-image-test.exe\n'
-        cd_tests+='WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine python3 /tests/check_cd_image.py /work/cd-image-test.exe --wine\n'
-        commands=commands.replace('nasm -O1 -f win64',cd_tests+'nasm -O1 -f win64')
-        storage_test='x86_64-w64-mingw32-gcc '+flags+' /tests/windows_storage.c game_files.obj windows_storage.obj cd_image.obj movie_files.obj -Wl,--image-base,0x10000000,--disable-dynamicbase -o windows-storage.exe\n'
-        storage_test+='WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 windows-storage.exe\n'
-        storage_test+='x86_64-w64-mingw32-gcc '+flags+' /tests/installed_movies.c game_files.obj windows_storage.obj cd_image.obj movie_files.obj -Wl,--image-base,0x10000000,--disable-dynamicbase -o installed-movies.exe\n'
-        storage_test+='mkdir movie-contract; (cd movie-contract && WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 ../installed-movies.exe)\n'
-        commands=commands.replace('nasm -O1 -f win64',storage_test+'nasm -O1 -f win64')
-        commands=commands.replace('movie_files.obj','/work/libmaiko_runtime.a').replace('timing.obj','/work/libmaiko_runtime.a')
-        commands='\n'.join(line+' -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -lwinpthread' if line.startswith('x86_64-w64-mingw32-gcc ') and ' -c ' not in line else line for line in commands.split('\n'))
+        commands = 'sh /work/build_windows.sh'
         with (work/'native-build.log').open('w') as log:
             run(['docker','exec',name,'timeout','360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
         report['native_build_status']='linked'

@@ -7,11 +7,7 @@
 #include "Game_vars.h"
 #include "Albion-sound.h"
 #include "guest_abi.h"
-uint32_t Game_SoundMasterVolume=127;
-int Game_MixerChannels,Game_AudioRate=22050,Game_ResamplingQuality=1,Game_SwapSoundChannels;
-unsigned Game_AudioFormat=AUDIO_S16LSB,Game_AudioChannels=2;
-Game_sample *Game_SampleCache[GAME_SAMPLE_CACHE_SIZE];
-int32_t AIL_preference[19]={[5]=127};
+extern int32_t AIL_preference[19];
 static SDL_atomic_t left,right,signed_total;
 static void postmix(void *unused,Uint8 *bytes,int length) {
     (void)unused;int16_t *pcm=(void *)bytes;int l=0,r=0;
@@ -20,7 +16,7 @@ static void postmix(void *unused,Uint8 *bytes,int length) {
     int total=0;for(int i=0;i<length/2;++i) total+=pcm[i];SDL_AtomicAdd(&signed_total,total);
 }
 int main(int argc,char **argv) {
-    assert(argc==2);setbuf(stdout,NULL);SDL_SetMainReady();
+    assert(argc==2);setbuf(stdout,NULL);Game_AudioRate=22050;SDL_SetMainReady();
     assert(!SDL_Init(SDL_INIT_AUDIO|SDL_INIT_TIMER));
     assert(!Mix_OpenAudio(Game_AudioRate,Game_AudioFormat,2,256));Mix_SetPostMix(postmix,NULL);
     int16_t *pcm=rg_low_alloc(8192);assert(pcm);

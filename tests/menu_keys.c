@@ -6,7 +6,7 @@ int main(int argc,char **argv) {
     if(argc!=2 && argc!=3) return 1;
     unsigned hold=argc==3 ? (unsigned)strtoul(argv[2],NULL,10) : 150;
     if(hold>5000) return 1;
-    HWND w=FindWindowA("RedguardNativeWindow",NULL); if(!w) return 2;
+    HWND w=FindWindowA("SDL_app",NULL); if(!w) return 2;
     if(!strcmp(argv[1],"close")) return PostMessageA(w,WM_CLOSE,0,0) ? 0 : 3;
     unsigned scan=0,key=0;
     if(!strcmp(argv[1],"up")){scan=0x48;key=VK_UP;}

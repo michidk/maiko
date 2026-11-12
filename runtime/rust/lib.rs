@@ -1,4 +1,17 @@
 //! Host services shared by the statically translated Redguard executable.
-mod installed_media;
-mod movies;
-mod timing;
+pub mod audio;
+pub mod crash;
+pub mod dialog;
+pub mod files;
+pub mod guest;
+pub mod host;
+pub mod input;
+pub mod install;
+pub mod installed_media;
+pub mod media;
+pub mod memory;
+pub mod movies;
+pub mod platform;
+pub mod storage;
+pub mod stream;
+pub mod timing;

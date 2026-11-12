@@ -12,7 +12,7 @@ import uuid
 from .build_windows import ROOT,run,ensure_tool_image
 from .sr_heap import stage_sr_heap
 from .sr_audio import stage_sr_audio
-from .rust_runtime import stage as stage_rust_runtime
+from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
 from .gog_install import movie_bundle
 
 IMAGE='redguard-recomp-linux:bookworm'
@@ -77,6 +77,9 @@ def main():
             for patch in ['openglide-x64.patch','openglide-sdl-window.patch']:
                 subprocess.run(['patch','-p1','-d',directory],input=(ROOT/'patches'/patch).read_bytes(),check=True)
             archive=subprocess.check_output(['tar','-c','-C',directory,'.'])
+        # Cargo can wait for another project; do this before the container lease starts.
+        rust_runtime=build_rust_runtime('x86_64-unknown-linux-gnu')
+        rust_host=build_rust_runtime('x86_64-unknown-linux-gnu',component='host')
         run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','1800' if a.keep_container else '480'])
         if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
@@ -90,10 +93,10 @@ def main():
         header=output/'game_build.h'
         header.write_text('#define RGFX_SHA256 "'+variants['translated_image_sha256']+'"\n#define RGFX_ALTERNATE_SHA256 "'+variants['alternate_image_sha256']+'"\n')
         run(['docker','cp',str(header),name+':/work/game_build.h'])
-        report['rust_runtime']=stage_rust_runtime(name,'x86_64-unknown-linux-gnu')
+        report['rust_runtime']=stage_rust_runtime(name,rust_runtime)
+        report['rust_host']=stage_rust_runtime(name,rust_host)
         report["sr_heap"]=stage_sr_heap(name)
         report['sr_audio']=stage_sr_audio(name)
-        run(['docker','cp',str(ROOT/'audio/audio_sdl.c'),name+':/audio/audio_sdl.c'])
         setup=time.monotonic()
         with (output/'build.log').open('w') as log:
             run(['docker','exec',name,'timeout','240','sh','-c','sh /linux/build_backend.sh && sh /linux/build_runtime.sh'],stdout=log,stderr=subprocess.STDOUT)
@@ -182,7 +185,8 @@ def main():
     except Exception:
         report['status']='failed'
         # Preserve the real game boundary even when the menu assertion fails.
-        subprocess.run(['docker','cp',name+':/work/linux-menu.log',str(output/'linux-menu.log')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        for file in ['linux-menu.log','linux-menu-before.ppm','linux-menu-options.ppm','linux-menu-return.ppm']:
+            subprocess.run(['docker','cp',name+':/work/'+file,str(output/file)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         raise
     finally:
         report['elapsed_seconds']=round(time.monotonic()-began,3)
