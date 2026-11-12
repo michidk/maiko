@@ -1,0 +1,46 @@
+{
+  "files": [
+    {
+      "path": "Redguard/RGFX.EXE",
+      "size": 1899256,
+      "sha256": "844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852ac1607ee4dfdf",
+      "version_strings": []
+    },
+    {
+      "path": "Redguard/REDGUARD.EXE",
+      "size": 1003008,
+      "sha256": "c403ad4067a23417581ac4a1d8820c697276de1a11deef620a6e245eb9233f49",
+      "version_strings": []
+    },
+    {
+      "path": "Redguard/glide2x.dll",
+      "size": 1294336,
+      "sha256": "42e6537121c359bfb5cd433e50b477279690cae5e06d1737a95beee0312bd394",
+      "version_strings": [
+        "nGlide v1.00"
+      ]
+    },
+    {
+      "path": "DOSBOX/Glide2x.dll",
+      "size": 418304,
+      "sha256": "380e20b9b812e247617cd6b60d898d9acd97fd2be141aad54cc22a647787f7c7",
+      "version_strings": []
+    },
+    {
+      "path": "__support/dosbox/glide2x.dll",
+      "size": 1335296,
+      "sha256": "8337e7e10c2e2fe40b793521151c38d80b9c3d284af2209d2309498b4c2fd21d",
+      "version_strings": [
+        "nGlide v1.03"
+      ]
+    }
+  ],
+  "active_wrapper_verified": false,
+  "launch_task": {
+    "isPrimary": true,
+    "type": "FileTask",
+    "path": "DOSBOX\\dosbox.exe",
+    "workingDir": "DOSBOX",
+    "arguments": "-conf \"..\\dosbox_redguard.conf\" -conf \"..\\dosbox_redguard_single.conf\" -noconsole -c \"exit\""
+  }
+}

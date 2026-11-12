@@ -1,0 +1,11 @@
+diff --git a/platform/sdl/window.cpp b/platform/sdl/window.cpp
+--- a/platform/sdl/window.cpp
++++ b/platform/sdl/window.cpp
+@@ -109,7 +109,7 @@ bool InitialiseOpenGLWindow(FxU wnd, int x, int y, int width, int height)
+     }
+     else {
+-#if (SIZEOF_INT_P == 8)
++#if (SIZEOF_INT_P == 8) && !defined(RG_SDL_WINDOW_POINTER)
+         /* SDL_Window is a native pointer. On 64-bit system, native pointers
+          * should have more than 32-bit values. Windows HWND and X11 Window handles
+          * are always in 32-bit values.

@@ -1,0 +1,21 @@
+{
+  "translated_image_sha256": "844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852ac1607ee4dfdf",
+  "alternate_image_sha256": "06d7a399cf01eec6bca3be39aaab1a39c42dc88116b6b74ae6f5f0547f7cdaf3",
+  "provenance": "Local and user-supplied copies; neither is established as the unmodified release.",
+  "differences": [
+    {
+      "file_offset": "0x9a041",
+      "original_address": "0x55441",
+      "local": "74",
+      "user": "eb",
+      "behavior": "JZ becomes unconditional jump to 0x5544f"
+    },
+    {
+      "file_offset": "0xf256b",
+      "original_address": "0xad96b",
+      "local": "b902",
+      "user": "eb73",
+      "behavior": "Jump to 0xad9e0 instead of MOV ECX,2 and following instructions"
+    }
+  ]
+}

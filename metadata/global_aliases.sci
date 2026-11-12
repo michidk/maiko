@@ -1,0 +1,6 @@
+loc_EC648,rg_entry
+loc_F70BA,loc_F70BA
+loc_F70EF,loc_F70EF
+loc_119CE2,loc_119CE2
+loc_13B3DB,loc_13B3DB
+loc_13B465,loc_13B465

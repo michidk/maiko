@@ -1,0 +1,46 @@
+diff --git a/GLutil.cpp b/GLutil.cpp
+index 8cef475..e009e09 100644
+--- a/GLutil.cpp
++++ b/GLutil.cpp
+@@ -232,6 +232,7 @@ static char * FindConfig( const char *IniFile, const char *IniConfig )
+ 
+     Find = NULL;
+     file = fopen( IniFile, "r" );
++    if (!file) return NULL;
+ 
+     while ( fgets( Buffer1, 255, file ) != NULL )
+     {
+@@ -297,6 +298,10 @@ void GetOptions( void )
+     if ( access( Path, 0 ) == -1 )
+     {
+         IniFile = fopen( Path, "w" );
++        if (!IniFile) {
++            GlideMsg("Cannot write wrapper configuration; using defaults\n");
++            return;
++        }
+         fprintf( IniFile, "Configuration File for OpenGLide\n\n" );
+         fprintf( IniFile, "Info:\n" );
+         fprintf( IniFile, "Priority goes from 0(HIGH) to 5(IDLE)\n" );
+@@ -372,8 +377,7 @@ void GetOptions( void )
+         }
+         else
+         {
+-            remove( Path );
+-            GetOptions( );
++            if (remove( Path ) == 0) GetOptions( );
+         }
+     }
+ }
+diff --git a/GlOgl.h b/GlOgl.h
+index 1185a91..dd50b57 100644
+--- a/GlOgl.h
++++ b/GlOgl.h
+@@ -50,7 +50,7 @@
+ #endif
+ 
+ #ifdef __GNUC__
+-#define RDTSC(v)    asm volatile ("rdtsc;" : "=A" (v) )
++#define RDTSC(v) do { unsigned lo, hi; asm volatile ("rdtsc" : "=a" (lo), "=d" (hi)); (v) = ((FxU64)hi << 32) | lo; } while (0)
+ #endif
+ 
+ #define ERRORFILE               "OpenGLid.err"
