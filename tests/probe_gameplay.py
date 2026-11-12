@@ -161,10 +161,20 @@ with prefix.with_suffix('.log').open('w') as log:
                         assert snapshots[index]['frame']>snapshots[index-1]['frame'],'Original movie frame counter did not advance'
                     assert snapshots[4]['handle']==0,'Original movie handle remained open after final skip'
                     report['movie_audio_mixed_verified']=any(x.get('audio_track',4294967295)!=4294967295 for x in snapshots[:4]) and snapshots[3]['stream_buffers']>snapshots[0]['stream_buffers'] and snapshots[3]['stream_nonzero']>snapshots[0]['stream_nonzero']
-                    until=time.monotonic()+25
-                    while process.poll() is None and state() is None and time.monotonic()<until:time.sleep(.2)
-                    report['world_after_movie']=state()
-                    assert report['world_after_movie'],'Original movie did not return to world'
+                    until=time.monotonic()+30
+                    ready_since=None
+                    while process.poll() is None and time.monotonic()<until:
+                        current=state()
+                        if (current and current['ui_mode']==31 and current['health'] is not None
+                                and current['health']>0 and current['animation_group'] is not None
+                                and current['timing'].get('loc_1A4624')==0):
+                            if ready_since is None:ready_since=time.monotonic()
+                            elif time.monotonic()-ready_since>=.3:break
+                        else:ready_since=None
+                        time.sleep(.04)
+                    else:raise TimeoutError('Original movie did not return to initialized gameplay after warm-up')
+                    report['world_after_movie']=current
+                    report['movie_world_warmup_finished_verified']=True
                     # World rendering can be slower than a150ms key tap under
                     # software GL. Wait for the actual book mode before Quit.
                     key('Escape',.6)
