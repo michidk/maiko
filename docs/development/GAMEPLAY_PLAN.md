@@ -4,9 +4,9 @@ The user authorized continuation beyond the menu on 2026-11-11. Preserve origina
 
 ## Current user priority
 
-Finish and verify the Windows/Linux Rust migration first. Keep Mac development stopped.
+The Windows/Linux Rust migration is complete. Keep Mac development stopped.
 
-Then reproduce a single-tap jump on the opening ship, trace original vertical movement, collision and landing, and verify rise, fall, landing and repeated jumps. Next trace attack input, weapon state, hits, damage and enemy behavior through defeating the ship enemies and reaching the island. Correct normal book startup, New Game intro playback and the initial speed burst. Compare distant sea and fog with the original scene before choosing a translation or renderer fix. Expand island coverage through dialogue, doors, scene changes, inventory, saves and actual quest progression.
+Then reproduce a single-tap jump on the opening ship, trace original vertical movement, collision and landing, and verify rise, fall, landing and repeated jumps. Next trace attack input, weapon state, hits, damage and enemy behavior through defeating the ship enemies and reaching the island. Provide the requested normal book startup, New Game intro playback and the initial speed burst. Compare distant sea and fog with the original scene before choosing a translation or renderer fix. Expand island coverage through dialogue, doors, scene changes, inventory, saves and actual quest progression.
 
 The checkpoints below describe earlier work. They do not supersede this order or establish that the reported gameplay defects are fixed.
 
@@ -32,3 +32,9 @@ Checkpoint, 2026-11-12 00:12 UTC: direct read-only CD image access now supplies 
 Checkpoint, 2026-11-12 00:43 UTC: original Smacker movie PCM now mixes on Linux through a real Miles double-buffer adapter. Original decoded track0, all skip points, ship entry and Quit0 pass. New adapter tests cover exact PCM buffer order, source ownership, consumed positions, EOF, release/reuse and stereo gain. The first audio-enabled integration exposed a previously dormant DPMI memory-pin dispatcher; native wrappers now return real host lock/unlock results. Windows audio integration is running. Next cover Windows streamed output and original gameplay/save regression, then real dialogue/combat/transitions and CD music. Dummy-device nonzero PCM is distinct from listening and synchronization acceptance.
 
 Review continuation, 2026-11-12 01:24 UTC: fixed negotiated movie output rate, removed allocation/conversion from the audio callback mutex, and strengthened callback translation guards across all return paths. Independent FFmpeg comparison matches the first32768 original decoded PCM bytes. The Linux skip sequence consumes522240 frames with zero measured starvation; lower nonzero counts include source silence. Hardware/listening, full-movie synchronization and other movie coverage remain open. Windows regression and actual extracted-ZIP/reference comparison precede replacement of the download. CD music remains the next implementation boundary, using the existing cue/muting and Miles wrapper research; no CD music implementation is claimed.
+
+## Latest Linux gameplay checkpoint
+
+The diagnostic-budget fix allows three separate ship jumps to rise, descend and land in the Linux check. Keyboard attacks defeat both original pirates and the original scripts load the island. The native startup adaptation now opens a visible book without an autosave, using the original menu entry-disable path for Continue and the original New Game path for the intro. These are bounded Linux checks; the reported hardware-Windows jump remains unresolved. See [VALIDATION.md](VALIDATION.md) for exact builds and acceptance limits.
+
+Next investigate startup timing against the original clock, verify the updated build on Windows, compare the distant sea/fog scene against the original, and follow island progression. Arrival on the island does not establish conversations, doors, quest completion or sustained gameplay.

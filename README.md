@@ -9,7 +9,7 @@ This project started as an experiment in [redguard-preservation](https://github.
 ## Current state
 
 - Windows x64 runs original game code. User testing confirms movement, sound and music, but reports endless rising after one jump on the opening ship, startup bypassing the book, initial acceleration, missing movies and distant fog artifacts. Combat progression and full-game completion remain unverified.
-- Linux x64 development tests cover the original book menu, bounded ship/island movement, inventory/logbook, isolated save/reload and sample audio. Broader gameplay, hardware audio and distribution support remain unverified.
+- Linux x64 development tests cover fresh startup into a visible book, Continue disabled without an autosave, three released ship jumps, defeat of both ship pirates and the original island transition. Inventory/logbook, isolated save/reload and sample audio also have bounded checks. Island quest progression, hardware audio and distribution support remain unverified.
 - Original intro video, configured skips into the ship and a bounded decoded-audio prefix pass Linux and Wine checks using our installed GOG layout, without a runtime media argument. This does not establish movies in the user's installation, full playback or audio/video synchronization.
 
 Build success, Wine execution and real-platform acceptance are recorded separately. Twelve diagnostic traps remain in unsupported mixed-mode system code and stop execution if reached.
@@ -91,7 +91,7 @@ The [platform boundary and continuation plan](docs/development/PLATFORM.md) desc
 
 The shared Rust runtime provides clocks, files, isolated save/config storage, installation validation, SDL window/input/audio integration and DOS services on both hosts. OpenGLide provides the graphics context and Glide implementation. Native bindings handle low-address memory, folder selection and fatal exception or signal reporting.
 
-The Linux x86-64 host uses the same native SR output and original startup code. Its OS adapters provide low-address memory, read-only DOS file/path/search behavior, executable hashing and signal diagnostics. These are compatibility services that SDL does not supply.
+The Linux x86-64 host uses the same native SR output as Windows. A guarded native startup adaptation opens the original book without an autosave, selects New Game and disables Continue until a save is admitted. This deliberately replaces the original fresh-start auto-intro behavior. The explicit MENU.INI ignore_autosave=1 direct-start override is preserved. Its OS adapters provide low-address memory, read-only DOS file/path/search behavior, executable hashing and signal diagnostics. These are compatibility services that SDL does not supply.
 
 ```sh
 python3 -m tools.build_linux artifacts/TIMESTAMP-native \

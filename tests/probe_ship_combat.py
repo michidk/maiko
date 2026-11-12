@@ -85,9 +85,11 @@ def main():
             finally:
                 subprocess.run(['xdotool', 'keyup', key], check=True, timeout=5)
 
-        def capture(name, after_ns):
+        def capture(name, after_ns, settled=False):
             source = root / 'game-frame-latest.ppm'
-            end = time.monotonic() + 3
+            end = time.monotonic() + (18 if settled else 3)
+            previous = None
+            previous_stamp = None
             while time.monotonic() < end:
                 try:
                     before = source.stat()
@@ -98,10 +100,22 @@ def main():
                     if (before.st_mtime_ns == after.st_mtime_ns and after.st_mtime_ns > after_ns
                             and magic == b'P6' and maximum == b'255' and width > 0 and height > 0
                             and len(pixels) == width * height * 3):
+                        digest = hashlib.sha256(data).hexdigest()
+                        if settled:
+                            if len(set(pixels)) <= 16:
+                                previous = None
+                                time.sleep(.05)
+                                continue
+                            if digest != previous or after.st_mtime_ns == previous_stamp:
+                                previous = digest
+                                previous_stamp = after.st_mtime_ns
+                                time.sleep(.05)
+                                continue
                         (root / f'ship-combat-{name}.ppm').write_bytes(data)
                         report.setdefault('captures', {})[name] = dict(
-                            sha256=hashlib.sha256(data).hexdigest(), mtime_ns=after.st_mtime_ns,
-                            required_after_ns=after_ns, width=width, height=height)
+                            sha256=digest, mtime_ns=after.st_mtime_ns,
+                            required_after_ns=after_ns, width=width, height=height,
+                            settled_nonblank=settled)
                         return
                 except (FileNotFoundError, ValueError):
                     pass
@@ -125,6 +139,20 @@ def main():
                 time.sleep(.1)
             else:
                 raise TimeoutError('Original SDL window')
+            book = BookMenu(process, root / 'linux-symbols.txt')
+            book.wait_ready(timeout=40)
+            report['startup_book_before_input_verified'] = True
+            require(not book.continue_available(), 'Continue available in a fresh scenario')
+            report['startup_continue_unavailable_verified'] = True
+            require(book.main_entry() == {'action': 10, 'grayed': False},
+                    'Fresh book must initially select New Game')
+            report['startup_new_selected_verified'] = True
+            capture('startup-book', launched_ns, settled=True)
+            def menu_key(name):
+                hold(name, .15, 'menu-select', observe=False)
+                time.sleep(.5)
+            book.select_main_action(10, menu_key)
+            hold('Return', .15, 'new-game-confirm', observe=False)
             time.sleep(2)
             # Respect the original movie's configured skip points. Installed-GOG
             # discovery supplies media; the probe passes no media argument.
@@ -204,8 +232,7 @@ def main():
                 time.sleep(.2)
             hold('Escape', .6, 'book')
             BookMenu(process, root / 'linux-symbols.txt').wait_ready()
-            hold('Up', .15, 'quit-select')
-            time.sleep(.5)
+            book.select_main_action(-2, menu_key)
             hold('Return', .15, 'quit-confirm', observe=False)
             code = process.wait(timeout=20)
             report['quit_exit'] = code

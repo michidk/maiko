@@ -17,7 +17,7 @@ p.add_argument('--runtime-dir',type=Path,default=Path('/work'),help='Run the act
 p.add_argument('--game-dir',default='/work/menu-scenario',help='Disposable development fixture directory')
 p.add_argument('--cd-image',help='Owned ISO or MODE1/2352 image mounted read-only as DOS D:')
 p.add_argument('--action',choices=['continue','new'],default='continue')
-p.add_argument('--fresh-start',action='store_true',help='Observe original startup without an autosave or a book selection')
+p.add_argument('--fresh-start',action='store_true',help='Require the startup book with Continue disabled, then select New Game without an autosave')
 p.add_argument('--seconds',type=float,default=30)
 p.add_argument('--wine-game-dir',help='Optional Windows drive path for the selected Linux game fixture')
 p.add_argument('--wine',action='store_true',help='Run the Windows host under Wine with posted window messages')
@@ -63,13 +63,6 @@ began=time.monotonic();peak=0
 with prefix.with_suffix('.log').open('w') as log:
     process=subprocess.Popen(command,env=environment,stdout=log,stderr=subprocess.STDOUT)
     try:
-        if not a.fresh_start:
-            deadline=time.monotonic()+40
-            while 'CLIP entry=7' not in prefix.with_suffix('.log').read_text():
-                if process.poll() is not None:raise RuntimeError('Original game stopped before menu')
-                if time.monotonic()>deadline:raise TimeoutError('Original menu initialization')
-                time.sleep(.1)
-            time.sleep(3)
         if not a.wine:
             window_deadline=time.monotonic()+40
             while True:
@@ -82,8 +75,12 @@ with prefix.with_suffix('.log').open('w') as log:
                 time.sleep(.1)
             subprocess.run(['xdotool','windowfocus','--sync',window],check=True,timeout=5)
         book=BookMenu(process,root/('native-symbols.txt' if a.wine else 'linux-symbols.txt'))
-        if not a.fresh_start:book.wait_ready()
-        if not a.uncaptured and not a.fresh_start:shutil.copyfile(root/'game-frame-latest.ppm',str(prefix)+'-menu.ppm')
+        book.wait_ready(timeout=40)
+        report['startup_book_before_input_verified']=True
+        report['startup_continue_available']=book.continue_available()
+        if a.fresh_start:
+            assert not report['startup_continue_available'],'Continue available without a valid autosave'
+        if not a.uncaptured:shutil.copyfile(root/'game-frame-latest.ppm',str(prefix)+'-menu.ppm')
         def key(name,hold=.15,observations=None):
             def observe_for(seconds):
                 until=time.monotonic()+seconds
@@ -105,11 +102,8 @@ with prefix.with_suffix('.log').open('w') as log:
                 try:observe_for(hold)
                 finally:subprocess.run(['xdotool','keyup',name],check=True,timeout=5)
             observe_for(.5)
-        if not a.fresh_start:
-            if a.action=='new':
-                for _ in range(3):key('Up')
-            key('Return');report['selection_sent']=True
-        else:report['fresh_start_without_selection']=True
+        book.select_main_action(10 if a.action=='new' else -1,key)
+        key('Return');report['selection_sent']=True
         deadline=time.monotonic()+a.seconds
         world_at=None;state_address=None;ui_address=None;extra_symbols={}
         if a.controls or a.exercise or a.modal_ui or a.movie_skip or a.jump_cycle:

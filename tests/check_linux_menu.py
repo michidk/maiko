@@ -1,11 +1,16 @@
 """Exercise original Linux menu with X11 keyboard events, without Wine."""
+import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import time
+from book_menu import BookMenu
 
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--fresh-start',action='store_true')
+args=parser.parse_args()
 root=Path('/work')
 environment=dict(os.environ,LIBGL_ALWAYS_SOFTWARE='1',RG_CAPTURE_DIR='/work')
 for file in root.glob('game-frame-*.ppm'): file.unlink()
@@ -47,12 +52,21 @@ with (root/'linux-menu.log').open('w') as log:
             time.sleep(.15)
             subprocess.run(['xdotool','keyup',name],check=True,timeout=5)
             time.sleep(.5)
+        book=BookMenu(process,root/'linux-symbols.txt')
+        book.wait_ready()
+        continue_available=book.continue_available()
+        if args.fresh_start:
+            assert not continue_available,'Continue available without a valid autosave'
+            assert book.main_entry()=={'action':10,'grayed':False},'Fresh book must select New Game'
+            key('Escape')
+            book.wait_ready()
+            assert book.main_entry()=={'action':10,'grayed':False},'Fresh Escape must remain in book'
         frame('before')
-        key('Up');key('Up');key('Return');time.sleep(3);frame('options')
+        book.select_main_action(4,key);key('Return');time.sleep(3);frame('options')
         key('Escape');time.sleep(3);frame('return')
         assert frame_hashes['before']!=frame_hashes['options']
         assert frame_hashes['options']!=frame_hashes['return']
-        key('Down');key('Down');key('Down');key('Return')
+        book.select_main_action(-2,key);key('Return')
         code=process.wait(timeout=15)
         assert code==0,code
     finally:
@@ -64,6 +78,9 @@ assert 'Native Glide window 1024x768 opened=1' in text
 result=dict(exe_sha256=hashlib.sha256((root/'redguard-native').read_bytes()).hexdigest(),
             wine_used=False,original_quit_exit=code,keyboard_events='X11 XTest through SDL',
             menu_navigation_exercised=True,captured_frame_sha256=frame_hashes,
+            startup_continue_available=continue_available,
+            fresh_start_escape_verified=args.fresh_start,
+            fresh_start_new_selected_verified=args.fresh_start,
             capture_settle='two successive complete matching back buffers',visual_review_required=True,native_windows_verified=False)
 (root/'linux-menu-verification.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result,indent=2))

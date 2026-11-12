@@ -176,6 +176,126 @@ def split_mixed_section(work, number):
     file.write_text(''.join(output))
 
 
+def native_startup_book(image, text):
+    """Show the native startup book, preserving the original direct-start override."""
+    original = bytes.fromhex('e840ed02006685c0741cc705a31d030001000000')
+    if image.at(0x205f6, len(original)) != original:
+        raise ValueError('Original startup autosave branch bytes changed')
+    before = ('CALL loc_4F33B\n'
+              'test ax, ax\n'
+              'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+              'jz loc_2061C\n'
+              'mov dword [loc_1A1DA3], 0x1\n')
+    after = before + 'native_startup_book:\n'
+    if text.count(before) != 1:
+        raise ValueError('Native startup autosave branch inventory changed')
+    text = text.replace(before, after)
+    # Preserve ignore_autosave=1's original direct-world path. Only replace
+    # the default fresh-install auto-intro path with the requested book.
+    if image.at(0x2063a, 9) != bytes.fromhex('85c07559b8ffffffff'):
+        raise ValueError('Original ignore_autosave branch bytes changed')
+    before = ('jnz loc_20697\n'
+              'mov eax, 0xffffffff\n')
+    after = ('jnz loc_20697\n'
+             'mov dword [loc_1A1DA3], 0x0\n'
+             'mov dword [loc_1A3F74], 0x0\n'
+             'jmp native_startup_book\n'
+             'mov eax, 0xffffffff\n')
+    if text.count(before) != 1:
+        raise ValueError('Native ignore_autosave branch inventory changed')
+    text = text.replace(before, after)
+    # The original only enters the startup book with a valid autosave. Its
+    # presentation uses that same flag to request and permit the book fade-in.
+    # Allow the startup book to fade in independently of Continue availability.
+    if image.at(0xabb3f, 10) != bytes.fromhex('a0a31d0300a272a30800'):
+        raise ValueError('Original main-book fade request bytes changed')
+    request = 'mov al, [loc_1A1DA3]\nmov [loc_1FA372], al\n'
+    if text.count(request) != 1:
+        raise ValueError('Native main-book fade request inventory changed')
+    # This is the one-time context-1 initialization, before input begins.
+    # Select the enabled New Game action for a fresh start. Doing this in the
+    # per-frame gray-entry code would reset the player's selection every frame.
+    selection = ('mov byte [loc_1FA372], 0x1\n'
+                 'cmp dword [loc_1A1DA3], 0x0\n'
+                 'jnz native_startup_selection_done\n'
+                 'mov eax, [loc_1A667B]\n'
+                 'mov ecx, 0x40\n'
+                 'native_startup_select_new:\n'
+                 'test eax, eax\n'
+                 'jz native_startup_selection_done\n'
+                 'cmp dword [eax+0x4], 0xa\n'
+                 'jnz native_startup_select_next\n'
+                 'test byte [eax+0xc], 0x8\n'
+                 'jnz native_startup_select_next\n'
+                 'test byte [eax+0xc], 0x1\n'
+                 'jz native_startup_select_next\n'
+                 'mov [loc_1A6677], eax\n'
+                 'jmp native_startup_selection_done\n'
+                 'native_startup_select_next:\n'
+                 'test byte [eax+0xc], 0x40\n'
+                 'jnz native_startup_selection_done\n'
+                 'mov eax, [eax+0x31]\n'
+                 'dec ecx\n'
+                 'jnz native_startup_select_new\n'
+                 'native_startup_selection_done:\n')
+    text = text.replace(request, selection)
+    if image.at(0xab81a, 13) != bytes.fromhex('833da31d0300010f85f4000000'):
+        raise ValueError('Original book fade admission bytes changed')
+    before = ('cmp dword [loc_1A1DA3], 0x1\n'
+              'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+              'jnz near loc_AB91B\n')
+    after = ('cmp dword [loc_1A1DA3], 0x1\n'
+             'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+             'jz native_startup_book_fade\n'
+             'cmp dword [loc_1F9BD0], 0x1\n'
+             'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+             'jnz near loc_AB91B\n'
+             'native_startup_book_fade:\n')
+    if text.count(before) != 1:
+        raise ValueError('Native book fade admission inventory changed')
+    text = text.replace(before, after)
+    # Context 1 originally implied an admitted autosave. Reuse the original
+    # gray/disable-entry path when that implication no longer holds.
+    if image.at(0xaf874, 9) != bytes.fromhex('833dd09b080002750c'):
+        raise ValueError('Original Continue context check bytes changed')
+    before = ('loc_AF874:\n'
+              'cmp dword [loc_1F9BD0], 0x2\n'
+              'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+              'jnz loc_AF889\n')
+    after = ('loc_AF874:\n'
+             'cmp dword [loc_1F9BD0], 0x2\n'
+             'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+             'jz native_startup_disable_continue\n'
+             'cmp dword [loc_1F9BD0], 0x1\n'
+             'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+             'jnz loc_AF889\n'
+             'cmp dword [loc_1A1DA3], 0x0\n'
+             'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+             'jnz loc_AF889\n'
+             'native_startup_disable_continue:\n')
+    if text.count(before) != 1:
+        raise ValueError('Native Continue context check inventory changed')
+    text = text.replace(before, after)
+    # Startup Escape originally means "resume slot 1". With no admitted save,
+    # use the same no-op path as original context 2 instead.
+    if image.at(0xac8a4, 11) != bytes.fromhex('833dd09b0800027502eb42'):
+        raise ValueError('Original book Escape context bytes changed')
+    before = ('loc_AC8A4:\n'
+              'cmp dword [loc_1F9BD0], 0x2\n'
+              'ACTION_CONDITIONAL_JUMP_FORWARD\n'
+              'jnz loc_AC8AF\n')
+    after = ('loc_AC8A4:\n'
+             'cmp dword [loc_1F9BD0], 0x2\n'
+             'jz loc_AC8AD\n'
+             'cmp dword [loc_1F9BD0], 0x1\n'
+             'jnz loc_AC8AF\n'
+             'cmp dword [loc_1A1DA3], 0x0\n'
+             'jnz loc_AC8AF\n')
+    if text.count(before) != 1:
+        raise ValueError('Native book Escape context inventory changed')
+    return text.replace(before, after)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['inspect', 'build', 'translate'])
@@ -260,6 +380,14 @@ def main():
             shutil.copyfile(ROOT / 'native-metadata/extern.inc', work / 'extern.inc')
             report['glide_imports']=emit_glide(image,work,write_mappings=False)
             source=work/'seg02.inc'
+            source.write_text(native_startup_book(image, source.read_text()))
+            report['native_startup_book'] = dict(
+                autosave_validation='original loc_4F33B',
+                continue_available='only with a valid original autosave',
+                presentation='startup book fade-in independent of autosave availability',
+                no_autosave='native book, then original New Game return path',
+                ignore_autosave='original direct-world override preserved',
+                fresh_selection='New Game', no_save_escape='remain in book')
             pattern=r'^mov (dword \[ebp-0x[0-9a-f]+\]|eax|esi|edi), 0x46c$'
             text,count=re.subn(pattern,r'mov \1, rg_bios_ticks',source.read_text(),flags=re.M)
             if count!=27:
