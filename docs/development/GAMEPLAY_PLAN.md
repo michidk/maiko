@@ -41,3 +41,6 @@ The shared Rust clock now paces original fixed 12-Hz warm-up steps. Complete shi
 
 
 Island continuation: ordinary input now reaches Brennan, selects the original Draggin Tale topic, returns to the topic menu, chooses Bye and restores player turning plus the original control/sound flags. The reusable Linux probe quits cleanly and preserves its source save. Next verify conversation/quest-state persistence across a separate process, then follow the directions through doors and scene changes. This does not extend Windows or full-game acceptance.
+
+
+Separate-process Continue now restores the post-conversation island position and health, displays Brennan's original saved directions in the journal, and opens/closes the original inventory before clean Quit. This establishes journal persistence, not all quest state. Following the directions and activating a real door/scene transition remain next. The cabin-door diagnostic selected Brennan instead and is not counted as a door pass.
