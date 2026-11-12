@@ -1,0 +1,416 @@
+--- a/SR/udis86_dep.c
++++ b/SR/udis86_dep.c
+@@ -55,6 +55,7 @@
+ 
+ 	/* B */
+ 	SET_FLAGS(UD_Ibsr, FL_NONE, FL_COND);
++	SET_FLAGS(UD_Ibswap, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ibt, FL_NONE, FL_COND);
+ 
+ 	/* C */
+@@ -111,7 +112,10 @@
+ 	SET_FLAGS(UD_Ifnsave, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifnstcw, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifnstsw, FL_NONE, FL_NONE);
++	SET_FLAGS(UD_Ifpatan, FL_NONE, FL_NONE);
++	SET_FLAGS(UD_Ifprem, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifptan, FL_NONE, FL_NONE);
++	SET_FLAGS(UD_Ifrndint, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifrstor, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifsin, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifsqrt, FL_NONE, FL_NONE);
+@@ -121,6 +125,7 @@
+ 	SET_FLAGS(UD_Ifsubp, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifsubr, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifsubrp, FL_NONE, FL_NONE);
++	SET_FLAGS(UD_Iftst, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifucom, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifucomp, FL_NONE, FL_NONE);
+ 	SET_FLAGS(UD_Ifucompp, FL_NONE, FL_NONE);
+@@ -156,6 +161,8 @@
+ 	SET_FLAGS(UD_Ijp, FL_PARITY, FL_NONE);
+ 	SET_FLAGS(UD_Ijnp, FL_PARITY, FL_NONE);
+ 	SET_FLAGS(UD_Ijns, FL_SIGN, FL_NONE);
++	SET_FLAGS(UD_Ijo, FL_OVERFLOW, FL_NONE);
++	SET_FLAGS(UD_Ijno, FL_OVERFLOW, FL_NONE);
+ 	SET_FLAGS(UD_Ijnz, FL_ZERO, FL_NONE);
+ 	SET_FLAGS(UD_Ijs, FL_SIGN, FL_NONE);
+ 	SET_FLAGS(UD_Ijz, FL_ZERO, FL_NONE);
+--- a/SR/SR_full_llasm_instr.c
++++ b/SR/SR_full_llasm_instr.c
+@@ -2334,6 +2334,13 @@
+                 }
+             }
+             break;
++        case UD_Ibswap:
++            if (ud_obj.operand[0].type == UD_OP_REG &&
++                ud_obj.operand[0].base >= UD_R_EAX && ud_obj.operand[0].base <= UD_R_EDI)
++            {
++                OUTPUT_PARAMSTRING("bswap %s, %s\n", X86REGSTR(ud_obj.operand[0].base), X86REGSTR(ud_obj.operand[0].base));
++            }
++            break;
+         case UD_Ibsr:
+             {
+                 /* CF,OF,AF,SF,PF undefined, ZF - modified */
+@@ -3534,6 +3541,35 @@
+                 }
+ 
+                 OUTPUT_PARAMSTRING("INT %i\n", intno);
++            }
++            break;
++        case UD_Ijecxz:
++        case UD_Ijo:
++        case UD_Ijno:
++            {
++                uint32_t address;
++                extrn_data *extrnadr;
++                int32_t displacement;
++                last_instruction = 1;
++                displacement = (ud_obj.operand[0].size == 32) ?
++                    ud_obj.operand[0].lval.sdword : ud_obj.operand[0].lval.sbyte;
++                address = (uint32_t)ud_obj.pc + displacement;
++                extrnadr = SR_disassemble_find_proc(Entry, address);
++                if (extrnadr != NULL) strcpy(cAddress, extrnadr->proc);
++                else SR_get_label(cAddress, address);
++                OUTPUT_STRING((displacement < 0) ?
++                    "ACTION_CONDITIONAL_JUMP_BACKWARD\n" : "ACTION_CONDITIONAL_JUMP_FORWARD\n");
++                if (ud_obj.mnemonic == UD_Ijecxz)
++                {
++                    OUTPUT_PARAMSTRING("ctcallz ecx, %s\n", cAddress);
++                }
++                else
++                {
++                    OUTPUT_STRING("and tmp1, eflags, OF\n");
++                    OUTPUT_PARAMSTRING("%s tmp1, %s\n",
++                        (ud_obj.mnemonic == UD_Ijo) ? "ctcallnz" : "ctcallz", cAddress);
++                }
++                SR_add_label(Entry, cur_ofs + decoded_length);
+             }
+             break;
+         case UD_Ija:
+@@ -6947,9 +6983,13 @@
+         case UD_Ifldln2:
+         case UD_Ifldz:
+         case UD_Ifninit:
++        case UD_Ifpatan:
++        case UD_Ifprem:
+         case UD_Ifptan:
+         case UD_Ifsin:
++        case UD_Ifrndint:
+         case UD_Ifsqrt:
++        case UD_Iftst:
+         case UD_Ifucompp:
+         case UD_Ifyl2x:
+             {
+@@ -6971,9 +7011,13 @@
+                 else if (ud_obj.mnemonic == UD_Ifldln2) instr = "FLDLN2";
+                 else if (ud_obj.mnemonic == UD_Ifldz) instr = "FLDZ";
+                 else if (ud_obj.mnemonic == UD_Ifninit) instr = "FNINIT";
++                else if (ud_obj.mnemonic == UD_Ifpatan) instr = "FATAN2R";
++                else if (ud_obj.mnemonic == UD_Ifprem) instr = "FPREM";
+                 else if (ud_obj.mnemonic == UD_Ifptan) instr = "FPTAN";
+                 else if (ud_obj.mnemonic == UD_Ifsin) instr = "FSIN";
++                else if (ud_obj.mnemonic == UD_Ifrndint) instr = "FRNDINT";
+                 else if (ud_obj.mnemonic == UD_Ifsqrt) instr = "FSQRT";
++                else if (ud_obj.mnemonic == UD_Iftst) instr = "FTST";
+                 else if (ud_obj.mnemonic == UD_Ifucompp) instr = "FUCOMPP";
+                 else /*if (ud_obj.mnemonic == UD_Ifyl2x)*/ instr = "FYL2X";
+ 
+@@ -7108,6 +7152,10 @@
+                                     {
+                                         OUTPUT_PARAMSTRING("%s_ST %i\n", instr, X87REGNUM(ud_obj.operand[1].base));
+                                     }
++                                    else if (ud_obj.operand[1].base == UD_R_ST0)
++                                    {
++                                        OUTPUT_PARAMSTRING("%s_TO_ST %i\n", instr, X87REGNUM(ud_obj.operand[0].base));
++                                    }
+                                 }
+                             }
+                         }
+@@ -7357,7 +7405,12 @@
+                     }
+                     else if (ud_obj.operand[0].type == UD_OP_MEM)
+                     {
+-                        if (ud_obj.operand[0].size == 64)
++                        if (ud_obj.operand[0].size == 80)
++                        {
++                            SR_disassemble_get_madr(cOutput, &(ud_obj.operand[0]), fixup[0], extrn[0], UD_NONE, MADR_REG, ZERO_EXTEND, &memadr);
++                            OUTPUT_PARAMSTRING("FLD_EXTENDED %s\n", memadr.madr);
++                        }
++                        else if (ud_obj.operand[0].size == 64)
+                         {
+                             SR_disassemble_get_madr(cOutput, &(ud_obj.operand[0]), fixup[0], extrn[0], UD_NONE, MADR_READ, ZERO_EXTEND, &memadr);
+ 
+@@ -7491,7 +7544,12 @@
+                     }
+                     else if (ud_obj.operand[0].type == UD_OP_MEM)
+                     {
+-                        if (ud_obj.operand[0].size == 64)
++                        if (ud_obj.operand[0].size == 80 && ud_obj.mnemonic == UD_Ifstp)
++                        {
++                            SR_disassemble_get_madr(cOutput, &(ud_obj.operand[0]), fixup[0], extrn[0], UD_NONE, MADR_REG, ZERO_EXTEND, &memadr);
++                            OUTPUT_PARAMSTRING("FSTP_EXTENDED %s\n", memadr.madr);
++                        }
++                        else if (ud_obj.operand[0].size == 64)
+                         {
+                             OUTPUT_PARAMSTRING("%s_DOUBLE\n", instr);
+ 
+--- a/SR/llasm-support/llasm_float.c
++++ b/SR/llasm-support/llasm_float.c
+@@ -297,6 +297,12 @@
+     ST0 = ST(num) / ST0;
+ }
+ 
++EXTERNC void CCALL x87_fdivr_to_st(CPU, int num)
++{
++    ST(num) = ST0 / ST(num);
++    CLEAR_X87_FLAGS;
++}
++
+ EXTERNC void CCALL x87_fdivrp_st(CPU, int num)
+ {
+     ST(num) = ST0 / ST(num);
+@@ -578,6 +584,24 @@
+     pst0->high = num_high;
+ }
+ 
++EXTERNC void CCALL x87_fld_extended(CPU, const uint8_t *bytes)
++{
++    uint64_t significand = 0;
++    unsigned int exponent;
++    double value;
++    int i;
++    for (i = 0; i < 8; ++i) significand |= (uint64_t)bytes[i] << (8 * i);
++    exponent = bytes[8] | ((unsigned int)(bytes[9] & 0x7f) << 8);
++    if (exponent == 0x7fff)
++        value = significand == UINT64_C(0x8000000000000000) ? INFINITY : NAN;
++    else if (exponent && !(significand >> 63))
++        value = NAN;
++    else
++        value = ldexp((double)significand, (int)(exponent ? exponent : 1) - 16383 - 63);
++    PUSH_REGS;
++    ST0 = copysign(value, (bytes[9] & 0x80) ? -1.0 : 1.0);
++}
++
+ EXTERNC void CCALL x87_fld_st(CPU, int num)
+ {
+     double newval;
+@@ -734,6 +758,51 @@
+     CLEAR_X87_FLAGS;
+ }
+ 
++EXTERNC void CCALL x87_fprem_void(CPU)
++{
++    double dividend = ST0, divisor = ST(1), nearest, result;
++    int nearest_quotient = 0;
++    unsigned int quotient = 0;
++    result = fmod(dividend, divisor);
++    if (isfinite(dividend) && !isnan(divisor) && divisor != 0.0)
++    {
++        nearest = remquo(dividend, divisor, &nearest_quotient);
++        quotient = (unsigned int)(nearest_quotient < 0 ? -nearest_quotient : nearest_quotient);
++        if (nearest != result) --quotient;
++    }
++    ST0 = result;
++    st_sw_cond = ((quotient & 4) ? X87_C0 : 0) |
++                 ((quotient & 2) ? X87_C3 : 0) | ((quotient & 1) ? X87_C1 : 0);
++}
++
++EXTERNC void CCALL x87_frndint_void(CPU)
++{
++    double value = ST0;
++    double rounded;
++    switch ((st_cw >> X87_RC_SHIFT) & 3)
++    {
++    case 0:
++        rounded = floor(value);
++        if (value - rounded > 0.5 ||
++            (value - rounded == 0.5 && fmod(rounded, 2.0) != 0.0))
++        {
++            rounded += 1.0;
++        }
++        break;
++    case 1:
++        rounded = floor(value);
++        break;
++    case 2:
++        rounded = ceil(value);
++        break;
++    default:
++        rounded = trunc(value);
++        break;
++    }
++    ST0 = copysign(rounded, value);
++    CLEAR_X87_FLAGS;
++}
++
+ EXTERNC void CCALL x87_fsqrt_void(CPU)
+ {
+     ST0 = sqrt(ST0);
+@@ -811,6 +880,27 @@
+ #endif
+ }
+ 
++EXTERNC void CCALL x87_fstp_extended(CPU, uint8_t *bytes)
++{
++    double value = ST0;
++    uint64_t significand = 0;
++    unsigned int exponent = 0;
++    int power, i;
++    if (isnan(value)) { significand = UINT64_C(0xc000000000000000); exponent = 0x7fff; }
++    else if (isinf(value)) { significand = UINT64_C(0x8000000000000000); exponent = 0x7fff; }
++    else if (value != 0.0)
++    {
++        double fraction = frexp(fabs(value), &power);
++        significand = (uint64_t)ldexp(fraction, 64);
++        exponent = power + 16382;
++    }
++    if (signbit(value)) exponent |= 0x8000;
++    for (i = 0; i < 8; ++i) bytes[i] = (uint8_t)(significand >> (8 * i));
++    bytes[8] = (uint8_t)exponent;
++    bytes[9] = (uint8_t)(exponent >> 8);
++    POP_REGS;
++}
++
+ EXTERNC void CCALL x87_fstp_st(CPU, int num)
+ {
+     ST(num) = ST0;
+@@ -882,10 +972,22 @@
+     ST0 = ST(num) - ST0;
+ }
+ 
++EXTERNC void CCALL x87_fsubr_to_st(CPU, int num)
++{
++    ST(num) = ST0 - ST(num);
++    CLEAR_X87_FLAGS;
++}
++
+ EXTERNC void CCALL x87_fsubrp_st(CPU, int num)
+ {
+     ST(num) = ST0 - ST(num);
+     POP_REGS;
++}
++
++EXTERNC void CCALL x87_ftst_void(CPU)
++{
++    st_sw_cond = isnan(ST0) ? X87_C0 | X87_C2 | X87_C3 :
++                 ST0 == 0.0 ? X87_C3 : ST0 < 0.0 ? X87_C0 : 0;
+ }
+ 
+ EXTERNC void CCALL x87_fucom_st(CPU, int num)
+--- a/SR/llasm-support/llasm_float.llinc
++++ b/SR/llasm-support/llasm_float.llinc
+@@ -47,6 +47,7 @@
+ funcv x87_fdivr_float $, num
+ funcv x87_fdivr_double $, num_low, num_high
+ funcv x87_fdivr_st $, num
++funcv x87_fdivr_to_st $, num
+ funcv x87_fdivrp_st $, num
+ 
+ funcv x87_fiadd_int32 $, num
+@@ -70,6 +71,7 @@
+ 
+ funcv x87_fld_float $, num
+ funcv x87_fld_double $, num_low, num_high
++funcv x87_fld_extended $, *bytes
+ funcv x87_fld_st $, num
+ funcv x87_fld1_void $
+ funcv x87_fldlg2_void $
+@@ -91,6 +93,9 @@
+ 
+ funcv x87_fsin_void $
+ 
++funcv x87_fprem_void $
++funcv x87_frndint_void $
++
+ funcv x87_fsqrt_void $
+ 
+ func x87_fst_float $
+@@ -98,6 +103,7 @@
+ funcv x87_fst_st $, num
+ func x87_fstp_float $
+ func x87_fstp_double $
++funcv x87_fstp_extended $, *bytes
+ funcv x87_fstp_st $, num
+ 
+ func x87_fnstcw_void $
+@@ -111,8 +117,10 @@
+ funcv x87_fsubr_float $, num
+ funcv x87_fsubr_double $, num_low, num_high
+ funcv x87_fsubr_st $, num
++funcv x87_fsubr_to_st $, num
+ funcv x87_fsubrp_st $, num
+ 
++funcv x87_ftst_void $
+ funcv x87_fucom_st $, num
+ funcv x87_fucomp_st $, num
+ funcv x87_fucompp_void $
+@@ -236,6 +244,10 @@
+     call x87_fdivr_st $, \num
+ endm
+ 
++macro FDIVR_TO_ST num
++    call x87_fdivr_to_st $, \num
++endm
++
+ macro FDIVRP_ST num
+     call x87_fdivrp_st $, \num
+ endm
+@@ -307,6 +319,10 @@
+     call x87_fld_double $, \num_low, \num_high
+ endm
+ 
++macro FLD_EXTENDED addr
++    call x87_fld_extended $, \addr
++endm
++
+ macro FLD_ST num
+     call x87_fld_st $, \num
+ endm
+@@ -373,6 +389,15 @@
+ endm
+ 
+ 
++macro FPREM_VOID
++    call x87_fprem_void $
++endm
++
++macro FRNDINT_VOID
++    call x87_frndint_void $
++endm
++
++
+ macro FSQRT_VOID
+     call x87_fsqrt_void $
+ endm
+@@ -398,6 +423,10 @@
+     call x87_fstp_double $
+ endm
+ 
++macro FSTP_EXTENDED addr
++    call x87_fstp_extended $, \addr
++endm
++
+ macro FSTP_ST num
+     call x87_fstp_st $, \num
+ endm
+@@ -444,11 +473,19 @@
+     call x87_fsubr_st $, \num
+ endm
+ 
++macro FSUBR_TO_ST num
++    call x87_fsubr_to_st $, \num
++endm
++
+ macro FSUBRP_ST num
+     call x87_fsubrp_st $, \num
+ endm
+ 
+ 
++macro FTST_VOID
++    call x87_ftst_void $
++endm
++
+ macro FUCOM_ST num
+     call x87_fucom_st $, \num
+ endm
