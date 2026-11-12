@@ -1,4 +1,5 @@
 #include "windows_storage.h"
+#include "movie_files.h"
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -67,6 +68,13 @@ static int lock_directory(const char *path,RgStorageGuard *guard) {
     }
     guard->directories[guard->count++]=h;return 1;
 }
+static int installed_movie(const char *relative,void *context) {
+    char *output=context;
+    if (!join(output,game_root,relative)) return 0;
+    for (char *p=output;*p;++p) if (*p=='/') *p='\\';
+    DWORD attributes=GetFileAttributesA(output);
+    return attributes!=INVALID_FILE_ATTRIBUTES && !(attributes&FILE_ATTRIBUTE_DIRECTORY);
+}
 int rg_storage_path(const char *requested,int writing,char output[MAX_PATH],RgStorageGuard *guard) {
     guard->count=0;
     if(!game_root[0]) {
@@ -76,19 +84,11 @@ int rg_storage_path(const char *requested,int writing,char output[MAX_PATH],RgSt
     /* DOS animation_drive is often D:\, independently of the host install
        drive. Resolve only root-level read-only SMK requests into installed
        movie folders. An explicitly mounted image is handled before this. */
-    if(!writing && !inside(requested,game_root) &&
-       (requested[0]=='D' || requested[0]=='d') && requested[1]==':') {
-        const char *leaf=requested+2;while(*leaf=='\\' || *leaf=='/') ++leaf;
-        const char *dot=strrchr(leaf,'.');
-        if(dot && !_stricmp(dot,".SMK") && dot!=leaf && !strpbrk(leaf,"\\/:*?<>|\"")) {
-            const char *folders[]={"","MOVIES\\","ANIMS\\","VIDEO\\"};
-            for(unsigned i=0;i<sizeof folders/sizeof *folders;++i) {
-                char suffix[MAX_PATH];
-                if(snprintf(suffix,sizeof suffix,"%s%s",folders[i],leaf)>=(int)sizeof suffix || !join(output,game_root,suffix)) return 0;
-                DWORD attr=GetFileAttributesA(output);
-                if(attr!=INVALID_FILE_ATTRIBUTES && !(attr&FILE_ATTRIBUTE_DIRECTORY)) {
-                    fprintf(stderr,"MOVIE loose %s -> %s\n",requested,output);return 1;
-                }
+    if(!writing && !inside(requested,game_root)) {
+        int movie=rg_movie_find(requested,installed_movie,output);
+        if(movie) {
+            if(movie>0) {
+                fprintf(stderr,"MOVIE loose %s -> %s\n",requested,output);return 1;
             }
             fprintf(stderr,"MOVIE missing %s; searched GAME_DIR, MOVIES, ANIMS, VIDEO; no installed file found\n",requested);
             SetLastError(ERROR_FILE_NOT_FOUND);return 0;

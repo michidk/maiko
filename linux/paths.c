@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "paths.h"
 #include "user_storage.h"
+#include "movie_files.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -68,7 +69,7 @@ int rg_relative_path(const char *path,char *out,size_t capacity) {
     }
     return 1;
 }
-int rg_resolve_path(const char *path,char *out,size_t capacity) {
+static int resolve_local_path(const char *path,char *out,size_t capacity) {
     char relative[4096];if(!rg_relative_path(path,relative,sizeof relative)) return 0;
     const char *base=rg_user_namespace(relative) ? rg_user_root() : root;
     if(strlen(base)>=capacity) {errno=ENAMETOOLONG;return 0;}
@@ -89,4 +90,24 @@ int rg_resolve_path(const char *path,char *out,size_t capacity) {
         part=next;
     }
     return 1;
+}
+typedef struct {char *output;size_t capacity;} MoviePath;
+static int installed_movie(const char *relative,void *context) {
+    MoviePath *result=context;
+    char path[4096];
+    int size=snprintf(path,sizeof path,"C:/%s",relative);
+    if(size<0 || (size_t)size>=sizeof path ||
+       !resolve_local_path(path,result->output,result->capacity)) return 0;
+    struct stat st;
+    return !stat(result->output,&st) && S_ISREG(st.st_mode);
+}
+int rg_resolve_path(const char *path,char *out,size_t capacity) {
+    MoviePath result={out,capacity};
+    int movie=rg_movie_find(path,installed_movie,&result);
+    if(!movie) return resolve_local_path(path,out,capacity);
+    if(movie<0) {
+        fprintf(stderr,"MOVIE missing %s; searched GAME_DIR, MOVIES, ANIMS, VIDEO; no installed file found\n",path);
+        errno=ENOENT;return 0;
+    }
+    fprintf(stderr,"MOVIE loose %s -> %s\n",path,out);return 1;
 }

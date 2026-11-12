@@ -45,7 +45,7 @@ def main():
     if not str(install).startswith('/home/vibepod/workspaces/'):
         p.error('Game mount must be under /home/vibepod/workspaces')
     original=json.loads((source/'report.json').read_text())
-    if original.get('status')!='native_assembly_emitted':p.error('Requires pipeline.py translate --native output')
+    if original.get('status')!='native_assembly_emitted':p.error('Requires python3 -m tools.pipeline translate --native output')
     variants=json.loads((ROOT/'metadata/image_variants.json').read_text())
     if original['image']['sha256']!=variants['translated_image_sha256']:p.error('Translation image hash mismatch')
     sr_head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT/'.cache/sr',text=True).strip()

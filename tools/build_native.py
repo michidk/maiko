@@ -67,7 +67,7 @@ def main():
         backend=ROOT/'.cache/glide'
         backend_report=json.loads((backend/'report.json').read_text())
         if backend_report['status']!='smoke_and_guest_bridge_passed':
-            raise ValueError('Run build_glide.py before linking the game')
+            raise ValueError('Run python3 -m tools.build_glide before linking the game')
         for file in ['redguard-glide.dll','libredguard-glide.a','libwinpthread-1.dll']:
             run(['docker','cp',str(backend/file),name+':/work/'+file])
         report['glide_backend']=backend_report
@@ -132,7 +132,7 @@ x86_64-w64-mingw32-nm -n redguard-native.exe > native-symbols.txt
 '''
         # The original-function tests all use the same host flags. Compile each
         # host source once so adding a function regression costs a link/run.
-        common=['cd_image','crash','game_files','platform_services','input','timing','game_install','game_directory_dialog','windows_storage']
+        common=['movie_files','cd_image','crash','game_files','platform_services','input','timing','game_install','game_directory_dialog','windows_storage']
         for source in common:
             commands=commands.replace(' '+source+'.c ',' '+source+'.obj ')
         flags='-Wall -Wextra -Werror -O2 -I/work -I/audio -I/sdl/include/SDL2 -DRG_USE_SDL_AUDIO -DSDL_MAIN_HANDLED'
@@ -144,7 +144,7 @@ x86_64-w64-mingw32-nm -n redguard-native.exe > native-symbols.txt
                                   'x86_64-w64-mingw32-gcc '+flags+' ')
         commands=prefix+commands.removeprefix('set -e\n')
         commands=commands.replace(' bridge.obj -L/work',' bridge.obj audio_sdl.obj stream_pcm.obj sr_audio.obj -L/sdl/lib -lSDL2_mixer -lSDL2 -L/work')
-        commands='\n'.join(line.replace(' -o ', ' windows_storage.obj cd_image.obj -o ') if line.startswith('x86_64-w64-mingw32-gcc ') and (' game_files.obj ' in line or ' game_install.obj ' in line) else line for line in commands.split('\n'))
+        commands='\n'.join(line.replace(' -o ', ' windows_storage.obj cd_image.obj movie_files.obj -o ') if line.startswith('x86_64-w64-mingw32-gcc ') and (' game_files.obj ' in line or ' game_install.obj ' in line) else line for line in commands.split('\n'))
         commands=commands.replace('WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 original-$name-test.exe',
                                   'SDL_AUDIODRIVER=dummy WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 original-$name-test.exe')
         sample_tests='x86_64-w64-mingw32-gcc '+flags+' /tests/audio_samples.c guest_memory.obj sr_audio.obj -L/sdl/lib -lSDL2_mixer -lSDL2 -o audio-samples.exe\n'
@@ -157,8 +157,10 @@ x86_64-w64-mingw32-nm -n redguard-native.exe > native-symbols.txt
         cd_tests='x86_64-w64-mingw32-gcc '+flags+' /tests/cd_image.c cd_image.obj -Wl,--image-base,0x10000000,--disable-dynamicbase -o cd-image-test.exe\n'
         cd_tests+='WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine python3 /tests/check_cd_image.py /work/cd-image-test.exe --wine\n'
         commands=commands.replace('nasm -O1 -f win64',cd_tests+'nasm -O1 -f win64')
-        storage_test='x86_64-w64-mingw32-gcc '+flags+' /tests/windows_storage.c game_files.obj windows_storage.obj cd_image.obj -Wl,--image-base,0x10000000,--disable-dynamicbase -o windows-storage.exe\n'
+        storage_test='x86_64-w64-mingw32-gcc '+flags+' /tests/windows_storage.c game_files.obj windows_storage.obj cd_image.obj movie_files.obj -Wl,--image-base,0x10000000,--disable-dynamicbase -o windows-storage.exe\n'
         storage_test+='WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 windows-storage.exe\n'
+        storage_test+='x86_64-w64-mingw32-gcc '+flags+' /tests/installed_movies.c game_files.obj windows_storage.obj cd_image.obj movie_files.obj -Wl,--image-base,0x10000000,--disable-dynamicbase -o installed-movies.exe\n'
+        storage_test+='mkdir movie-contract; (cd movie-contract && WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 ../installed-movies.exe)\n'
         commands=commands.replace('nasm -O1 -f win64',storage_test+'nasm -O1 -f win64')
         with (work/'native-build.log').open('w') as log:
             run(['docker','exec',name,'timeout','360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)

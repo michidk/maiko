@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "game_files.h"
 #include "cd_image.h"
+#include "movie_files.h"
 #include "paths.h"
 #include "user_storage.h"
 #include <stdio.h>
@@ -179,6 +180,11 @@ int rg_file_service(GuestFrame *f) {
         const char *requested=(void *)(uintptr_t)(uint32_t)f->edx;
         unsigned access=f->eax&3;
         if(access==3) {error(f,12);return 1;}
+        if(rg_movie_leaf(requested)) {
+            if(access) {error(f,5);return 1;}
+            if(!rg_resolve_path(requested,path,sizeof path)) {error(f,dos_error());return 1;}
+            return save_handle(f,open(path,O_RDONLY|O_CLOEXEC),requested);
+        }
         char relative[4096];
         if(!rg_relative_path(requested,relative,sizeof relative)) {error(f,dos_error());return 1;}
         int fd;

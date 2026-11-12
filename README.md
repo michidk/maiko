@@ -79,6 +79,8 @@ Without `--user-dir`, the game-file adapter denies writes. With that option, ori
 
 ## Native Linux feasibility target
 
+The [platform boundary and continuation plan](docs/development/PLATFORM.md) describes shared code and remaining host differences.
+
 SDL2 provides the shared window, input and timer modules in `runtime/input_sdl.c` and `runtime/timing_sdl.c`. OpenGLide's SDL2 backend provides the graphics context and Glide implementation. The Windows test currently retains its tested Win32 backend; switching Windows to the shared SDL path is a separate follow-up.
 
 The Linux x86-64 host uses the same native SR output and original startup code. Its OS adapters provide low-address memory, read-only DOS file/path/search behavior, executable hashing and signal diagnostics. These are compatibility services that SDL does not supply.
@@ -126,7 +128,7 @@ The game now uses SR's pooled below2GiB heap through a shared native wrapper. Th
 
 The original translated book menu must draw, respond to input and exit in a normal Windows window. A linked executable, a recreated menu, or an emulator-assisted run does not satisfy that milestone. Wine evidence now includes the original book, Options navigation, Escape recovery and clean original Quit from the actual extracted ZIP. The user has exercised gameplay on real Windows; full menu, other menu paths and focus acceptance remain open. Do not ship the diagnostic substitutions as game support.
 
-Launcher default: `RUN.cmd` presets `GAME_DIR=D:\Games\GOG Galaxy\Redguard\Redguard` and leaves `CD_IMAGE` empty. Keep the runtime outside the game directory. Installed menu artwork and textures load from `GAME_DIR` without a CD image. The user reports no image in their GOG installation; the image present in our local extracted installer does not establish their layout. Cyrus supports installed artwork independently, and its movie adapter can read loose SMK files when `animation_drive` is configured as a relative path. The Windows adapter maps root-level DOS D: SMK reads to matching loose files in GAME_DIR, MOVIES, ANIMS or VIDEO. It reports the exact missing request. This does not establish whether the user installation contains those files. Image-backed movies remain supported.
+Launcher default: `RUN.cmd` presets `GAME_DIR=D:\Games\GOG Galaxy\Redguard\Redguard` and leaves `CD_IMAGE` empty. Keep the runtime outside the game directory. Installed menu artwork and textures load from `GAME_DIR` without a CD image. The user reports no image in their GOG installation; the image present in our local extracted installer does not establish their layout. Cyrus supports installed artwork independently, and its movie adapter can read loose SMK files when `animation_drive` is configured as a relative path. Both file adapters use a shared policy to map root-level DOS D: SMK reads to matching loose files in GAME_DIR, MOVIES, ANIMS or VIDEO. It reports the exact missing request. This does not establish whether the user installation contains those files. Image-backed movies remain supported.
 
 Optional movie media: Pass `--game-dir PATH --user-dir SAVE_PATH --cd-image PATH_TO_GAME_GOG` to use movies from the owned CD image. The optional `CD_IMAGE` setting in `RUN.cmd` passes the same path. The adapter accepts ordinary ISO2048 and MODE1/2352 images, supports root files required by the shipped movie layout, and denies writes. It does not implement CD music, general MSCDEX or nested ISO directories.
 
