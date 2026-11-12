@@ -10,7 +10,7 @@ From the repository root, with the independently built patched OUT_LLASM transla
 
 ```sh
 python3 translate_llasm.py \
-  --install /home/vibepod/workspaces/cyrus/redguard \
+  --install /path/to/Redguard \
   --sr .cache/sr-llasm/SR/SR.exe
 ```
 

@@ -12,3 +12,8 @@ python3 tests/check_cd_image.py "$build/cd-image"
 "$build/user-storage"
 "$cc" -Wall -Wextra -Werror -O2 -Iruntime -Ilinux tests/import_interruption.c linux/paths.c linux/user_storage.c -o "$build/import-interruption"
 "$build/import-interruption"
+
+# The Mac branch also checks that source manifests reject changed inputs.
+if [ -f tests/macos_source_manifest.py ]; then
+    python3 -m unittest discover -s tests -p macos_source_manifest.py
+fi
