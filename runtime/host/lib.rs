@@ -119,6 +119,9 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
         if service & 0x80000000 != 0 {
             if service == 0x800d92d0 {
                 static mut COUNT: u32 = 0;
+                if COUNT >= 32 {
+                    return;
+                }
                 let p = f.eax as u32 as usize as *const u8;
                 let readable = rg_host_readable(p.cast(), 12) != 0;
                 if COUNT < 8 || (!readable && COUNT < 32) {
