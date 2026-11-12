@@ -33,3 +33,19 @@ Independent C/C++ test programs remain in `tests/`. They check Rust's exported C
 Detailed run results belong in [VALIDATION.md](VALIDATION.md) and the [decision trail](../research/decisions.tsv). A successful Wine run does not establish real-Windows acceptance. Movie checks use the SDL dummy audio device and do not establish hardware playback or audio/video synchronization.
 
 Gameplay fixes follow this migration. The reported endless jump, combat, startup burst and distant fog remain separate work in [GAMEPLAY_PLAN.md](GAMEPLAY_PLAN.md). The existing Mac branch and PR remain untouched.
+
+## Remaining non-Rust inventory and next steps
+
+The goal is an all-Rust first-party code base. Production C and C++ are already gone; what remains, with sizes at `d2525c5`:
+
+| Area | Size | Disposition |
+|---|---|---|
+| `tools/*.py`: translation, build, packaging, verification, LE image reader, SDL/SR staging | 106 KB | Move to a Rust workspace tool (`xtask`-style `maiko` binary). Parsing, hashing, patch-site checks, ZIP packaging and report handling move first; Docker and Wine invocations are plain process calls. |
+| `tests/*.py`: gameplay probes and checks, guest-memory trace, book and console input | 133 KB | Move the shared guest-memory reader, `CombatTrace` and `BookMenu` into a probe crate, then port probes one at a time. Keep behavior identical and rerun each against its recorded result. |
+| `tests/*.c`, `*.cpp`, `*.asm` harnesses: 44 programs | 98 KB | Port the C ABI and original-function checks to Rust integration tests that call the same exports. The assembly calling-convention harness stays assembly with a Rust driver. |
+| Headers (`runtime/*.h`, `linux/*.h`, `audio/*.h`) | 6 KB | Generate from the Rust exports instead of maintaining by hand. |
+| Shell scripts: build and portable checks | 13 KB | Absorb into the Rust tool. |
+| SR translator, OpenGLide-ng, SDL | upstream | Stay vendored or pinned with their patches; they are not first-party code. |
+| Translated engine assembly, `native_entry.asm`, macros | generated or ABI-bound | Stay assembly. |
+
+Order: (1) the Rust tool for build, package and verify, because every release goes through it; (2) the probe crate and the probes that gate releases; (3) test harness ports; (4) header generation and shell removal. Each step lands on `main` only after the replaced Python or C behavior has been run against the new implementation on the same inputs.

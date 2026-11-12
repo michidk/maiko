@@ -4,7 +4,7 @@ Maiko is an experimental native port of *The Elder Scrolls Adventures: Redguard*
 
 You need your own Redguard installation. Game executables, assets, CD images, generated translations and builds are excluded from this source repository. The runtime recognizes the two inspected RGFX.EXE variants in [metadata/image_variants.json](metadata/image_variants.json). Translation currently requires the canonical variant described below.
 
-This project started as an experiment in [redguard-preservation](https://github.com/michidk/redguard-preservation) and is separate from [Cyrus](https://github.com/michidk/cyrus). This branch contains the Windows/Linux implementation.
+This project started as an experiment in [redguard-preservation](https://github.com/michidk/redguard-preservation) and is separate from [Cyrus](https://github.com/michidk/cyrus). This repository contains the Windows/Linux implementation; macOS work is kept separate on `feat/macos-backend`.
 
 ## Current state
 
@@ -149,3 +149,7 @@ Windows exposes original game cwd and current-drive queries as virtual C:, while
 Movie-audio checks now convert to the negotiated device rate and record all consumed frames separately from nonzero and starved frames. An opt-in developer capture, `RG_MOVIE_PCM_CAPTURE`, records at most256KiB of pre-conversion source PCM for independent comparison. It is absent from normal launcher runs and packages contain no captured PCM. The Linux movie gate compares32768 bytes with FFmpeg after2s uninterrupted playback. Correct decoding of that prefix and zero starvation in the skip scenario do not establish full-movie quality, hardware playback or synchronization.
 
 Windows gameplay feedback, 2026-11-12: the user reports movement and audio working, a single jump on the opening ship that never falls, immediate ship startup, initial acceleration, missing movies and distant fog artifacts. The same shipped executable rises, descends and lands in Wine on both ship and island. These checks do not resolve the Windows report. New bounded STATE lines record the original position, jump/fall state, animation vertical-control flag, jump key, fly flag and timing fields. The original gravity and simulation arithmetic is retained. Current development source deliberately opens the book on a default fresh start and paces the original fixed 12-Hz loading warm-up. Three released ship jumps pass on Linux and on the rebuilt Windows executable under Wine. These checks do not resolve the real-Windows report; the older shipped download predates these changes. Copied-autosave tests and fresh-start tests remain separate.
+
+## Contributing
+
+Validated work is committed directly to `main`; there are no pull requests or long-lived feature branches. The macOS port is the exception and stays on `feat/macos-backend` until it is deliberately merged. New first-party code is Rust. See [AGENTS.md](AGENTS.md) for the commit, validation and test-environment rules.
