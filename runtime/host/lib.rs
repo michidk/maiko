@@ -220,6 +220,10 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             }
         }
         match service {
+            27 => {
+                pace_startup_clock(read32(&raw const loc_1A4624));
+                return;
+            }
             24 => {
                 rg_movie_clock_callback = host_movie_clock_read as *const () as usize as u32;
                 rg_movie_clock_shutdown = host_movie_clock_stop as *const () as usize as u32;

@@ -29,6 +29,7 @@ HOST_SERVICE host_poll_input, 23
 HOST_SERVICE host_movie_clock_init, 24
 HOST_SERVICE host_movie_clock_read, 25
 HOST_SERVICE host_movie_clock_stop, 26
+HOST_SERVICE host_startup_clock_pace, 27
 HOST_SERVICE host_audio_init, 12288
 HOST_SERVICE host_audio_shutdown, 12289
 HOST_SERVICE host_audio_sample_init, 12290

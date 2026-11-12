@@ -175,9 +175,9 @@ with prefix.with_suffix('.log').open('w') as log:
                         time.sleep(.1)
                     assert current and current['ui_mode']==30,'Original book did not open after movie'
                     report['movie_quit_book_observed']=True
-                    # Menu navigation runs faster and repeats held directions.
-                    # Use one short tap after its camera/page transition settles.
-                    book.wait_ready();key('Up');key('Return')
+                    # Read the current selection instead of assuming a fixed
+                    # number of taps from the item restored after the movie.
+                    book.select_main_action(-2,key);key('Return')
                     assert process.wait(timeout=15)==0
                     report['movie_skip_to_world_verified']=True
                     break

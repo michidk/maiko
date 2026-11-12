@@ -1,9 +1,46 @@
+use std::cell::RefCell;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicU32, Ordering},
 };
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+
+const STARTUP_STEP: Duration = Duration::from_nanos(1_000_000_000 / 12);
+
+#[derive(Default)]
+struct StartupPacer {
+    last_step: Option<Instant>,
+}
+
+impl StartupPacer {
+    fn delay(&mut self, remaining: u32, now: Instant) -> Option<Duration> {
+        if remaining == 0 {
+            self.last_step = None;
+            return None;
+        }
+        Some(self.last_step.map_or(STARTUP_STEP, |last| {
+            (last + STARTUP_STEP).saturating_duration_since(now)
+        }))
+    }
+}
+
+thread_local! {
+    static STARTUP_PACER: RefCell<StartupPacer> = RefCell::new(StartupPacer::default());
+}
+
+/// Match wall time to the original fixed 12-Hz clock steps during warm-up.
+/// Repeated counter resets during loading fades remain paced. Slow frames
+/// never create a backlog of steps to catch up on later.
+pub fn pace_startup_clock(remaining: u32) {
+    STARTUP_PACER.with(|pacer| {
+        let mut pacer = pacer.borrow_mut();
+        if let Some(delay) = pacer.delay(remaining, Instant::now()) {
+            thread::sleep(delay);
+            pacer.last_step = Some(Instant::now());
+        }
+    });
+}
 
 #[unsafe(no_mangle)]
 pub static rg_bios_ticks: AtomicU32 = AtomicU32::new(0);
@@ -78,6 +115,47 @@ pub extern "C" fn rg_clock_milliseconds() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn startup_steps_follow_twelve_hz_on_a_fast_renderer() {
+        let mut pacer = StartupPacer::default();
+        let start = Instant::now();
+        let mut now = start;
+        for remaining in (1..=12).rev() {
+            let delay = pacer.delay(remaining, now).unwrap();
+            now += delay;
+            pacer.last_step = Some(now);
+            if remaining != 1 {
+                now += Duration::from_millis(10);
+            }
+        }
+        assert_eq!(now.duration_since(start), STARTUP_STEP * 12);
+        assert_eq!(pacer.delay(0, now), None);
+    }
+
+    #[test]
+    fn loading_fade_resets_do_not_disable_pacing() {
+        let mut pacer = StartupPacer::default();
+        let start = Instant::now();
+        let mut now = start;
+        for remaining in [12, 12, 12, 11, 12, 11, 10] {
+            now += pacer.delay(remaining, now).unwrap();
+            pacer.last_step = Some(now);
+        }
+        assert_eq!(now.duration_since(start), STARTUP_STEP * 7);
+    }
+
+    #[test]
+    fn slow_frames_do_not_accumulate_catchup_steps() {
+        let mut pacer = StartupPacer::default();
+        let start = Instant::now();
+        pacer.last_step = Some(start);
+        let resumed = start + Duration::from_secs(2);
+        assert_eq!(pacer.delay(5, resumed), Some(Duration::ZERO));
+        pacer.last_step = Some(resumed);
+        assert_eq!(pacer.delay(4, resumed), Some(STARTUP_STEP));
+        assert_eq!(pacer.delay(0, resumed), None);
+        assert_eq!(pacer.delay(12, resumed), Some(STARTUP_STEP));
+    }
     #[test]
     fn bios_rate_and_long_uptime_without_overflow() {
         for (elapsed, frequency, ticks) in [

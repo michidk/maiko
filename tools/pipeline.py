@@ -296,6 +296,16 @@ def native_startup_book(image, text):
     return text.replace(before, after)
 
 
+def native_startup_clock(image, text):
+    """Pace the original fixed-step clock before it advances the simulation."""
+    if image.at(0x5f6bc, 12) != bytes.fromhex('e8a0000000833d2446030000'):
+        raise ValueError('Original startup clock call bytes changed')
+    before = 'CALL loc_5F761\ncmp dword [loc_1A4624], 0x0\n'
+    if text.count(before) != 1 or 'CALL host_startup_clock_pace\n' in text:
+        raise ValueError('Native startup clock call inventory changed')
+    return text.replace(before, 'CALL host_startup_clock_pace\n' + before)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['inspect', 'build', 'translate'])
@@ -381,6 +391,11 @@ def main():
             report['glide_imports']=emit_glide(image,work,write_mappings=False)
             source=work/'seg02.inc'
             source.write_text(native_startup_book(image, source.read_text()))
+            source.write_text(native_startup_clock(image, source.read_text()))
+            report['native_startup_clock_pacing'] = dict(
+                original_fixed_step_hz=12,
+                active='original warm-up counter nonzero, including loading fade resets',
+                simulation='original scale, deltas and movement arithmetic unchanged')
             report['native_startup_book'] = dict(
                 autosave_validation='original loc_4F33B',
                 continue_available='only with a valid original autosave',
@@ -395,7 +410,7 @@ def main():
             source.write_text(text)
             report['native_bios_tick_pointer_rewrites']=count
             with (work/'extern.inc').open('a') as out:
-                out.write('extern rg_bios_ticks\n')
+                out.write('extern rg_bios_ticks\nextern host_startup_clock_pace\n')
             # Address-taken handwritten clipping helpers were previously emitted as
             # raw x86 bytes. Each must use the translated stack and call target.
             roots=[0xd933c,0xd93cc,0xd945c,0xd94ec,0xd9578,0xd9604]

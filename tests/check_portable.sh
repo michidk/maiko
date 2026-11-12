@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 python3 -m unittest discover -s tests -p package_media.py
 python3 -m unittest discover -s tests -p jump_trace_cases.py
 python3 -m unittest discover -s tests -p book_menu_cases.py
+python3 -m unittest discover -s tests -p startup_timing_cases.py
 python3 -m compileall -q -x '/(\.git|\.cache|artifacts)/' .
 build=$(mktemp -d)
 trap 'rm -rf "$build"' EXIT HUP INT TERM

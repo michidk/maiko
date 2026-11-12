@@ -48,4 +48,5 @@ class CombatTrace:
                     })
                 actor = struct.unpack_from("<I", data, 4)[0]
             return {"actors": actors, "selected": hex(selected), "actor_count": len(visited),
-                    "ui_mode": word(self.symbols["loc_1A824C"])}
+                    "ui_mode": word(self.symbols["loc_1A824C"]),
+                    "startup_remaining": word(self.symbols["loc_1A4624"])}

@@ -217,6 +217,7 @@ def main():
                 player = next((x for x in current['actors'] if x['selected']), None)
                 arrived = ('open maps\\island.rgm' in text and player is not None
                            and current['ui_mode'] == 31 and player['health'] > 0
+                           and current['startup_remaining'] == 0
                            and math.dist(player['position'], spawn) > 1000000)
                 if arrived:
                     if arrived_at is None:
@@ -224,6 +225,7 @@ def main():
                         arrived_ns = time.time_ns()
                     elif time.monotonic() - arrived_at > 3:
                         report['island_arrival_verified'] = True
+                        report['island_clock_warmup_finished_verified'] = True
                         report['island_player'] = player
                         capture('island', arrived_ns)
                         break
