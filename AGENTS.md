@@ -19,7 +19,7 @@ New first-party code is Rust. Do not add production C, C++ or Python. The one-ti
 - State only what was observed. A Wine or Linux run is not real-Windows acceptance, and dummy-audio or software-GL runs do not establish hardware playback or rendering.
 - Record exact hashes, commands and limits in `VALIDATION.md` and a row in `docs/research/decisions.tsv`. Keep failures; do not edit them away.
 - Never rewrite a test or gate so a failing build passes, unless the owner has said the requirement itself is wrong.
-- Original game bytes are hash-checked at every patch site. Patches live in `native-metadata/` (`instruction_replacements.sci` and `instruction_checks.json` must stay in step). Guard a null or invalid read before the first x87 push so the floating-point stack stays balanced.
+- Original game bytes are hash-checked at every patch site. Every patch is documented next to the code that implements it, not in a separate document: byte replacements in `native-metadata/instruction_replacements.sci` (and `metadata/`, `probe-only/`) carry a comment block (Original, Replacement, Effect, Why, Evidence) and a `# sha256:` of the original bytes above each entry, the build rejects an entry without them, and `python3 tests/check_patch_tables.py` checks the tables without the game. The text hooks that edit the generated assembly are documented in `tools/pipeline.py` and each upstream patch carries a header at the top of its `.patch` file. A new or changed patch updates its own documentation in the same commit. Guard a null or invalid read before the first x87 push so the floating-point stack stays balanced.
 
 ## Test environment
 

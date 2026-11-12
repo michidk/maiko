@@ -38,7 +38,21 @@ def command(args, *, cwd=None, log=None, timeout=180):
     return round(time.monotonic() - start, 3)
 
 
+def patch_body(path):
+    """The diff itself: a patch's descriptive header is documentation and must not invalidate caches."""
+    data = Path(path).read_bytes()
+    match = re.search(rb'^(diff --git |--- )', data, re.M)
+    return data[match.start():] if match else data
+
+
 def build():
+    """Build the pinned SR translator with the repository's x64 patch.
+
+    Patch: patches/sr-x64.patch plus the OUTPUT_TYPE switch below (documented in the patch header).
+    Effect: SR emits x86-64 NASM source instead of 32-bit.
+    Why: the native Windows and Linux builds are 64-bit; stock SR targets 32-bit output.
+    Evidence: docs/development/PLATFORM.md. The stamp file refuses a changed patch on a cached checkout.
+    """
     CACHE.mkdir(exist_ok=True)
     venv = CACHE / 'venv'
     if not (venv / 'bin/scons').exists():
@@ -52,7 +66,7 @@ def build():
     if actual != SR_COMMIT:
         raise RuntimeError('Cached SR checkout is at a different revision')
     patch = ROOT / 'patches/sr-x64.patch'
-    signature = hashlib.sha256(patch.read_bytes()).hexdigest()
+    signature = hashlib.sha256(patch_body(patch)).hexdigest()
     stamp = repo / '.redguard-patch'
     if not stamp.exists():
         command(['git', 'apply', '--check', patch], cwd=repo)
@@ -70,9 +84,57 @@ def build():
     return repo / 'SR/SR.exe', elapsed
 
 
+REQUIRED_DOC = ('Original:', 'Replacement:', 'Effect:', 'Why:', 'Evidence:')
+
+
+def read_replacements(path, *, require_hash=True):
+    """Parse an annotated replacement table into (label, length, replacement, sha256, doc) entries.
+
+    The comment block above an entry documents it and a `# sha256:` line pins the original
+    bytes. A blank line ends a block that several entries share. The translator never sees
+    the comments: use `replacement_text` for what it reads.
+    """
+    entries, doc, digest = [], [], None
+    for number, line in enumerate(Path(path).read_text().splitlines(), 1):
+        if not line.strip():
+            doc = []
+        elif line.startswith('#'):
+            body = line[1:].strip()
+            if body.startswith('sha256:'):
+                digest = body.split(':', 1)[1].strip()
+            elif body:
+                doc.append(body)
+        else:
+            label, length, replacement = line.split(',', 2)
+            missing = [key for key in REQUIRED_DOC if not any(d.startswith(key) for d in doc)]
+            if missing:
+                raise ValueError(f'{path}:{number} {label} lacks documentation: {", ".join(missing)}')
+            if require_hash and not digest:
+                raise ValueError(f'{path}:{number} {label} lacks a sha256 line')
+            entries.append((label, int(length), replacement, digest, list(doc)))
+            digest = None
+    return entries
+
+
+def replacement_text(entries):
+    return ''.join(f'{label},{length},{replacement}\n' for label, length, replacement, _, _ in entries)
+
+
+def check_replacements(entries, image):
+    for label, length, _, digest, _ in entries:
+        address = int(label.removeprefix('loc_'), 16)
+        if digest and hashlib.sha256(image.at(address, length)).hexdigest() != digest:
+            raise ValueError(f'Original bytes changed at {label} ({length} bytes)')
+
+
 def metadata(image, work, probe):
     for file in (ROOT / 'metadata').glob('*.sci'):
-        shutil.copyfile(file, work / file.name)
+        if file.name == 'instruction_replacements.sci':
+            entries = read_replacements(file)
+            check_replacements(entries, image)
+            (work / file.name).write_text(replacement_text(entries))
+        else:
+            shutil.copyfile(file, work / file.name)
     # Verify the two-entry Watcom idioms before applying their equivalent expansion.
     for address in [0xf70b6, 0xf70eb, 0x119cde, 0x13b3d7, 0x13b461]:
         if image.at(address, 4) != bytes.fromhex('66a989cf'):
@@ -92,8 +154,8 @@ def metadata(image, work, probe):
             0x144ca7: '0f03c2', 0x13bd6b: '0f010c24',
         }
         seen = set()
-        for line in (ROOT / 'probe-only/instruction_replacements.sci').read_text().splitlines():
-            label, length, replacement = line.split(',', 2)
+        probe_entries = read_replacements(ROOT / 'probe-only/instruction_replacements.sci', require_hash=False)
+        for label, length, replacement, _, _ in probe_entries:
             if not replacement.startswith('ud2'):
                 continue
             address = int(label.removeprefix('loc_'), 16)
@@ -103,12 +165,20 @@ def metadata(image, work, probe):
             seen.add(address)
         if seen != expected.keys():
             raise ValueError('Diagnostic substitution inventory changed')
-        shutil.copyfile(ROOT / 'probe-only/instruction_replacements.sci', work / 'instruction_replacements.sci')
+        (work / 'instruction_replacements.sci').write_text(replacement_text(probe_entries))
     return len(names)
 
 
 def relax_branches(work):
-    # Translation expands instructions. Original rel8 distances no longer apply.
+    """Rewrite generated assembly so it assembles: short jumps become near and data runs compact.
+
+    Original: SR copies the original's rel8 (`jcc short`) forms.
+    Effect: no behavior change. Branches may now reach further and long `db` runs use `times` or
+    128-byte lines so NASM builds the large segments in reasonable time.
+    Why: translation expands instructions, so original rel8 distances no longer fit.
+    Evidence: none needed beyond a successful assembly; the translated output is compared byte-for-byte
+    when this function changes.
+    """
     for file in work.glob('seg*.inc'):
         text = re.sub(r'^(j\w+) short ', r'\1 ', file.read_text(), flags=re.M)
         compact = []
@@ -133,6 +203,14 @@ def relax_branches(work):
 
 
 def instrument_native(work):
+    """Add a trace call at the entry of 21 original functions (diagnostic only).
+
+    Original: the listed function entry labels, each required to occur exactly once.
+    Effect: each entry first calls `trace_<address>`, a host service that records the call; game
+    logic and registers are untouched.
+    Why: lets the probes follow startup, movie and audio flow without a debugger.
+    Evidence: runtime/call_trace.inc; runtime/host/lib.rs (trace services, service numbers with the top bit set).
+    """
     addresses = [0x1115c2, 0x113c04, 0x113c63, 0x113cad, 0xf1cde, 0x129dc4,
                  0x119b86, 0x133707, 0x11fd96, 0x1303d4, 0x130c8b, 0x110826,
                  0xc7f20, 0xf976c, 0xc80f8, 0x20000, 0x20095, 0x98673, 0x138b82,
@@ -156,7 +234,14 @@ def instrument_native(work):
 
 
 def split_mixed_section(work, number):
-    """Retain writable embedded data without making translated code writable."""
+    """Retain writable embedded data without making translated code writable.
+
+    Original: translated sections that mix executable code and data in one object.
+    Effect: no behavior change. Data runs go to non-executable writable sections and code to executable
+    read-only ones; the original's own writes to its embedded data still work.
+    Why: modern platforms refuse writable-and-executable memory and the translator emits one section.
+    Evidence: docs/development/PLATFORM.md (operating-system bindings).
+    """
     file=work/f'seg{number:02}.inc'
     output=[];pending=[];active='code'
     for line in file.read_text().splitlines(True):
@@ -177,7 +262,18 @@ def split_mixed_section(work, number):
 
 
 def native_startup_book(image, text):
-    """Show the native startup book, preserving the original direct-start override."""
+    """Show the native startup book, preserving the original direct-start override.
+
+    Original: a fresh install with no usable autosave skips the book and starts the intro immediately,
+    and the book only fades in when an autosave was admitted.
+    Replacement: the default fresh start enters the book with New Game selected and Continue disabled,
+    through the original disable-entry path; startup Escape with no admitted save takes the original
+    no-op path. MENU.INI `ignore_autosave=1` keeps its original direct-world path.
+    Effect: a new player sees the book menu first. This deliberately differs from the original.
+    Why: reported on real Windows: starting straight into the game bypassed the book.
+    Evidence: docs/development/VALIDATION.md (fresh start, Continue disabled); tests/check_startup_override.py.
+    Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.
+    """
     original = bytes.fromhex('e840ed02006685c0741cc705a31d030001000000')
     if image.at(0x205f6, len(original)) != original:
         raise ValueError('Original startup autosave branch bytes changed')
@@ -297,7 +393,16 @@ def native_startup_book(image, text):
 
 
 def native_startup_clock(image, text):
-    """Pace the original fixed-step clock before it advances the simulation."""
+    """Pace the original fixed-step clock before it advances the simulation.
+
+    Original: at 0x5F6BC the original calls its clock update (loc_5F761) and then tests the step counter.
+    Replacement: call host_startup_clock_pace first (runtime/rust/timing.rs).
+    Effect: the 12 Hz loading warm-up advances at its fixed rate instead of as fast as the host runs.
+    Simulation arithmetic is untouched.
+    Why: reported on real Windows: a burst of fast movement at the start.
+    Evidence: docs/development/VALIDATION.md (startup pacing); the Linux and Wine runs record the countdowns.
+    Guards: the 12 original bytes are checked and the call must occur exactly once and not already be present.
+    """
     if image.at(0x5f6bc, 12) != bytes.fromhex('e8a0000000833d2446030000'):
         raise ValueError('Original startup clock call bytes changed')
     before = 'CALL loc_5F761\ncmp dword [loc_1A4624], 0x0\n'
@@ -340,16 +445,10 @@ def main():
                 with (work / file.name).open('a') as out:
                     out.write(file.read_text())
             elif file.name == 'instruction_replacements.sci':
-                checks=json.loads((ROOT/'native-metadata/instruction_checks.json').read_text())
-                replacements=[line.split(',',2) for line in file.read_text().splitlines()]
-                if [(int(label[4:],16),int(length)) for label,length,_ in replacements] != [(int(c['address'],16),c['length']) for c in checks]:
-                    raise ValueError('Native replacement byte-check inventory differs')
-                for check in checks:
-                    original=image.at(int(check['address'],16),check['length'])
-                    if hashlib.sha256(original).hexdigest()!=check['sha256']:
-                        raise ValueError(f'Native boundary bytes changed: {check["address"]}')
+                entries = read_replacements(file)
+                check_replacements(entries, image)
                 with (work / file.name).open('a') as out:
-                    out.write(file.read_text())
+                    out.write(replacement_text(entries))
             else:
                 shutil.copyfile(file, work / file.name)
     if args.native:

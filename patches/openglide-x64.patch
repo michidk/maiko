@@ -1,3 +1,11 @@
+Patch: OpenGLide-ng 64-bit and read-only-install fixes
+Upstream: https://github.com/eugenenuke/openglide-ng at the commit named by BACKEND in tools/package_native.py; applied by tools/build_glide.py and tools/build_linux.py.
+Original: FindConfig reads its configuration file without checking that it opened; GetOptions writes OpenGLid.ini unchecked and recurses if it cannot remove a bad file; RDTSC reads the timestamp counter with the 32-bit "=A" constraint, which is wrong on x86-64.
+Replacement: FindConfig returns when the file is missing; GetOptions logs "Cannot write wrapper configuration; using defaults" and returns, and only recurses if the bad file was removed; RDTSC assembles the 64-bit value from EAX and EDX.
+Effect: the renderer starts when the game directory is read-only (the native build mounts it read-only) and its timing counter is correct on 64-bit.
+Why: the game is run from an unmodified, possibly read-only installation, and the build is 64-bit.
+Evidence: tests/backend_smoke.cpp; the Glide window checks in the Linux and Wine runs.
+
 diff --git a/GLutil.cpp b/GLutil.cpp
 index 8cef475..e009e09 100644
 --- a/GLutil.cpp
