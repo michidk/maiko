@@ -8,9 +8,9 @@ import subprocess
 import time
 import tempfile
 import uuid
-from build_windows import ROOT, IMAGE, run, ensure_tool_image
-from le_image import Image
-from sr_heap import stage_sr_heap
+from .build_windows import ROOT, IMAGE, run, ensure_tool_image
+from .le_image import Image
+from .sr_heap import stage_sr_heap
 from glide.imports import emit
 
 COMMIT='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'

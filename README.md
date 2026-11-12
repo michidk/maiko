@@ -14,7 +14,17 @@ This project started as an experiment in [redguard-preservation](https://github.
 
 Build success, Wine execution and real-platform acceptance are recorded separately. Twelve diagnostic traps remain in unsupported mixed-mode system code and stop execution if reached.
 
-See [the build and runtime notes](#reproduce), [the gameplay plan](GAMEPLAY_PLAN.md), [research history](RESEARCH.md) and [decision trail](decisions.tsv). Historical research links into ignored artifacts refer to the original development workspace; those artifacts are not published here.
+See [the build and runtime notes](#reproduce), [the gameplay plan](docs/development/GAMEPLAY_PLAN.md), [research history](docs/research/RESEARCH.md) and [decision trail](docs/research/decisions.tsv). Historical research links into ignored artifacts refer to the original development workspace; those artifacts are not published here.
+
+## Repository layout
+
+- `tools/`: translation, build, verification and packaging commands. Run entry points as `python3 -m tools.<name>` from the repository root.
+- `runtime/`, `linux/`, `glide/`, `audio/`: native runtime and platform adapters.
+- `metadata/`, `native-metadata/`, `probe-only/`, `patches/`: translator inputs and upstream changes.
+- `tests/`: synthetic checks and game-backed development probes.
+- `docs/development/`: implementation plans and validation notes.
+- `docs/research/`: research history and the decision trail.
+- `.cache/`, `artifacts/`: ignored dependencies, generated translations and local test output.
 
 ## Reproduce
 
@@ -25,22 +35,22 @@ sh tests/check_portable.sh
 ```
 
 
-Use Linux, Python 3.11 with venv support, GCC/G++, Git and Docker. The Docker game builds and package verifier currently require bind-mounted inputs to resolve below `/home/vibepod/workspaces`. This applies to `build_native.py`, `build_linux.py` and `verify_native_package.py`, including selected game, CD-image and verifier input paths. The scripts retain this development-environment restriction; a clone elsewhere can run the source-only checks, but must stage those inputs under that directory for Docker runs. The source build installs pinned SCons into a local virtual environment. Everything downloaded or generated is ignored under `.cache/` and `artifacts/`.
+Use Linux, Python 3.11 with venv support, GCC/G++, Git and Docker. The Docker game builds and package verifier currently require bind-mounted inputs to resolve below `/home/vibepod/workspaces`. This applies to `tools/build_native.py`, `tools/build_linux.py` and `tools/verify_native_package.py`, including selected game, CD-image and verifier input paths. The scripts retain this development-environment restriction; a clone elsewhere can run the source-only checks, but must stage those inputs under that directory for Docker runs. The source build installs pinned SCons into a local virtual environment. Everything downloaded or generated is ignored under `.cache/` and `artifacts/`.
 
 ```sh
 export REDGUARD_DIR=/path/to/Redguard
-python3 pipeline.py inspect
-python3 pipeline.py build
+python3 -m tools.pipeline inspect
+python3 -m tools.pipeline build
 
 # Honest compatibility gate: currently fails at a mixed-mode far transfer.
-python3 pipeline.py translate
+python3 -m tools.pipeline translate
 
 # Explicit diagnostic mode: unresolved CPU/system boundaries become fatal traps.
-python3 pipeline.py translate --probe-traps
+python3 -m tools.pipeline translate --probe-traps
 
 docker build -t redguard-recomp-tools:bookworm .
 # Substitute the artifact directory printed by the preceding translation.
-python3 build_windows.py artifacts/TIMESTAMP-probe --wine
+python3 -m tools.build_windows artifacts/TIMESTAMP-probe --wine
 ```
 
 The Docker build downloads tools; the build/run container has networking disabled and no game-install mount. Containers are removed after each run. `--wine` checks the expected diagnostic exit and message, not gameplay. The generated report keeps `menu_verified` and `native_windows_verified` false.
@@ -50,9 +60,9 @@ The translation input is pinned to SHA-256 `844a316b5f71e3c7fadf4b012ab63c5c13aa
 ## Continue the native target
 
 ```sh
-python3 build_glide.py --install /path/to/Redguard
-python3 pipeline.py translate --native --install /path/to/Redguard
-python3 build_native.py artifacts/TIMESTAMP-native --install /path/to/Redguard
+python3 -m tools.build_glide --install /path/to/Redguard
+python3 -m tools.pipeline translate --native --install /path/to/Redguard
+python3 -m tools.build_native artifacts/TIMESTAMP-native --install /path/to/Redguard
 ```
 
 The native build runs synthetic adapter, file and platform tests before the original game. It mounts the install read-only, uses native Win32 services, and keeps unresolved CPU instructions as explicit fatal traps. Original CRT constructors execute before the original main function. A successful build is not a successful menu run; inspect `report.json` and `native-wine.log` for the reached boundary. Automated Windows-target checks run under Wine. The user has tested the game on real Windows; full acceptance remains open.
@@ -74,7 +84,7 @@ SDL2 provides the shared window, input and timer modules in `runtime/input_sdl.c
 The Linux x86-64 host uses the same native SR output and original startup code. Its OS adapters provide low-address memory, read-only DOS file/path/search behavior, executable hashing and signal diagnostics. These are compatibility services that SDL does not supply.
 
 ```sh
-python3 build_linux.py artifacts/TIMESTAMP-native \
+python3 -m tools.build_linux artifacts/TIMESTAMP-native \
   --install /path/to/Redguard \
   --menu-autosave /path/to/SAVEGAME.SAV
 ```
@@ -87,29 +97,29 @@ The Linux test suite also exercises 9000 simultaneous guest allocations, long ho
 
 Remaining Linux limits include incomplete game-loading coverage, unsorted DOS searches without generated long-name aliases and signal alternate stacks installed only on the initializing thread. Isolated save/config writes are available with `--user-dir`; guest memory uses the shared SR pooled heap. SDL's SIGINT/SIGTERM behavior during a game loop that stops pumping events remains untested; use an external timeout with a kill escalation for manual runs. The current 618 NASM byte-immediate warnings were audited against matching generated source and are sign-extended negative byte immediates. This does not prove unexercised translated code correct.
 
-Add `--gameplay both --gameplay-seconds 30` to record bounded Continue/New Game observations. `--world-controls` measures original player position after walking and attempts in-game Quit. With `--writable-gameplay`, that stricter probe now completes original autosave and Quit. Add `--save-roundtrip` to verify exact player-position persistence in a second process, and `--exercise` for original inventory open/close and bounded action input. `--modal-ui` on Continue seeds one synthetic logbook entry in disposable storage and checks the original logbook interface. Map opening is reported separately and remains unverified in the current seed. A timeout or observation-only report is never full-game acceptance. See [whole-game plan](GAMEPLAY_PLAN.md).
+Add `--gameplay both --gameplay-seconds 30` to record bounded Continue/New Game observations. `--world-controls` measures original player position after walking and attempts in-game Quit. With `--writable-gameplay`, that stricter probe now completes original autosave and Quit. Add `--save-roundtrip` to verify exact player-position persistence in a second process, and `--exercise` for original inventory open/close and bounded action input. `--modal-ui` on Continue seeds one synthetic logbook entry in disposable storage and checks the original logbook interface. Map opening is reported separately and remains unverified in the current seed. A timeout or observation-only report is never full-game acceptance. See [whole-game plan](docs/development/GAMEPLAY_PLAN.md).
 
 The game now uses SR's pooled below2GiB heap through a shared native wrapper. The build exports and hashes the exact upstream sources from the pinned revision. DOS path and file services remain platform-specific; SDL alone does not supply them.
 
 ## Files
 
-- `sr_audio.py`, `audio/` and `windows_sdl.py`: pinned SR sample playback through SDL_mixer and official Windows SDK staging.
+- `tools/sr_audio.py`, `audio/` and `tools/windows_sdl.py`: pinned SR sample playback through SDL_mixer and official Windows SDK staging.
 - `linux/user_storage.c` and `runtime/windows_storage.c`: isolated opt-in save/config storage.
-- `sr_heap.py` and `runtime/guest_memory.cpp`: pinned pooled SR heap staging and checked native allocation API.
-- `le_image.py`: hash-checked LE inspection and page loading.
-- `pipeline.py`: pinned dependency build, metadata validation, translation and assembly compaction.
+- `tools/sr_heap.py` and `runtime/guest_memory.cpp`: pinned pooled SR heap staging and checked native allocation API.
+- `tools/le_image.py`: hash-checked LE inspection and page loading.
+- `tools/pipeline.py`: pinned dependency build, metadata validation, translation and assembly compaction.
 - `metadata/`: exact-build roots and overlapping-instruction adaptations.
 - `probe-only/`: explicit fatal substitutions for unsupported boundaries.
 - `runtime/`: shared startup/ABI contracts, SDL input/timers and Windows host adapters. Every unimplemented service terminates.
-- `linux/` and `build_linux.py`: Linux host adapters and reusable native ELF build/menu verification.
-- `build_glide.py` and `glide/`: pinned native renderer build, pixel smoke tests, guest layouts and original-stub mapping.
-- `build_native.py`: native runtime integration, ABI/input/file tests and original startup tracing.
-- `build_windows.py`: reproducible Windows linking and Wine boundary check.
-- `package_native.py`: package the observed Windows gameplay test and renderer sources/notices.
-- `verify_native_package.py`: extract and run the actual seven-file ZIP under Wine with a host D: install, the shipped GAME_DIR preset, no-image menu navigation and saved path-error exits. Optional media mode also checks an independent movie PCM reference.
+- `linux/` and `tools/build_linux.py`: Linux host adapters and reusable native ELF build/menu verification.
+- `tools/build_glide.py` and `glide/`: pinned native renderer build, pixel smoke tests, guest layouts and original-stub mapping.
+- `tools/build_native.py`: native runtime integration, ABI/input/file tests and original startup tracing.
+- `tools/build_windows.py`: reproducible Windows linking and Wine boundary check.
+- `tools/package_native.py`: package the observed Windows gameplay test and renderer sources/notices.
+- `tools/verify_native_package.py`: extract and run the actual seven-file ZIP under Wine with a host D: install, the shipped GAME_DIR preset, no-image menu navigation and saved path-error exits. Optional media mode also checks an independent movie PCM reference.
 - `tests/check_movie_pcm.py`: compare a bounded original Smacker source prefix byte-for-byte with FFmpeg in the Linux development image.
 - `runtime/cd_image.c` and `tests/check_cd_image.py`: shared read-only ISO/MODE1 CD root-file adapter and synthetic sector/handle tests.
-- `package_diagnostic.py`: package a hash-matched Wine-verified diagnostic and runtime notices.
+- `tools/package_diagnostic.py`: package a hash-matched Wine-verified diagnostic and runtime notices.
 - `Dockerfile`: isolated MinGW/NASM/Wine toolchain.
 
 ## Acceptance still required

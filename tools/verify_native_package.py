@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import time
 import uuid
-from build_windows import ROOT,IMAGE,ensure_tool_image,run
+from .build_windows import ROOT,IMAGE,ensure_tool_image,run
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
