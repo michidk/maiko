@@ -149,7 +149,7 @@ if a.jump_cycle:
     if a.fresh_start:shutil.rmtree(scenario/'SAVEGAME')
     jump=subprocess.run(['python3','/tests/probe_gameplay.py','--wine','--runtime-dir',str(root),
         '--game-dir',str(scenario),'--user-dir',str(root/'jump-user'),'--action',a.jump_action,
-        '--seconds','40','--jump-cycle','--uncaptured']+(['--fresh-start'] if a.fresh_start else [])+(['--window-close'] if a.window_close else [])+(['--wine-game-dir',default_game] if a.game_on_drive_d else []),env=environment,timeout=80)
+        '--seconds','40','--jump-cycle','--uncaptured']+(['--fresh-start'] if a.fresh_start else [])+(['--window-close'] if a.window_close else [])+(['--wine-game-dir',example_game] if a.game_on_drive_d else []),env=environment,timeout=80)
     assert jump.returncode==0,f'Original jump/close cycle failed; see gameplay-{a.jump_action}.json/log'
     report['jump_cycle_verified']=True
     if a.window_close:report['window_close_verified']=True
@@ -159,7 +159,7 @@ if a.cd_image or a.loose_movie or a.installed_gog:
         environment['RG_MOVIE_PCM_CAPTURE']='Z:\\work\\package-movie-source.pcm'
     movie=subprocess.run(['python3','/tests/probe_gameplay.py','--wine','--runtime-dir',str(root),
         '--game-dir',str(scenario),'--user-dir',str(root/'movie-user'),'--action','new',
-        '--seconds','50','--movie-skip']+(['--cd-image',a.cd_image] if a.cd_image else [])+(['--wine-game-dir',default_game] if a.game_on_drive_d else []),env=environment,timeout=100)
+        '--seconds','50','--movie-skip']+(['--cd-image',a.cd_image] if a.cd_image else [])+(['--wine-game-dir',example_game] if a.game_on_drive_d else []),env=environment,timeout=100)
     evidence=json.loads(Path('/work/gameplay-new.json').read_text())
     shutil.copyfile('/work/gameplay-new.json','/work/package-movie.json')
     shutil.copyfile('/work/gameplay-new.log','/work/package-movie.log')
@@ -196,7 +196,7 @@ print('PASS actual extracted ZIP, uploaded RGFX, shipped default game path, spac
 
 if a.cd_image:
     missing=subprocess.run(['/usr/lib/wine/wine64',str(root/'redguard-native.exe'),
-        '--game-dir',default_game if a.game_on_drive_d else 'Z:'+str(scenario).replace('/','\\'),'--user-dir',r'Z:\work\invalid-media-user',
+        '--game-dir',example_game if a.game_on_drive_d else 'Z:'+str(scenario).replace('/','\\'),'--user-dir',r'Z:\work\invalid-media-user',
         '--cd-image',r'Z:\media\missing image.gog'],cwd=root,env=environment,text=True,
         stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=20)
     assert missing.returncode==1 and 'CD image unavailable or invalid:' in missing.stdout
