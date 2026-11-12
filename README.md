@@ -25,7 +25,7 @@ sh tests/check_portable.sh
 ```
 
 
-Use Linux, Python 3.11 with venv support, GCC/G++, Git and Docker. The source build installs pinned SCons into a local virtual environment. Everything downloaded or generated is ignored under `.cache/` and `artifacts/`.
+Use Linux, Python 3.11 with venv support, GCC/G++, Git and Docker. The Docker game builds and package verifier currently require bind-mounted inputs to resolve below `/home/vibepod/workspaces`. This applies to `build_native.py`, `build_linux.py` and `verify_native_package.py`, including selected game, CD-image and verifier input paths. The scripts retain this development-environment restriction; a clone elsewhere can run the source-only checks, but must stage those inputs under that directory for Docker runs. The source build installs pinned SCons into a local virtual environment. Everything downloaded or generated is ignored under `.cache/` and `artifacts/`.
 
 ```sh
 export REDGUARD_DIR=/path/to/Redguard
@@ -81,7 +81,7 @@ python3 build_linux.py artifacts/TIMESTAMP-native \
 
 The install must resolve below `/home/vibepod/workspaces` for the Docker mount. The command creates a separate Linux artifact directory and leaves the input translation and install unchanged. It builds an ELF64 executable and replaceable Glide library, runs original-function and adapter regressions, then exercises Options, Escape and original Quit through X11 keyboard events under Xvfb/Mesa. No Wine is involved. The scenario uses a copied autosave and disables sound/CD audio by default. Add `--sound --redbook` to test sample audio and the explicit absent-CD-device path. Use `--test-image /path/to/RGFX.EXE` to check either inspected image in that disposable scenario.
 
-This is a Linux feasibility target, not a distributable Linux release. It currently depends on Debian12 SDL2, OpenGL, OpenSSL and C/C++ runtimes. Other distributions, Wayland, other graphics drivers, audible hardware output, sustained gameplay and ARM is unverified. The report distinguishes the tested Linux menu sequence from overall menu and real Windows acceptance.
+This is a Linux feasibility target, not a distributable Linux release. It currently depends on Debian12 SDL2, OpenGL, OpenSSL and C/C++ runtimes. Other distributions, Wayland, other graphics drivers, audible hardware output, sustained gameplay and ARM game execution remain unverified. The report distinguishes the tested Linux menu sequence from overall menu and real Windows acceptance.
 
 The Linux test suite also exercises 9000 simultaneous guest allocations, long host filenames during DOS directory searches, keypad/extended-key mappings and a native SDL window pointer above 4 GiB. The Glide window argument preserves the full host pointer. Captures are OpenGLide back-buffer readbacks, not screenshots of the presented desktop window.
 
