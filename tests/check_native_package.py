@@ -121,7 +121,7 @@ assert ('Native CD image mounted' in log)==a.installed_gog
 assert (root/'user-data/.redguard-storage-v1').is_file()
 if a.expected_exit==0:
     assert 'BLOCKED' not in log
-    assert 'Original DOS termination status=0; exiting native process' in log
+    assert 'reason=original-dos-termination status=0' in log
 report=dict(zip_sha256=hashlib.sha256(Path('/work/runtime.zip').read_bytes()).hexdigest(),
             exe_sha256=hashlib.sha256((root/'redguard-native.exe').read_bytes()).hexdigest(),
             host_game_drive_d=a.game_on_drive_d,no_launcher_script=True,requested_cd_image=a.cd_image,launcher_cd_image_mounted='Native CD image mounted' in log,cd_image_mounted=False,uploaded_image_recognized=True,cmd_exit_code=result.returncode,

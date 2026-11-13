@@ -17,5 +17,5 @@ result=subprocess.run(['/usr/lib/wine/wine64','original-fault-test.exe','--exit'
 print(result.stdout,flush=True)
 assert result.returncode==7
 assert 'PASS native DOS exit runs host cleanup' in result.stdout
-assert 'Original DOS termination status=7' in result.stdout
+assert 'reason=original-dos-termination status=7' in result.stdout
 print('PASS original DOS exit status maps to native process and cleanup',flush=True)

@@ -54,6 +54,12 @@ unsafe extern "C" {
     static loc_1A4620: u8;
     static loc_1A4624: u8;
     static mut loc_1A4654: u8;
+    static mut loc_1EEC50: u8;
+    static mut loc_1EEC58: u8;
+    static mut loc_1EEC5C: u8;
+    static mut loc_1EEC60: u8;
+    static mut loc_1EEC64: u8;
+    static mut loc_1EEC68: u8;
     static loc_1EEC48: u8;
     static loc_1EEC54: u8;
     static loc_1F29C4: u8;
@@ -253,6 +259,32 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             27 => {
                 let remaining = read32(&raw const loc_1A4624);
                 pace_startup_clock(remaining);
+                // Keep the game's FPS measurement from being fouled by loads, menus and the 12 Hz warm-up.
+                let measured = maiko_runtime::timing::GuestTiming {
+                    smoothed: read32(&raw const loc_1EEC58) as i32,
+                    measured: read32(&raw const loc_1EEC5C) as i32,
+                    frames: read32(&raw const loc_1EEC60) as i32,
+                    baseline: read32(&raw const loc_1EEC64),
+                    remainder: read32(&raw const loc_1EEC68) as i32,
+                    scale: read32(&raw const loc_1EEC50) as i32,
+                };
+                let ticks = maiko_runtime::timing::rg_bios_ticks.load(std::sync::atomic::Ordering::Relaxed);
+                let fixed = maiko_runtime::timing::FRAME_GUARD.with(|guard| {
+                    guard.borrow_mut().step(remaining != 0, rg_clock_milliseconds(), ticks, measured)
+                });
+                if let Some(t) = fixed {
+                    maiko_runtime::rg_log!(
+                        "event=timing-reset measured_fps={} smoothed_fps={} scale={} (was measured {} smoothed {} scale {})",
+                        t.measured, t.smoothed, t.scale, measured.measured, measured.smoothed, measured.scale
+                    );
+                    let put = |p: *mut u8, v: u32| (p).cast::<u32>().write_unaligned(v);
+                    put(&raw mut loc_1EEC58, t.smoothed as u32);
+                    put(&raw mut loc_1EEC5C, t.measured as u32);
+                    put(&raw mut loc_1EEC60, t.frames as u32);
+                    put(&raw mut loc_1EEC64, t.baseline);
+                    put(&raw mut loc_1EEC68, t.remainder as u32);
+                    put(&raw mut loc_1EEC50, t.scale as u32);
+                }
                 // Original flag at loc_1A4654 turns the frame-time smoothing on; see SmoothingRelease.
                 let flag = read32(&raw const loc_1A4654);
                 let action = maiko_runtime::timing::SMOOTHING
