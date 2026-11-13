@@ -8,6 +8,7 @@ pub mod host;
 pub mod input;
 pub mod install;
 pub mod installed_media;
+pub mod locate;
 pub mod media;
 pub mod memory;
 pub mod movies;

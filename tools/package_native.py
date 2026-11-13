@@ -49,7 +49,6 @@ def main():
     archive=subprocess.check_output(['git','archive',BACKEND],cwd=source)
     args.output.mkdir(parents=True,exist_ok=True)
     destination=args.output/'redguard-native-startup-test.zip'
-    launcher=(ROOT/'runtime/RUN.cmd').read_text().replace('\n','\r\n')
     notices=sorted((work/'notices').glob('*.txt'))
     if len(notices)!=6:
         parser.error('Expected the complete SR, GCC/MinGW and LGPL notices')
@@ -67,11 +66,21 @@ def main():
         library_notice=sysroot/'share/doc/rust/COPYRIGHT-library.html'
         licence+='===== Rust standard library and bundled dependencies =====\n'+library_notice.read_text()+'\n\n'
         licence+=rust_dependency_notices()+'\n'
-    with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as package:
+    # Ship the smallest files that run: symbol tables and debug sections are build-machine
+    # information that the game does not read (the unstripped build stays in the work folder for the
+    # symbol map the tests use).
+    strip=shutil.which('x86_64-w64-mingw32-strip') or shutil.which('strip')
+    shipped=args.output/'.stripped'
+    shipped.mkdir(exist_ok=True)
+    with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as package:
         for filename in ['redguard-native.exe','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
-            package.write(work/filename,filename)
-        package.writestr('RUN.cmd',launcher)
+            source=work/filename
+            if strip:
+                subprocess.run([strip,'-s','-o',str(shipped/filename),str(source)],check=True)
+                source=shipped/filename
+            package.write(source,filename)
         package.writestr('LICENSES.txt',licence)
+    shutil.rmtree(shipped)
     development=args.output/'redguard-development.zip'
     with zipfile.ZipFile(development,'w',zipfile.ZIP_DEFLATED) as package:
         package.write(work/'native-wine.log','wine-reference.log')
@@ -87,18 +96,13 @@ def main():
                          'inside the supplied tools/docker/Dockerfile toolchain. The build script creates the SDK header.\n')
     digest=hashlib.sha256(destination.read_bytes()).hexdigest()
     source_digest=hashlib.sha256(development.read_bytes()).hexdigest()
-    (args.output/'RUN.cmd').write_bytes(launcher.encode('utf-8'))
     (args.output/'SHA256SUMS.txt').write_text(f'{digest}  {destination.name}\n{source_digest}  {development.name}\n')
     (args.output/'index.html').write_text(r'''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Redguard native gameplay test</title><style>body{font:18px/1.6 system-ui;max-width:720px;margin:50px auto;padding:0 24px}</style>
-<h1>Redguard native gameplay experiment</h1><p><strong>The original book menu and bounded island gameplay run without DOSBox on Linux and under Wine.</strong> This is an incomplete experimental build. Real Windows acceptance and full-game completion remain unverified.</p>
-<p><a href="redguard-native-startup-test.zip" download>Download Windows x64 test ZIP</a></p>
-<p><a href="RUN.cmd" download>Download the editable RUN.cmd separately</a></p>
-<p>Extract into a separate writable folder and run RUN.cmd. Set GAME_DIR in RUN.cmd to the folder containing RGFX.EXE, or leave it empty to choose the folder in a dialog. Keep all extracted runtime files together. Edit GAME_DIR only if your installation moves. Both inspected executable variants are supported. USER_DIR controls the separate save/config location.</p>
-<p>Send back native-test.log after one short jump on the opening ship. This update adds bounded original jump and frame-timing samples and fixes native window-close cleanup. Endless rising reported on Windows, startup acceleration, combat completion and distant fog artifacts remain under investigation. The original startup can go straight into a fresh game when no usable autosave is found; the book-menu tests use a copied autosave.</p>
-<p>RUN.cmd imports saves and settings once into its own user-data folder and writes there. Installed menu artwork and textures load directly from GAME_DIR. The normal launcher requires only the installed game folder. Bundled GOG movie data is detected in the selected game folder or its parent automatically. No media setting is needed. On both platforms, root-level DOS D: movie requests also search for loose SMK files in GAME_DIR and its MOVIES, ANIMS and VIDEO folders. The log reports missing files. The runtime package supplies no movie assets; it reads those already installed by GOG. The optional image adapter remains available for owners of compatible media. Movie acceptance is recorded separately from this runtime package; a package without tested movie media does not claim cinematic playback. Audible hardware quality and synchronization remain unverified. CD music remains unsupported. Twelve diagnostic CPU traps remain in untranslated mixed-mode system code; reaching one stops the test. The graphics wrapper may write OpenGLid.ini/OpenGLid.log in the selected game folder.</p>
-<p><a href="redguard-development.zip">Optional renderer source and build evidence</a></p>
-<p><a href="SHA256SUMS.txt">ZIP SHA-256 checksum</a></p>''')
+<title>Maiko for Windows</title><style>body{font:18px/1.6 system-ui;max-width:720px;margin:50px auto;padding:0 24px}</style>
+<h1>Maiko for Windows</h1><p><a href="redguard-native-startup-test.zip" download>Download the Windows x64 ZIP</a> (<a href="SHA256SUMS.txt">SHA-256</a>)</p>
+<p>Extract it into its own writable folder and double-click <code>redguard-native.exe</code>. It looks for your Redguard folder itself (its own folder, the folders around it, the standard GOG folders) and asks only if it finds nothing; it remembers the answer. Saves and settings go into a <code>user-data</code> folder beside the program. You need your own copy of Redguard; the ZIP contains no game files.</p>
+<p>For fullscreen, a window size, skipping the intro or loading a save, add options to a shortcut to <code>redguard-native.exe</code>, for example <code>--fullscreen</code> or <code>--skip-intro --load-save 1</code>.</p>
+<p><a href="redguard-development.zip">Renderer source and build evidence</a></p>''')
     (args.output/'movie-evidence.json').write_text(json.dumps(media,indent=2)+'\n')
     print(destination)
     print(digest)

@@ -9,7 +9,7 @@ opens with a living player. A failed leg is recorded and the run continues. The 
 hazards from ending the walk. Linux software-GL and dummy audio only; not Windows, story
 progress or full-game acceptance.
 """
-import argparse, hashlib, json, math, os, subprocess, sys, time
+import argparse, hashlib, json, math, os, signal, subprocess, sys, time
 from pathlib import Path
 sys.path.insert(0, '/tests')
 from book_menu import BookMenu
@@ -25,6 +25,7 @@ ROUTE = [
     (6, 'observe.rgm', []),
     (45, 'catacomb.rgm', ['setflag after_catacombs,1']),
 ]
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))  # a timeout still writes the report
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--root', type=Path, default=Path('/work'))
 p.add_argument('--game-dir', default='/work/island-reload-scenario')

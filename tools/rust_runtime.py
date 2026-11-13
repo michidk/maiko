@@ -42,16 +42,20 @@ def build(target, *, component="runtime"):
     if target not in TARGETS:
         raise ValueError('Unsupported runtime target: '+target)
     env = cross_tools(target)
+    # Panic messages embed source paths; do not ship the build machine's folder names.
+    cargo_home = os.environ.get('CARGO_HOME') or str(Path.home()/'.cargo')
+    env['RUSTFLAGS'] = ' '.join(filter(None, [env.get('RUSTFLAGS', ''),
+        f'--remap-path-prefix={cargo_home}=/cargo', f'--remap-path-prefix={ROOT}=/maiko']))
     cargo = shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo')
     output = ROOT/'.cache/rust-runtime'
     output.mkdir(parents=True, exist_ok=True)
     tag=target+('' if component=='runtime' else '-'+component)
     with (output/(tag+'.log')).open('w') as log:
-        subprocess.run([cargo, 'build', '--locked', '--release', '--target', target, '-p', 'maiko-'+component],
+        subprocess.run([cargo, 'build', '--locked', '--profile', 'runtime', '--target', target, '-p', 'maiko-'+component],
                        cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
     metadata = json.loads(subprocess.check_output(
         [cargo, 'metadata', '--format-version=1', '--no-deps', '--locked'], cwd=ROOT, text=True))
-    archive = Path(metadata['target_directory'])/target/('release/libmaiko_'+component+'.a')
+    archive = Path(metadata['target_directory'])/target/('runtime/libmaiko_'+component+'.a')
     sources = [ROOT/'Cargo.toml', ROOT/'Cargo.lock', ROOT/'rust-toolchain.toml',
                *sorted((ROOT/'runtime').rglob('*.rs')),
                *sorted((ROOT/'runtime').rglob('Cargo.toml'))]

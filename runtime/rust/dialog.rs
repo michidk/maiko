@@ -39,10 +39,10 @@ pub unsafe extern "C" fn rg_choose_game_directory(path: *mut c_char, capacity: u
             Ok(p) => p,
             Err(_) => return 0,
         };
-        if !directory.join("RGFX.EXE").is_file() {
+        if crate::locate::resolve(&directory).is_none() {
             MessageBoxA(
                 std::ptr::null_mut(),
-                c"Choose the inner Redguard folder containing RGFX.EXE, SYSTEM.INI and FXART."
+                c"Choose your Redguard folder: the one that contains RGFX.EXE, FXART and MAPS, or the GOG folder around it."
                     .as_ptr()
                     .cast(),
                 c"Redguard game files not found".as_ptr().cast(),
@@ -54,8 +54,55 @@ pub unsafe extern "C" fn rg_choose_game_directory(path: *mut c_char, capacity: u
     }
     #[cfg(unix)]
     {
-        let _ = (path, capacity);
-        eprintln!("Select a game folder with --game-dir GAME_DIRECTORY");
-        0
+        // No native dialog: ask in the terminal the game was started from.
+        use std::io::{BufRead, IsTerminal, Write};
+        if path.is_null() || capacity == 0 || !std::io::stdin().is_terminal() {
+            eprintln!("Select a game folder with --game-dir GAME_DIRECTORY");
+            return 0;
+        }
+        loop {
+            eprint!("Your Redguard folder (the one with RGFX.EXE; empty to quit): ");
+            let _ = std::io::stderr().flush();
+            let mut line = String::new();
+            if std::io::stdin().lock().read_line(&mut line).unwrap_or(0) == 0 {
+                return 0;
+            }
+            let line = line.trim().trim_matches(['"', '\'']);
+            if line.is_empty() {
+                return 0;
+            }
+            let directory = std::path::Path::new(line);
+            if crate::locate::resolve(directory).is_none() {
+                eprintln!(
+                    "The Redguard files (RGFX.EXE, FXART, MAPS) are not in or around that folder."
+                );
+                continue;
+            }
+            if unsafe { crate::storage::copy_path(directory, path, capacity) }.is_ok() {
+                return 1;
+            }
+        }
     }
+}
+
+/// Tell the user why the game did not start. Used only for launches without `--game-dir`, which
+/// are double-clicks that have no console to read; scripted and terminal launches get stderr.
+pub fn show_error(text: &str) {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::*;
+        if let (Ok(text), Ok(title)) = (
+            std::ffi::CString::new(text),
+            std::ffi::CString::new("Redguard could not start"),
+        ) {
+            MessageBoxA(
+                std::ptr::null_mut(),
+                text.as_ptr().cast(),
+                title.as_ptr().cast(),
+                MB_OK | MB_ICONERROR,
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = text;
 }

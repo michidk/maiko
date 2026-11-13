@@ -40,26 +40,12 @@ image.write_bytes(Path('/work/user-RGFX.EXE').read_bytes())
 if a.loose_movie:shutil.copyfile(a.loose_movie,scenario/'INTRO.SMK')
 root=Path('/work/extracted native test')
 with zipfile.ZipFile('/work/runtime.zip') as archive:
-    assert set(archive.namelist())=={'redguard-native.exe','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll','RUN.cmd','LICENSES.txt'}
+    assert set(archive.namelist())=={'redguard-native.exe','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll','LICENSES.txt'}
     archive.extractall(root)
-cmd=root/'RUN.cmd'
-canonical_bytes=cmd.read_bytes()
-canonical=cmd.read_text()
-def setting(source,name,value):
-    updated,count=re.subn(r'^set "'+re.escape(name)+r'=[^"\r\n]*"$',
-                          lambda _:f'set "{name}={value}"',source,flags=re.MULTILINE)
-    assert count==1,(name,count)
-    return updated
-
-def write_cmd(source):
-    cmd.write_bytes(source.replace('\r\n','\n').replace('\n','\r\n').encode())
-
-# The launcher ships with GAME_DIR empty (folder dialog). Configure it the way a user does, by
-# editing only that line, and exercise it at a real Wine D: path.
+# The program is started directly: there is no launcher script. It asks for the game folder when
+# none is given; here the folder is given the way a shortcut or terminal would, at a real Wine D: path
+# for the drive layout and at a spaced Z: path otherwise.
 example_game=r'D:\Games\GOG Galaxy\Redguard\Redguard'
-assert 'set "GAME_DIR="' in canonical
-assert 'CD_IMAGE' not in canonical and '--cd-image' not in canonical
-configured=canonical
 if a.game_on_drive_d:
     prefix=Path('/tmp/rg-package-wine')
     # Initialize before mapping D:. Wine10's GUI wineboot update hangs in the
@@ -82,18 +68,17 @@ if a.game_on_drive_d:
         (selected.parent/'game.gog').symlink_to('/media/owned CD image.gog')
         assert not selected.is_symlink() and selected.parent.joinpath('game.gog').is_file()
     drive.symlink_to(drive_root)
-    configured=setting(configured,'GAME_DIR',example_game)
+    game_argument=example_game+'\\.'
 else:
-    configured=setting(configured,'GAME_DIR','Z:\\work\\menu scenario\\')
-if configured!=canonical:
-    write_cmd(configured)
-assert not a.game_on_drive_d or cmd.read_bytes().decode()==setting(canonical,'GAME_DIR',example_game).replace('\r\n','\n').replace('\n','\r\n')
-
+    game_argument='Z:\\work\\menu scenario\\.'
+user_argument=r'Z:\work\extracted native test\user-data'
+program=['/usr/lib/wine/wine64',str(root/'redguard-native.exe')]
+explicit=program+['--game-dir',game_argument,'--user-dir',user_argument]
 environment=dict(os.environ,WINEDEBUG='-all',WINEPREFIX='/tmp/rg-package-wine',
                  LIBGL_ALWAYS_SOFTWARE='1',SDL_AUDIODRIVER='dummy',RG_CAPTURE_DIR='Z:\\work')
-with Path('/work/package-cmd-output.log').open('w') as output:
-    process=subprocess.Popen(['/usr/lib/wine/wine64','cmd','/c','RUN.cmd'],cwd=root,
-                             env=environment,stdin=subprocess.PIPE,stdout=output,stderr=subprocess.STDOUT,text=True)
+with (root/'native-test.log').open('w') as output:
+    process=subprocess.Popen(explicit,cwd=root,env=environment,stdin=subprocess.DEVNULL,
+                             stdout=output,stderr=subprocess.STDOUT,text=True)
     def key(name):
         subprocess.run(['/usr/lib/wine/wine64','/work/menu-keys.exe',name],env=environment,check=True,timeout=10)
         time.sleep(0.5)
@@ -113,7 +98,7 @@ with Path('/work/package-cmd-output.log').open('w') as output:
         time.sleep(4);frame('options')
         key('escape');time.sleep(4);frame('return')
         key('down');key('down');key('down');key('enter')
-        process.communicate('\n',timeout=25)
+        process.wait(timeout=25)
     finally:
         if (root/'native-test.log').exists():
             shutil.copyfile(root/'native-test.log','/work/package-native-test.log')
@@ -125,7 +110,6 @@ with Path('/work/package-cmd-output.log').open('w') as output:
 log=(root/'native-test.log').read_text()
 Path('/work/package-native-test.log').write_text(log)
 assert result.returncode==a.expected_exit,(result.returncode,a.expected_exit)
-assert f'Exit code: {a.expected_exit}' in log
 assert 'Recognized RGFX.EXE variant=0' in log or 'Recognized RGFX.EXE variant=1' in log
 assert 'Native Glide window 1024x768 opened=1' in log
 assert 'Isolated native user storage:' in log
@@ -140,7 +124,7 @@ if a.expected_exit==0:
     assert 'Original DOS termination status=0; exiting native process' in log
 report=dict(zip_sha256=hashlib.sha256(Path('/work/runtime.zip').read_bytes()).hexdigest(),
             exe_sha256=hashlib.sha256((root/'redguard-native.exe').read_bytes()).hexdigest(),
-            host_game_drive_d=a.game_on_drive_d,shipped_default_game_dir='',launcher_edited_only_in_game_dir=a.game_on_drive_d,requested_cd_image=a.cd_image,launcher_cd_image_mounted='Native CD image mounted' in log,cd_image_mounted=False,uploaded_image_recognized=True,cmd_exit_code=result.returncode,
+            host_game_drive_d=a.game_on_drive_d,no_launcher_script=True,requested_cd_image=a.cd_image,launcher_cd_image_mounted='Native CD image mounted' in log,cd_image_mounted=False,uploaded_image_recognized=True,cmd_exit_code=result.returncode,
             frame_exported=Path('/work/game-frame-latest.ppm').exists(),
             wine_menu_sequence_verified=True,menu_verified=False,native_windows_verified=False)
 if a.game_on_drive_d:
@@ -184,15 +168,39 @@ if a.cd_image or a.loose_movie or a.installed_gog:
         report['original_movie_pcm_reference_verified']=True
         report['movie_pcm_reference_bytes']=len(pcm)
         report['movie_pcm_reference_sha256']=a.movie_pcm_sha256
-# The actual launcher also needs a useful saved log when the path is invalid.
-write_cmd(setting(canonical,'GAME_DIR',r'Z:\work\missing game'))
-missing=subprocess.run(['/usr/lib/wine/wine64','cmd','/c','RUN.cmd'],cwd=root,
-                       env=environment,input='\n',text=True,stdout=subprocess.PIPE,
+# Started with no arguments, the program looks for the game itself. First launch: REDGUARD_DIR names
+# it (the next steps of the search are covered by unit tests); the program then stores the folder. Second
+# launch: nothing is given and the stored folder is used.
+def start_without_arguments(name,extra_environment):
+    log_file=root/(name+'.log')
+    with log_file.open('w') as output:
+        running=subprocess.Popen(program,cwd=root,env=dict(environment,**extra_environment),
+                                 stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,text=True)
+        try:
+            deadline=time.monotonic()+40
+            while 'Verified original game directory' not in log_file.read_text():
+                assert running.poll() is None,name+': the program did not start'
+                assert time.monotonic()<deadline,name+': no start'
+                time.sleep(0.2)
+        finally:
+            running.kill();running.wait()
+            subprocess.run(['/usr/lib/wine/wineserver64','-k'],env=environment,check=False)
+    return log_file.read_text()
+game_for_environment=example_game if a.game_on_drive_d else 'Z:\\work\\menu scenario'
+first=start_without_arguments('game-folder-environment',{'REDGUARD_DIR':game_for_environment})
+assert 'Game folder found without asking' in first
+stored=list(Path('/tmp/rg-package-wine/drive_c/users').glob('*/AppData/Roaming/maiko/**/install.json'))
+assert len(stored)==1,stored
+second=start_without_arguments('game-folder-remembered',{})
+assert 'Game folder found without asking' in second
+report['stored_game_folder_start_verified']=True
+# A bad explicit folder must end with exit code 1 and a message, not hang.
+missing=subprocess.run(program+['--game-dir',r'Z:\work\missing game'],cwd=root,
+                       env=environment,stdin=subprocess.DEVNULL,text=True,stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT,timeout=20)
-assert missing.returncode==1
-assert 'Exit code: 1' in (root/'native-test.log').read_text()
+assert missing.returncode==1 and 'selection failed' in missing.stdout
 report['missing_game_path_saved_exit']=1
-print('PASS actual extracted ZIP, uploaded RGFX, shipped default game path, spaced runtime path and missing-path saved exit',flush=True)
+print('PASS actual extracted ZIP started directly, uploaded RGFX, remembered game folder, spaced runtime path and missing-path exit',flush=True)
 
 if a.cd_image:
     missing=subprocess.run(['/usr/lib/wine/wine64',str(root/'redguard-native.exe'),
@@ -202,7 +210,7 @@ if a.cd_image:
     assert missing.returncode==1 and 'CD image unavailable or invalid:' in missing.stdout
     Path('/work/package-invalid-cd.log').write_text(missing.stdout)
     report['missing_cd_image_cli_exit']=1
-    print('PASS optional CLI rejects missing media; normal CMD has no CD setting')
+    print('PASS optional CLI rejects missing media')
 
 Path('/work/package-verification.json').write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps(report,indent=2),flush=True)

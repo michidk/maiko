@@ -112,7 +112,7 @@ pub fn zip(files: &Files, executable: Option<&str>) -> Result<Vec<u8>> {
         if !safe_path(name) {
             return Err(format!("Unsafe package path: {name}"));
         }
-        let mode = if Some(name.as_str()) == executable || name.ends_with(".sh") {
+        let mode = if Some(name.as_str()) == executable {
             0o755
         } else {
             0o644
@@ -243,16 +243,21 @@ mod tests {
         assert!(safe_path("link/libSDL2.so.0"));
     }
     #[test]
-    fn zip_roundtrip_retains_files_and_launcher_permissions() {
+    fn zip_roundtrip_retains_files_and_executable_permissions() {
         let files = Files::from([
-            ("RUN.sh".into(), b"#!/bin/sh\n".to_vec()),
+            ("redguard-native".into(), b"\x7fELF".to_vec()),
             ("LICENSES.txt".into(), b"Notice".to_vec()),
         ]);
-        let bytes = zip(&files, Some("RUN.sh")).unwrap();
+        let bytes = zip(&files, Some("redguard-native")).unwrap();
         assert_eq!(unzip(&bytes).unwrap(), files);
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         assert_eq!(
-            archive.by_name("RUN.sh").unwrap().unix_mode().unwrap() & 0o777,
+            archive
+                .by_name("redguard-native")
+                .unwrap()
+                .unix_mode()
+                .unwrap()
+                & 0o777,
             0o755
         );
     }
