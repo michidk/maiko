@@ -52,7 +52,10 @@ impl SmoothingRelease {
         if remaining != 0 {
             self.warming = true;
             self.frames_left = 0;
-            return self.saved.take().map_or(Smoothing::Keep, Smoothing::Restore);
+            return self
+                .saved
+                .take()
+                .map_or(Smoothing::Keep, Smoothing::Restore);
         }
         if self.warming {
             self.warming = false;
@@ -63,7 +66,10 @@ impl SmoothingRelease {
         if self.frames_left > 0 {
             self.frames_left -= 1;
             if self.frames_left == 0 {
-                return self.saved.take().map_or(Smoothing::Keep, Smoothing::Restore);
+                return self
+                    .saved
+                    .take()
+                    .map_or(Smoothing::Keep, Smoothing::Restore);
             }
         }
         Smoothing::Keep
