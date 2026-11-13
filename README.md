@@ -60,6 +60,8 @@ Set `OPTIONS` in `RUN.cmd`, or pass the options after `--game-dir` when you star
 set "OPTIONS=--skip-intro --skip-outro --load-save 1"
 ```
 
+On Linux, add them after the game folder: `sh RUN.sh /path/to/Redguard --skip-intro --load-save 1`.
+
 | Option | Effect |
 |---|---|
 | `--skip-intro` | New Game starts on the ship without the intro movie. |
