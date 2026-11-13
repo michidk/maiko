@@ -10,11 +10,11 @@
   <script type="module" src="./main.js"></script>
 </head>
 <body>
-  <header><a class="wordmark" href="./">Maiko</a><a href="https://github.com/michidk/maiko">Source &amp; documentation</a></header>
+  <header><nav class="header-inner" aria-label="Main navigation"><a class="wordmark" href="./">Maiko</a><a href="https://github.com/michidk/maiko">Source &amp; documentation</a></nav></header>
   <main>
     <section class="introduction" aria-labelledby="title">
-      <div><h1 id="title">Play Redguard on<br>Windows or Linux.</h1><p class="lead">The original adventure, running natively. Build a package from your own copy of the game, without DOSBox.</p></div>
-      <aside><strong>An experimental port</strong><p>The opening and many locations work. A complete playthrough is still untested. You need to own Redguard and keep its original game files.</p></aside>
+      <h1 id="title">Maiko</h1><p class="lead">Play <em>The Elder Scrolls Adventures: Redguard</em> natively on Windows or Linux, without DOSBox.</p><p class="sub">Build a package from your own copy of Redguard. Your executable stays on your device. No game files are included.</p>
+      <aside><p><strong>An experimental port.</strong> The opening and many locations work. A complete playthrough is still untested. You need to own Redguard and keep its original game files.</p></aside>
     </section>
     <section class="builder" aria-labelledby="builder-title">
       <div class="builder-heading"><h2 id="builder-title">Build your package</h2><p>Your file stays on this device.</p></div>
@@ -34,6 +34,6 @@
     </section>
     <section class="instructions" aria-labelledby="next-title"><h2 id="next-title">Once your ZIP is ready</h2><ol><li>Extract it into its own folder, outside your game installation.</li><li>On Windows, open <code>RUN.cmd</code>. On Linux, run <code>./RUN.sh /path/to/Redguard</code> in a terminal.</li><li>Windows asks for the original game folder. Linux uses the path you pass to RUN.sh and needs a working OpenGL driver; see the included README. Your saves and settings go into the package's separate <code>user-data</code> folder.</li></ol><p>You can also build locally with the <a href="https://github.com/michidk/maiko/blob/main/docs/client-builder.md">Rust command-line tool</a>. macOS and mobile devices are not supported as game targets.</p></section>
   </main>
-  <footer>Maiko is an independent fan project. Redguard belongs to Bethesda Softworks and ZeniMax. No game files are included.</footer>
+  <footer><p>Maiko is an independent fan project. Redguard belongs to Bethesda Softworks and ZeniMax. No game files are included.</p></footer>
 </body>
 </html>

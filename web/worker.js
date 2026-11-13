@@ -8,7 +8,7 @@ self.onmessage = async ({ data }) => {
   const stage = message => self.postMessage({ kind: 'progress', message });
   try {
     stage('Checking your executable…');
-    await init();
+    await init({ module_or_path: new URL('./pkg/maiko_patcher_bg.wasm', import.meta.url) });
     const input = new Uint8Array(data.input);
     validate(input);
     stage('Downloading the compiler and runtime. Your executable stays here.');

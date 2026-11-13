@@ -16,6 +16,7 @@ const built = await Bun.build({ entrypoints: ['web/main.js', 'web/worker.js'], o
 if (!built.success) throw new AggregateError(built.logs, 'Website build failed');
 for (const name of ['index.html', 'style.css', 'kits.json']) await cp(`web/${name}`, `web/dist/${name}`);
 await cp('web/pkg', 'web/dist/pkg', { recursive: true });
+await cp('web/fonts', 'web/dist/fonts', { recursive: true });
 const kits = JSON.parse(await readFile('web/kits.json', 'utf8'));
 for (const target of ['linux', 'windows']) {
   const kit = kits[target];
