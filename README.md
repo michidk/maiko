@@ -27,6 +27,27 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 Nothing is copied into or changed in your game folder. The controls are the original ones from the game's `KEYS.INI`, and the original options menu works.
 
+### Game controllers
+
+SDL2-compatible gamepads work on Windows and Linux. Connect one before starting or plug it in while playing. The layout uses the button positions below, with Xbox names as a reference. Multiple connected controllers can provide input.
+
+| Control | Original key | Action with the default game settings |
+|---|---|---|
+| Left stick or D-pad | Arrow keys | Move forward/backward and turn; navigate menus |
+| A / bottom face button | Space | Jump |
+| X / left face button | Left Ctrl | Attack or interact |
+| B / right face button | Escape | Back or cancel |
+| Y / top face button | S | Draw or sheathe sword |
+| Left shoulder | Left Shift | Walk modifier |
+| Right shoulder | Left Alt | Alt modifier |
+| Start / Menu | Escape | Open the book menu or go back |
+| Back / View | I | Inventory |
+| Left-stick click | Enter | Confirm menu selection |
+
+The stick acts as digital directions, with a 50% activation threshold and a 37.5% release threshold to avoid drift and repeated changes near the edge. Controller presses use the same keyboard path as physical keys, so changing those keys in the game's settings also changes their controller actions. Keyboard and mouse remain usable alongside the controller. Unplugging a controller releases its inputs; switching away from the window releases all game inputs, and held controller inputs resume when focus returns.
+
+The right stick, triggers, vibration and controller-specific remapping are not implemented. Inventory and other screens that require a mouse still need one.
+
 ### Movies
 
 On a GOG installation the intro and other movies play automatically from the game's `game.gog` file, which Maiko finds inside the game folder or the folder above it. If your copy keeps movies as loose `.SMK` files, put them in the game folder or in a `MOVIES`, `ANIMS` or `VIDEO` folder inside it. A damaged or ambiguous `game.gog` stops startup with a message in the log.
