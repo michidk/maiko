@@ -4,7 +4,9 @@ import { runWasi, runLlasm } from './wasi.js';
 self.onmessage = async ({ data }) => {
   let builder;
   const logs = [];
-  const log = line => { logs.push(line); if (logs.length > 24) logs.shift(); };
+  // The assembler prints tens of thousands of harmless overflow warnings; count them so that real messages stay visible.
+  let warnings = 0;
+  const log = line => { if (/: warning: /.test(line)) { warnings++; return; } logs.push(line); if (logs.length > 24) logs.shift(); };
   const stage = message => self.postMessage({ kind: 'progress', message });
   try {
     stage('Checking your executable…');
@@ -77,7 +79,7 @@ self.onmessage = async ({ data }) => {
     self.postMessage({ kind: 'complete', buffer }, [buffer]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    self.postMessage({ kind: 'error', message: `${message}${logs.length ? `\n\nCompiler output:\n${logs.join('\n')}` : ''}` });
+    self.postMessage({ kind: 'error', message: `${message}${logs.length ? `\n\nCompiler output:\n${logs.join('\n')}` : ''}${warnings ? `\n\n(${warnings} compiler warnings hidden; they are expected.)` : ''}` });
   } finally {
     builder?.free();
   }
