@@ -46,15 +46,17 @@ fn run() -> Result<(), String> {
             let image = Image::load(&maiko_patcher::native::read_limited(Path::new(&args[2]), 32 * 1024 * 1024)?)?;
             println!("Recognized RGFX.EXE: {} ({} LE objects)", image.source_hash, image.objects.len()); Ok(())
         }
-        Some("prepare") if args.len() == 4 => {
+        Some(stage @ ("prepare" | "prepare-llasm")) if args.len() == 4 => {
             if Path::new(&args[3]).exists() { return Err("Prepare needs a new, empty output directory".into()); }
-            write_files(Path::new(&args[3]), prepare(&maiko_patcher::native::read_limited(Path::new(&args[2]), 32 * 1024 * 1024)?)?)
+            let input = maiko_patcher::native::read_limited(Path::new(&args[2]), 32 * 1024 * 1024)?;
+            write_files(Path::new(&args[3]), if stage == "prepare-llasm" { maiko_patcher::llasm::prepare_input(&input)? } else { prepare(&input)? })
         }
-        Some("finish") if args.len() == 4 => {
+        Some(stage @ ("finish" | "finish-llasm")) if args.len() == 4 => {
             let directory = Path::new(&args[3]);
-            write_files(directory, finish(&maiko_patcher::native::read_limited(Path::new(&args[2]), 32 * 1024 * 1024)?, read_files(directory)?)?)
+            let files = read_files(directory)?;
+            write_files(directory, if stage == "finish-llasm" { maiko_patcher::llasm::finish(files)? } else { finish(&maiko_patcher::native::read_limited(Path::new(&args[2]), 32 * 1024 * 1024)?, files)? })
         }
-        _ => Err("Usage: maiko-patcher build --input RGFX.EXE --target linux|windows --kit KIT.zip --output PACKAGE.zip [--wasmtime PATH]\n       maiko-patcher inspect RGFX.EXE | prepare RGFX.EXE DIRECTORY | finish RGFX.EXE DIRECTORY".into())
+        _ => Err("Usage: maiko-patcher build --input RGFX.EXE --target linux|windows --kit KIT.zip --output PACKAGE.zip [--wasmtime PATH]\n       maiko-patcher inspect RGFX.EXE | prepare[-llasm] RGFX.EXE DIRECTORY | finish[-llasm] RGFX.EXE DIRECTORY".into())
     }
 }
 

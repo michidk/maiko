@@ -80,7 +80,7 @@ h2 { font-size: 1.4rem; margin: 44px 0 10px; color: var(--red); font-weight: 600
 .builder-heading { margin-bottom: 24px; }
 .builder h2 { margin: 0 0 6px; color: var(--gold-pale); }
 .builder-heading p { margin: 0; }
-fieldset { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-width: 0; }
+fieldset { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; min-width: 0; }
 legend { font-weight: 600; padding: 0; margin-bottom: 12px; }
 .platform {
   display: flex;

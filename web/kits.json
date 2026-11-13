@@ -6,5 +6,9 @@
   "windows": {
     "url": "https://github.com/michidk/maiko/releases/download/client-runtime-20261113/windows.zip",
     "sha256": "db73ad59796ac2b455699a43e06cc781a376a0adc8815679c8b6688c0d689a7f"
+  },
+  "macos": {
+    "url": "https://github.com/michidk/maiko/releases/download/client-runtime-20261113/macos.zip",
+    "sha256": "f6c26c44a38cee755fcf641438f05fe394bfb9f932066210637cd18b6a02c1c8"
   }
 }

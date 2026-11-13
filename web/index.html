@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <meta name="description" content="Build a native Windows or Linux version of Redguard from your own executable. The Rust patcher runs entirely on your device.">
+  <meta name="description" content="Build a native Windows, Linux or macOS version of Redguard from your own executable. Your executable stays on your device.">
   <title>Maiko · Build your native Redguard package</title>
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./main.js"></script>
@@ -13,7 +13,7 @@
   <header><nav class="header-inner" aria-label="Main navigation"><a class="wordmark" href="./">Maiko</a><a href="https://github.com/michidk/maiko">GitHub</a></nav></header>
   <main>
     <section class="introduction" aria-labelledby="title">
-      <h1 id="title">Maiko</h1><p class="lead">Play <em>The Elder Scrolls Adventures: Redguard</em> natively on Windows or Linux, without DOSBox.</p><p class="sub">Requires your own copy of Redguard. Your executable stays on this device.</p>
+      <h1 id="title">Maiko</h1><p class="lead">Play <em>The Elder Scrolls Adventures: Redguard</em> natively on Windows and Linux, with an experimental macOS port.</p><p class="sub">Requires your own copy of Redguard. Your executable stays on this device.</p>
     </section>
     <section class="builder" aria-labelledby="builder-title">
       <div class="builder-heading"><h2 id="builder-title">Build your package</h2></div>
@@ -21,8 +21,13 @@
       <fieldset id="platforms"><legend>Where will you play?</legend>
         <label class="platform"><input type="radio" name="target" value="windows"><span><strong>Windows</strong><small>64-bit · Windows 10 or newer</small></span></label>
         <label class="platform"><input type="radio" name="target" value="linux"><span><strong>Linux</strong><small>64-bit · glibc 2.36+ · X11/XWayland</small></span></label>
+        <label class="platform"><input type="radio" name="target" value="macos" aria-describedby="macos-note"><span><strong>macOS</strong><small>Experimental · macOS 11+ · Apple Silicon / Intel</small></span></label>
       </fieldset>
       <p id="detection" class="hint"></p>
+      <section id="macos-guidance" aria-label="Experimental macOS runtime" hidden>
+        <p id="macos-note">The macOS port is experimental. Your ZIP supports Apple Silicon and Intel Macs. Mac builds take longer and need a current desktop browser.</p>
+      </section>
+      <div id="browser-build">
       <label class="file-label" for="executable">Your original RGFX.EXE</label>
       <p id="file-help" class="hint">Select RGFX.EXE from your Redguard installation.</p>
       <input type="file" id="executable" accept=".exe" aria-describedby="file-help">
@@ -33,8 +38,10 @@
         <div class="log-bar"><span id="log-title">Build log</span><button id="copy-log" class="secondary" type="button">Copy log</button></div>
         <pre id="log" role="log" aria-labelledby="log-title" tabindex="0"></pre>
       </div>
+      </div>
     </section>
-    <section class="instructions" aria-labelledby="next-title"><h2 id="next-title">Once your ZIP is ready</h2><ol><li>Extract it into its own folder, outside your game installation.</li><li>On Windows, double-click <code>redguard-native.exe</code>. On Linux, run <code>./redguard-native</code> in a terminal; it needs a working OpenGL driver.</li><li>It looks for your Redguard folder (the one with <code>RGFX.EXE</code>) and asks you to choose it only if it cannot find it, then remembers it. Your saves and settings go into the package's separate <code>user-data</code> folder.</li></ol><p>Fullscreen, window size and other options are listed in the <a href="https://github.com/michidk/maiko#command-line-options">README</a>. You can also build locally with the <a href="https://github.com/michidk/maiko/blob/main/docs/client-builder.md">Rust command-line tool</a>.</p></section>
+    <section id="browser-instructions" class="instructions" aria-labelledby="next-title"><h2 id="next-title">Once your ZIP is ready</h2><ol><li>Extract it into its own folder, outside your game installation.</li><li>For the pinned Windows package, open <code>RUN.cmd</code>. On Linux, run <code>./RUN.sh /path/to/Redguard</code> in a terminal. Follow the included README for these runtime snapshots.</li><li>Saves and settings go into the package's <code>user-data</code> folder.</li></ol><p>Prefer the terminal? Use the <a href="https://github.com/michidk/maiko/blob/main/docs/client-builder.md">Rust command-line tool</a>.</p></section>
+    <section id="macos-instructions" class="instructions" aria-labelledby="mac-next-title" hidden><h2 id="mac-next-title">Once your Mac ZIP is ready</h2><ol><li>Extract the ZIP into its own folder.</li><li>Open <code>redguard-native</code>. Select your owned Redguard installation if asked. The ZIP contains the runtime; you supply the game files.</li><li>If macOS blocks the download, open Terminal and remove quarantine from the extracted folder:<pre><code>xattr -dr com.apple.quarantine "$HOME/Downloads/maiko-macos-universal"</code></pre>Adjust the path if you extracted it elsewhere, then open <code>redguard-native</code> again.</li></ol><p>Saves and settings are in <code>~/Library/Application Support/Maiko/user-data</code>. Logs are in <code>~/Library/Logs/Maiko</code>. Read the <a href="https://github.com/michidk/maiko/blob/feat/macos-backend/platforms/macos/LAUNCH.md">Mac launch guide</a> for details.</p></section>
   </main>
   <footer><p>Independent fan project. Redguard belongs to Bethesda Softworks and ZeniMax.</p><p>Related projects: <a href="https://michidk.github.io/redguard-preservation/">Redguard Preservation</a> (file format and engine documentation), <a href="https://michidk.github.io/cyrus/">Cyrus</a> (a Rust rebuild of the game) and the <a href="https://michidk.github.io/cyrus/viewer/">Cyrus asset viewer</a>.</p></footer>
 </body>

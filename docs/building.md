@@ -30,6 +30,6 @@ A Linux or Wine check does not establish real-Windows acceptance. Dummy audio an
 
 ## Local development containers
 
-`tools/docker/Dockerfile` defines the optional compiler, assembler and Wine environment used by the local build and test tools. `tools/docker/linux.Dockerfile` extends it with SDL/OpenGL development libraries and debugging tools. These images are development dependencies; the browser builder, release pipeline and generated game packages run without Docker.
+`platforms/windows/Dockerfile` defines the optional compiler, assembler and Wine environment used by the local build and test tools. `platforms/linux/Dockerfile` extends it with SDL/OpenGL development libraries and debugging tools. These images are development dependencies; the browser builder, release pipeline and generated game packages run without Docker.
 
-The tools build these images automatically when needed, using only `tools/docker/` as the build context. Game files, caches and the rest of the checkout are excluded from that context without a `.dockerignore` file.
+The tools build these images automatically when needed, using only the corresponding `platforms/<os>/` directory as the build context. Game files, caches and the rest of the checkout are excluded from that context without a `.dockerignore` file.

@@ -9,6 +9,7 @@
 //! has to be consistent; it is converted to 2352-byte sectors at 75 per second.
 use crate::guest::GuestFrame;
 use crate::host::rg_host_readable;
+use crate::rg_log;
 use std::ffi::c_int;
 use std::fs::File;
 use std::io;
@@ -75,15 +76,7 @@ fn mix_into(output: &mut [u8], source: &[u8], volume: u32) {
     }
 }
 
-#[cfg(unix)]
-fn read_at(file: &File, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
-    std::os::unix::fs::FileExt::read_at(file, buffer, offset)
-}
-
-#[cfg(windows)]
-fn read_at(file: &File, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
-    std::os::windows::fs::FileExt::seek_read(file, buffer, offset)
-}
+use crate::os::read_at;
 
 struct Disc {
     image: File,
@@ -190,7 +183,7 @@ impl Player {
             self.state = None;
             return self.status();
         }
-        eprintln!(
+        rg_log!(
             "CD music: playing track {} ({start_ms} ms to {end_ms} ms)",
             disc.track_at(start)
         );
@@ -267,8 +260,9 @@ pub fn close() {
 }
 
 unsafe fn put_u32(address: u32, value: u32) {
-    if address != 0 && rg_host_readable(address as usize as *const _, 4) != 0 {
-        unsafe { (address as usize as *mut u32).write_unaligned(value) };
+    let pointer = crate::memory::guest_ptr::<u32>(address);
+    if address != 0 && rg_host_readable(pointer.cast(), 4) != 0 {
+        unsafe { pointer.write_unaligned(value) };
     }
 }
 
@@ -281,7 +275,7 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return 0;
     };
-    let stack = frame.esp as u32 as usize as *const u32;
+    let stack = crate::memory::guest_ptr::<u32>(frame.esp as u32);
     if rg_host_readable(stack.cast(), 5 * 4) == 0 {
         return 0;
     }
@@ -294,11 +288,11 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
             if player.disc.is_none() {
                 match locate(Path::new(".")).map(|(image, cue)| Disc::open(&image, &cue)) {
                     Some(Ok(disc)) => {
-                        eprintln!("CD music: {} tracks on the game disc image", disc.tracks());
+                        rg_log!("CD music: {} tracks on the game disc image", disc.tracks());
                         player.disc = Some(disc);
                     }
-                    Some(Err(error)) => eprintln!("CD music unavailable: {error}"),
-                    None => eprintln!("CD music unavailable: no game.gog with game.ins found"),
+                    Some(Err(error)) => rg_log!("CD music unavailable: {error}"),
+                    None => rg_log!("CD music unavailable: no game.gog with game.ins found"),
                 }
             }
             u64::from(if player.disc.is_some() { HANDLE } else { 0 })

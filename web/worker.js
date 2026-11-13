@@ -1,5 +1,5 @@
 import init, { Builder, validate } from './pkg/maiko_patcher.js';
-import { runWasi } from './wasi.js';
+import { runWasi, runLlasm } from './wasi.js';
 
 self.onmessage = async ({ data }) => {
   let builder;
@@ -27,16 +27,50 @@ self.onmessage = async ({ data }) => {
     builder = new Builder(input, new Uint8Array(bytes), data.target);
     stage('Building game engine…');
     let files = builder.prepare();
-    const sr = await WebAssembly.compile(builder.tool('sr'));
-    files = await runWasi(sr, ['sr', 'RGFX.EXE', 'rgfx.asm'], files, ['rgfx.asm', ...Array.from({ length: 7 }, (_, index) => `seg${String(index + 1).padStart(2, '0')}.inc`)], log);
-    files = builder.finish(files);
-    const nasm = await WebAssembly.compile(builder.tool('nasm'));
-    for (const [args, output] of builder.assembly()) {
-      stage(`Assembling ${args[args.length - 3]}…`);
-      files = await runWasi(nasm, args, files, [output], log);
+    let executable;
+    if (data.target === 'macos') {
+      const sr = await WebAssembly.compile(builder.tool('sr-llasm'));
+      const outputs = ['rgfx.llasm', ...Array.from({ length: 7 }, (_, index) => ['code', 'data'].map(kind => `seg${String(index + 1).padStart(2, '0')}_${kind}.llinc`)).flat()];
+      files = await runWasi(sr, ['sr', 'RGFX.EXE', 'rgfx.llasm'], files, outputs, log);
+      files = builder.finish(files);
+      stage('Translating the game to LLVM…');
+      let ir = await runLlasm(builder, files);
+      files = null;
+      stage('Optimizing the Mac engine…');
+      const opt = await WebAssembly.compile(builder.tool('opt'));
+      const optimized = await runWasi(opt, builder.optimization(), { 'game.ll': ir }, ['game.bc'], log);
+      ir = null;
+      const bitcode = optimized['game.bc'];
+      delete optimized['game.ll'];
+      if (!bitcode?.length) throw new Error('LLVM did not produce the optimized engine.');
+      const images = [];
+      const modules = new Map();
+      for (const arch of ['x86_64', 'arm64']) {
+        let current = { 'game.bc': bitcode };
+        for (const [tool, args, output] of builder.compilation(arch)) {
+          stage(`${{ llc: 'Compiling', ld64: 'Linking' }[tool]} for ${arch === 'arm64' ? 'Apple Silicon' : 'Intel'}…`);
+          if (!modules.has(tool)) modules.set(tool, await WebAssembly.compile(builder.tool(tool)));
+          if (tool === 'ld64') Object.assign(current, builder.linker_files(arch));
+          const result = await runWasi(modules.get(tool), args, current, [output], log);
+          if (!result[output]?.length) throw new Error(`${tool} did not produce ${output}.`);
+          current = { [output]: result[output] };
+        }
+        images.push(Object.values(current)[0]);
+      }
+      stage('Verifying the universal Mac executable…');
+      executable = builder.universal(images[0], images[1]);
+    } else {
+      const sr = await WebAssembly.compile(builder.tool('sr'));
+      files = await runWasi(sr, ['sr', 'RGFX.EXE', 'rgfx.asm'], files, ['rgfx.asm', ...Array.from({ length: 7 }, (_, index) => `seg${String(index + 1).padStart(2, '0')}.inc`)], log);
+      files = builder.finish(files);
+      const nasm = await WebAssembly.compile(builder.tool('nasm'));
+      for (const [args, output] of builder.assembly()) {
+        stage(`Assembling ${args[args.length - 3]}…`);
+        files = await runWasi(nasm, args, files, [output], log);
+      }
+      stage('Verifying executable…');
+      executable = builder.relink(files[data.target === 'linux' ? 'rgfx.o' : 'rgfx.obj']);
     }
-    stage('Verifying executable…');
-    const executable = builder.relink(files[data.target === 'linux' ? 'rgfx.o' : 'rgfx.obj']);
     stage('Packing your ZIP…');
     const zip = builder.package(executable);
     const buffer = zip.slice().buffer;
