@@ -1,11 +1,12 @@
-"""Walk across the island on foot and enter a building by its door.
+"""Walk across the island on foot and enter each building by its door.
 
-Run under Xvfb with an island autosave in the scenario. The original console is used twice to learn
-where two authored markers are (`load 1,N,0`) and to start at the first one; the probe then steers the
-player with ordinary keyboard input toward the second marker, beside the Draggin Tale door, sidestepping
-when blocked, and presses the action key at the door. Success is the walk (distance to the goal falls
-below the door range), the on-screen prompt, and the tavern opening with a living player. The `drevil`
-cheat keeps hazards from ending the walk. Linux software-GL and dummy audio only; not Windows, story
+Run under Xvfb with an island autosave in the scenario. For every door on the route the original
+console is used to learn where the authored marker beside it is (`load 1,N,0`) and to start at the
+bell-tower marker; the probe then steers the player with ordinary keyboard input toward the door
+marker, sidestepping when blocked, and presses the action key at the door. A leg passes when the
+distance to the door falls below the door range, the on-screen prompt appears and the destination map
+opens with a living player. A failed leg is recorded and the run continues. The `drevil` cheat keeps
+hazards from ending the walk. Linux software-GL and dummy audio only; not Windows, story
 progress or full-game acceptance.
 """
 import argparse, hashlib, json, math, os, subprocess, sys, time
@@ -14,13 +15,23 @@ sys.path.insert(0, '/tests')
 from book_menu import BookMenu
 from combat_trace import CombatTrace
 
+# island marker beside each door, destination map, console setup
+ROUTE = [
+    (8, 'tavern.rgm', []),
+    (21, 'gerricks.rgm', []),
+    (16, 'rollos.rgm', []),
+    (22, 'harbtowr.rgm', []),
+    (14, 'jffers.rgm', []),
+    (6, 'observe.rgm', []),
+    (45, 'catacomb.rgm', ['setflag after_catacombs,1']),
+]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--root', type=Path, default=Path('/work'))
 p.add_argument('--game-dir', default='/work/island-reload-scenario')
 p.add_argument('--user-dir', required=True, type=Path)
 p.add_argument('--label', default='island-walk')
-p.add_argument('--start', type=int, default=0, help='Island marker to start from')
-p.add_argument('--goal', type=int, default=8, help='Island marker beside the door to reach')
+p.add_argument('--start', type=int, default=0, help='Island marker to start each walk from')
+p.add_argument('--only', help='Comma-separated destination maps; default every door on the route')
 a = p.parse_args()
 if a.user_dir.exists():
     p.error('Use a fresh isolated user directory')
@@ -29,7 +40,7 @@ symbols = {x[2]: int(x[0], 16) for line in (root / 'linux-symbols.txt').read_tex
 log_path = root / (a.label + '.log')
 W, H = 1024, 768
 KEYS = {' ': 'space', ',': 'comma', '*': 'asterisk', '_': 'underscore'}
-report = {'path': [], 'sidesteps': 0, 'full_game_verified': False, 'native_windows_verified': False, 'wine_used': False,
+report = { 'full_game_verified': False, 'native_windows_verified': False, 'wine_used': False,
           'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
           'exe_sha256': hashlib.sha256((root / 'redguard-native').read_bytes()).hexdigest()}
 
@@ -150,68 +161,76 @@ with log_path.open('w') as log:
                 time.sleep(0.5)
             return wait_world()[1]
 
-        goal = load_marker(a.goal)['position']
-        report['goal'] = goal
-        load_marker(a.start)
-        began = time.monotonic()
-        while time.monotonic() - began < 30 and lockout() != 0:
-            time.sleep(0.5)
-        report['lockout_cleared'] = lockout() == 0
-        _, here = state()
-        report['start'] = here['position']
-        report['initial_distance'] = round(math.dist(here['position'], goal))
-        save('start', frame())
-        stuck, last, turns, log_every = 0, None, 0, 0
-        for step in range(1400):
-            assert proc.poll() is None, 'Game exited'
-            _, pl = state()
-            dist = math.dist(pl['position'], goal)
-            if step % 25 == 0:
-                report['path'].append([round(pl['position'][0]), round(pl['position'][2]), round(dist)])
-            if dist < 5000:
-                break
-            dx, dz = goal[0] - pl['position'][0], goal[2] - pl['position'][2]
-            error = (round(math.atan2(-dx, dz) * 2048 / (2 * math.pi)) % 2048 - pl['heading'] + 1024) % 2048 - 1024
-            if abs(error) > 90:
-                key('Left' if error > 0 else 'Right', 0.12)
+        report['legs'] = []
+        for goal_marker, dest, setup in ROUTE:
+            if a.only and dest not in a.only.split(','):
                 continue
-            key('Up', 0.25)
-            _, after = state()
-            stuck = stuck + 1 if math.dist(after['position'], pl['position']) < 300 else 0
-            if stuck >= 4:
-                # Blocked by scenery: turn away, walk along it, then steer back toward the goal.
-                report['sidesteps'] += 1
-                side = 'Left' if report['sidesteps'] % 2 else 'Right'
-                key(side, 0.5)
-                key('Up', 1.2)
+            leg = {'goal_marker': goal_marker, 'destination': dest, 'sidesteps': 0}
+            report['legs'].append(leg)
+            try:
+                goal = load_marker(goal_marker)['position']
+                load_marker(a.start)
+                began = time.monotonic()
+                while time.monotonic() - began < 30 and lockout() != 0:
+                    time.sleep(0.5)
+                for command in setup:
+                    console(command)
+                _, here = state()
+                leg['initial_distance'] = round(math.dist(here['position'], goal))
                 stuck = 0
-        _, pl = state()
-        report['final_distance'] = round(math.dist(pl['position'], goal))
-        report['reached_goal'] = report["final_distance"] < 8000
-        save('arrived', frame())
-        assert report['reached_goal'], 'Did not reach the door on foot'
-        taverns = log_count('tavern.rgm')
-        for turn in range(14):
-            if prompt_pixels(frame()) > 30:
-                report['prompt_after_turns'] = turn
-                break
-            key('Right', 0.3)
-            time.sleep(0.5)
-        else:
-            raise AssertionError('Activation prompt never appeared at the door')
-        for press in range(3):
-            key('Control_L', 0.4)
-            for _ in range(30):
-                if log_count('tavern.rgm') > taverns:
+                for step in range(1400):
+                    assert proc.poll() is None, 'Game exited'
+                    _, pl = state()
+                    dist = math.dist(pl['position'], goal)
+                    if dist < 5000:
+                        break
+                    dx, dz = goal[0] - pl['position'][0], goal[2] - pl['position'][2]
+                    error = (round(math.atan2(-dx, dz) * 2048 / (2 * math.pi)) % 2048 - pl['heading'] + 1024) % 2048 - 1024
+                    if abs(error) > 90:
+                        key('Left' if error > 0 else 'Right', 0.12)
+                        continue
+                    key('Up', 0.25)
+                    _, after = state()
+                    stuck = stuck + 1 if math.dist(after['position'], pl['position']) < 300 else 0
+                    if stuck >= 4:
+                        # Blocked by scenery: turn away, walk along it, then steer back toward the goal.
+                        leg['sidesteps'] += 1
+                        key('Left' if leg['sidesteps'] % 2 else 'Right', 0.5)
+                        key('Up', 1.2)
+                        stuck = 0
+                _, pl = state()
+                leg['final_distance'] = round(math.dist(pl['position'], goal))
+                save(dest + '-arrived', frame())
+                assert leg['final_distance'] < 8000, f'Did not reach the {dest} door on foot'
+                opened = log_count(dest)
+                for turn in range(14):
+                    if prompt_pixels(frame()) > 30:
+                        leg['prompt_after_turns'] = turn
+                        break
+                    key('Right', 0.3)
+                    time.sleep(0.5)
+                else:
+                    raise AssertionError('Activation prompt never appeared at the ' + dest + ' door')
+                for press in range(3):
+                    key('Control_L', 0.4)
+                    for _ in range(30):
+                        if log_count(dest) > opened:
+                            break
+                        time.sleep(0.5)
+                    if log_count(dest) > opened:
+                        break
+                assert log_count(dest) > opened, dest + ' did not open'
+                snap, pl = wait_world(60)
+                leg.update(entered=True, player=pl, ok=True)
+            except Exception as error:
+                leg.update(ok=False, error=repr(error))
+                if proc.poll() is not None:
                     break
-                time.sleep(0.5)
-            if log_count('tavern.rgm') > taverns:
-                break
-        assert log_count('tavern.rgm') > taverns, 'Tavern did not open'
-        snap, pl = wait_world(60)
-        report['entered_tavern'] = True
-        report['tavern_player'] = pl
-        report['ok'] = True
+                try:
+                    save(dest + '-failed', frame())
+                except Exception:
+                    pass
+        report['ok'] = all(leg.get('ok') for leg in report['legs'])
     except Exception as error:
         report['ok'] = False
         report['error'] = repr(error)
@@ -228,4 +247,4 @@ with log_path.open('w') as log:
                 proc.kill()
         report['exit'] = proc.returncode
         Path(str(root / a.label) + '.json').write_text(json.dumps(report, indent=1))
-print(json.dumps({k: v for k, v in report.items() if k != 'path'}))
+print(json.dumps([{k: leg.get(k) for k in ("destination", "ok", "initial_distance", "final_distance", "sidesteps", "error")} for leg in report["legs"]]))
