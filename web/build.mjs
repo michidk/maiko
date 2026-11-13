@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 
 function command(args) {
@@ -33,4 +33,14 @@ for (const target of ['linux', 'windows']) {
   if (new Bun.CryptoHasher('sha256').update(bytes).digest('hex') !== kit.sha256) throw new Error(`${target} runtime kit checksum mismatch`);
   await Bun.write(`web/dist/kits/${target}.zip`, bytes);
 }
-console.info('Built web/dist with verified runtime kits.');
+const fonts = (await readdir('web/dist/fonts')).sort();
+const assets = ['index.html', 'style.css', 'main.js', 'worker.js', 'kits.json', 'pkg/maiko_patcher_bg.wasm', ...fonts.map(name => `fonts/${name}`)];
+const hasher = new Bun.CryptoHasher('sha256');
+for (const name of assets) hasher.update(name).update('\0').update(await readFile(`web/dist/${name}`));
+const version = hasher.digest('hex').slice(0, 20);
+const html = await readFile('web/dist/index.html', 'utf8');
+await Bun.write('web/dist/index.html', html.replace('./style.css', `./style.css?v=${version}`).replace('./main.js', `./main.js?v=${version}`));
+let css = await readFile('web/dist/style.css', 'utf8');
+for (const name of fonts) css = css.replaceAll(`./fonts/${name}`, `./fonts/${name}?v=${version}`);
+await Bun.write('web/dist/style.css', css);
+console.info(`Built web/dist with verified runtime kits and asset version ${version}.`);

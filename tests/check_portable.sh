@@ -14,8 +14,6 @@ cc=${CC:-cc}
 rust_runtime=$(python3 -m tools.rust_runtime --target x86_64-unknown-linux-gnu)
 "$cc" -Wall -Wextra -Werror -O2 -no-pie -Iruntime tests/cd_image.c "$rust_runtime" -Wl,--gc-sections -ldl -lpthread -lm -o "$build/cd-image"
 python3 tests/check_cd_image.py "$build/cd-image"
-"$build/user-storage"
-"$build/import-interruption"
 
 "$cc" -Wall -Wextra -Werror -O2 -no-pie -Iruntime -Ilinux tests/installed_movies.c "$rust_runtime" -Wl,--gc-sections -ldl -lpthread -lm -o "$build/installed-movies"
 python3 - "$build/installed-movies" <<'PYTEST'

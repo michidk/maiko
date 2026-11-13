@@ -15,8 +15,8 @@ const selectedTarget = () => document.querySelector('input[name="target"]:checke
 const detected = detectPlatform(navigator.userAgentData?.platform ?? navigator.platform, navigator.userAgent);
 if (detected) document.querySelector(`input[value="${detected}"]`).checked = true;
 document.querySelector('#detection').textContent = detected
-  ? `${detected === 'windows' ? 'Windows' : 'Linux'} was detected. You can choose a different target.`
-  : 'Choose Windows or Linux. We could not detect a supported desktop system.';
+  ? `${detected === 'windows' ? 'Windows' : 'Linux'} selected automatically.`
+  : 'Select your target system.';
 
 function resetDownload() {
   if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -35,19 +35,19 @@ function controls() {
 function stop() { worker?.terminate(); worker = null; controls(); }
 function failure(message) {
   stop();
-  status.textContent = 'The build did not complete. No package was produced.';
+  status.textContent = 'Build failed.';
   error.textContent = message;
   error.hidden = false;
 }
 function changed() {
   resetDownload();
   error.hidden = true;
-  status.textContent = file.files?.length ? 'Ready to build. The first build downloads the compiler and runtime.' : 'Choose your executable to begin.';
+  status.textContent = file.files?.length ? 'Ready to build.' : '';
   controls();
 }
 file.addEventListener('change', changed);
 platforms.addEventListener('change', changed);
-cancel.addEventListener('click', () => { stop(); status.textContent = 'Build cancelled. Your original file has not been changed.'; });
+cancel.addEventListener('click', () => { stop(); status.textContent = 'Build cancelled.'; });
 build.addEventListener('click', async () => {
   const input = file.files?.[0];
   const target = selectedTarget();
@@ -57,7 +57,9 @@ build.addEventListener('click', async () => {
   if (input.size > 32 * 1024 * 1024) { failure('RGFX.EXE must be smaller than 32 MiB. Select the executable rather than an archive or disc image.'); return; }
   if (typeof WebAssembly === 'undefined' || typeof Worker === 'undefined') { failure('Your browser needs WebAssembly and module workers. Use a current desktop browser or the Rust CLI.'); return; }
   try {
-    const current = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    const workerUrl = new URL('./worker.js', import.meta.url);
+    workerUrl.search = new URL(import.meta.url).search;
+    const current = new Worker(workerUrl, { type: 'module' });
     worker = current;
     controls();
     status.textContent = 'Reading your executable locally…';
@@ -72,7 +74,7 @@ build.addEventListener('click', async () => {
         download.download = `maiko-${target}-x64.zip`;
         download.hidden = false;
         stop();
-        status.textContent = 'Your package is ready. Download the ZIP, then follow the instructions below.';
+        status.textContent = 'Your package is ready.';
         download.focus();
       }
     };
