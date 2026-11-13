@@ -32,6 +32,7 @@ p.add_argument('--game-dir', default='/work/island-reload-scenario')
 p.add_argument('--user-dir', required=True, type=Path)
 p.add_argument('--label', default='island-walk')
 p.add_argument('--start', type=int, default=0, help='Island marker to start each walk from')
+p.add_argument('--scan-markers', type=int, metavar='COUNT', help='Only record where island markers 0..COUNT-1 are (positions in the report), then stop')
 p.add_argument('--only', help='Comma-separated destination maps; default every door on the route')
 a = p.parse_args()
 if a.user_dir.exists():
@@ -163,6 +164,16 @@ with log_path.open('w') as log:
             return wait_world()[1]
 
         report['legs'] = []
+        if a.scan_markers:
+            report['markers'] = {}
+            for marker in range(a.scan_markers):
+                try:
+                    report['markers'][marker] = load_marker(marker)['position']
+                except Exception as error:
+                    report['markers'][marker] = repr(error)
+                Path(str(root / a.label) + '.json').write_text(json.dumps(report, indent=1))
+            report['ok'] = True
+            raise SystemExit(0)
         for goal_marker, dest, setup in ROUTE:
             if a.only and dest not in a.only.split(','):
                 continue
