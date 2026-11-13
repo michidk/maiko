@@ -1,0 +1,173 @@
+Patch: SR audio layer for the native runtime
+Upstream: https://github.com/M-HT/SR at the commit pinned by SR_COMMIT in tools/pipeline.py (games/Albion/SR-Main/Albion-sound.c), as staged by tools/sr_audio.py.
+Original: Compare_Samples decides whether a cached sample matches a new one by checking seven sampled 32-bit words of its data, so different samples can compare equal. Panning and volume are computed inline against SDL_mixer. Copies of converted samples keep no unconverted data.
+Replacement: Compare_Samples compares every format field and then the full kept original data with memcmp; pan and volume go through the shared Game_AIL_set_sample_pan and Game_AIL_set_sample_volume helpers (runtime/rust/audio.rs); sample copies reserve room for the original data so the comparison has it.
+Effect: sample identity no longer depends on a 28-byte signature, and the Rust runtime owns pan and volume so the native mixer and the original Miles calls stay consistent.
+Why: the native audio path (runtime/rust/audio.rs) has to share pan and volume state with SR's cached samples.
+Evidence: docs/architecture.md; tests/audio_samples.c; the sample-audio regression in the Linux and Wine runs.
+
+--- a/Albion-sound.c
++++ b/Albion-sound.c
+@@ -159,38 +159,11 @@
+ 
+ static int Compare_Samples(AIL_sample *S, Game_sample *sample)
+ {
+-    unsigned int len;
+-    uint8_t *Sdata;
+-
+     if (sample == NULL) return -1;
+-
+-    if (S->_stereo == sample->_stereo &&
+-        S->_16bit == sample->_16bit &&
+-        S->_signed == sample->_signed &&
+-        S->start == sample->start &&
+-        S->playback_rate == sample->playback_rate &&
+-        S->len == sample->len &&
+-
+-        S->len >= 4
+-        )
+-    {
+-        len = S->len;
+-        Sdata = (uint8_t *) S->start;
+-
+-        if ( sample->orig_data[0] == *( (uint32_t *) &(Sdata[((len - 4) / 8) & 0xfffffffcUL]) ) &&
+-             sample->orig_data[1] == *( (uint32_t *) &(Sdata[(((len - 4) * 2) / 8) & 0xfffffffcUL]) ) &&
+-             sample->orig_data[2] == *( (uint32_t *) &(Sdata[(((len - 4) * 3) / 8) & 0xfffffffcUL]) ) &&
+-             sample->orig_data[3] == *( (uint32_t *) &(Sdata[(((len - 4) * 4) / 8) & 0xfffffffcUL]) ) &&
+-             sample->orig_data[4] == *( (uint32_t *) &(Sdata[(((len - 4) * 5) / 8) & 0xfffffffcUL]) ) &&
+-             sample->orig_data[5] == *( (uint32_t *) &(Sdata[(((len - 4) * 6) / 8) & 0xfffffffcUL]) ) &&
+-             sample->orig_data[6] == *( (uint32_t *) &(Sdata[(((len - 4) * 7) / 8) & 0xfffffffcUL]) )
+-            )
+-        {
+-            return 0;
+-        }
+-    }
+-
+-    return 1;
++    if (S->_stereo != sample->_stereo || S->_16bit != sample->_16bit ||
++        S->_signed != sample->_signed || S->start != sample->start ||
++        S->playback_rate != sample->playback_rate || S->len != sample->len) return -1;
++    return memcmp(S->start, &sample->data + sample->len_cvt, S->len);
+ }
+ 
+ // returns dst size in bytes
+@@ -355,36 +328,8 @@
+ 
+     Mix_HaltChannel(S->channel);
+ 
+-    /* set panning */
+-    {
+-        int32_t leftpan, rightpan;
+-        uint32_t left, right;
+-
+-        leftpan = S->pan;
+-        rightpan = 127 - S->pan;
+-
+-        left = (leftpan >= 63)?255:( (leftpan * 265265) >> 16 ); /* (leftpan * 255) / 63 */
+-        right = (rightpan >= 63)?255:( (rightpan * 265265) >> 16 ); /* (rightpan * 255) / 63 */
+-
+-        Mix_SetPanning(S->channel, 255, 255);
+-        if (Game_SwapSoundChannels)
+-        {
+-            Mix_SetPanning(S->channel, right, left);
+-        }
+-        else
+-        {
+-            Mix_SetPanning(S->channel, left, right);
+-        }
+-    }
+-
+-    /* set volume */
+-    {
+-        uint32_t volume;
+-
+-        volume = ( ( (uint32_t) S->volume ) * Game_SoundMasterVolume * 521 ) >> 16; /* (volume * Game_SoundMasterVolume * 128) / (127 * 127) */
+-
+-        Mix_Volume(S->channel, volume);
+-    }
++    Game_AIL_set_sample_pan(S, S->pan);
++    Game_AIL_set_sample_volume(S, S->volume);
+ 
+     /* play sample */
+     {
+@@ -466,7 +411,7 @@
+ 
+                         SDL_BuildAudioCVT(&cvt, AUDIO_S16LSB, channels, Game_AudioRate, Game_AudioFormat, Game_AudioChannels, Game_AudioRate);
+ 
+-                        sample = (Game_sample *) malloc(offsetof(Game_sample, data) + newlen_bytes * cvt.len_mult * form_mult);
++                        sample = (Game_sample *) malloc(offsetof(Game_sample, data) + newlen_bytes * cvt.len_mult * form_mult + S->len);
+ 
+                         sample->start = (uint8_t *) S->start;
+                         sample->len = S->len;
+@@ -566,7 +511,7 @@
+ 
+                         SDL_BuildAudioCVT(&cvt, format, channels, Game_AudioRate, Game_AudioFormat, Game_AudioChannels, Game_AudioRate);
+ 
+-                        sample = (Game_sample *) malloc(offsetof(Game_sample, data) + newlen_bytes * cvt.len_mult * form_mult);
++                        sample = (Game_sample *) malloc(offsetof(Game_sample, data) + newlen_bytes * cvt.len_mult * form_mult + S->len);
+ 
+                         sample->start = (uint8_t *) S->start;
+                         sample->len = S->len;
+@@ -583,7 +528,7 @@
+ 
+                     SDL_BuildAudioCVT(&cvt, format, channels, S->playback_rate, Game_AudioFormat, Game_AudioChannels, Game_AudioRate);
+ 
+-                    sample = (Game_sample *) malloc(offsetof(Game_sample, data) + S->len * cvt.len_mult);
++                    sample = (Game_sample *) malloc(offsetof(Game_sample, data) + S->len * cvt.len_mult + S->len);
+ 
+                     sample->start = (uint8_t *) S->start;
+                     sample->len = S->len;
+@@ -593,17 +538,6 @@
+                     memcpy(cvt.buf, S->start, cvt.len);
+                 }
+ 
+-                if (sample->len >= 4)
+-                {
+-                    sample->orig_data[0] = *( (uint32_t *) &(sample->start[((sample->len - 4) / 8) & 0xfffffffcUL]) );
+-                    sample->orig_data[1] = *( (uint32_t *) &(sample->start[(((sample->len - 4) * 2) / 8) & 0xfffffffcUL]) );
+-                    sample->orig_data[2] = *( (uint32_t *) &(sample->start[(((sample->len - 4) * 3) / 8) & 0xfffffffcUL]) );
+-                    sample->orig_data[3] = *( (uint32_t *) &(sample->start[(((sample->len - 4) * 4) / 8) & 0xfffffffcUL]) );
+-                    sample->orig_data[4] = *( (uint32_t *) &(sample->start[(((sample->len - 4) * 5) / 8) & 0xfffffffcUL]) );
+-                    sample->orig_data[5] = *( (uint32_t *) &(sample->start[(((sample->len - 4) * 6) / 8) & 0xfffffffcUL]) );
+-                    sample->orig_data[6] = *( (uint32_t *) &(sample->start[(((sample->len - 4) * 7) / 8) & 0xfffffffcUL]) );
+-                }
+-
+                 SDL_ConvertAudio(&cvt);
+ 
+                 sample->self_ptr = NULL;
+@@ -615,6 +549,7 @@
+                 sample->playback_rate = S->playback_rate;
+ 
+                 sample->len_cvt = cvt.len_cvt;
++                memcpy(&sample->data + sample->len_cvt, S->start, S->len);
+ 
+                 S->sample = sample;
+ 
+@@ -713,6 +648,7 @@
+ #endif
+ 
+     S->volume = volume; /* 0-127 */
++    Mix_Volume(S->channel, ((uint32_t)volume * Game_SoundMasterVolume * 521) >> 16);
+ }
+ 
+ void CCALL Game_AIL_set_sample_pan(struct _AIL_sample *S, int32_t pan)
+@@ -722,6 +658,10 @@
+ #endif
+ 
+     S->pan = pan; /* 0-127 */
++    uint32_t l = 127 - pan, r = pan;
++    l = l >= 63 ? 255 : (l * 265265) >> 16;
++    r = r >= 63 ? 255 : (r * 265265) >> 16;
++    Mix_SetPanning(S->channel, Game_SwapSoundChannels ? r : l, Game_SwapSoundChannels ? l : r);
+ }
+ 
+ void CCALL Game_AIL_set_sample_loop_count(struct _AIL_sample *S, int32_t loop_count)
+@@ -730,7 +670,7 @@
+     fprintf(stderr, "AIL_set_sample_loop_count: 0x%" PRIxPTR ", %i\n", (uintptr_t) S, loop_count);
+ #endif
+ 
+-    S->loop_count = loop_count;
++    S->loop_count = loop_count ? loop_count - 1 : -1;
+ }
+ 
+ uint32_t CCALL Game_AIL_sample_status(struct _AIL_sample *S)

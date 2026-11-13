@@ -1,0 +1,30 @@
+Patch: compile the pinned SR translator for WASI
+Upstream: https://github.com/M-HT/SR at ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3, after sr-x64.patch.
+Original: the loader includes nonstandard malloc.h and main lowers the host process priority with nice().
+Replacement: include standard stdlib.h and skip priority adjustment on WASI.
+Effect: the same x64 translator runs inside a browser or a sandboxed local WASI runtime. Native priority adjustment is unchanged.
+Why: WASI has no process priority service and its standard allocator declarations live in stdlib.h. The build links WASI's mmap emulation so SR's existing buffered-read fallback remains available; C++ containers are built with exceptions disabled because allocation failure aborts the isolated build.
+Evidence: the supported reference RGFX.EXE produces byte-identical rgfx.asm and all seven postprocessed engine sections with the native and WASI translators. No game bytes are included in this patch.
+
+--- a/SR/SR_loader.c
++++ b/SR/SR_loader.c
+@@ -23,7 +23,7 @@
+  */
+ 
+ #include <stdio.h>
+-#include <malloc.h>
++#include <stdlib.h>
+ #include <string.h>
+ #include "SR_defs.h"
+ #include "SR_vars.h"
+--- a/SR/SR_main.c
++++ b/SR/SR_main.c
+@@ -265,7 +265,7 @@ int main (int argc, char *argv[])
+ 
+ #ifdef _WIN32
+ 	SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+-#else
++#elif !defined(__wasi__)
+ 	if (-1 == nice(1)) {}
+ #endif
+ 

@@ -1,0 +1,28 @@
+Patch: C linkage for SR's guest heap manager
+Upstream: https://github.com/M-HT/SR at the commit pinned by SR_COMMIT in tools/pipeline.py (games/Albion/SR-Main/Game_memory.h), as staged by tools/sr_heap.py.
+Original: the heap manager's C++ declarations have C++ linkage.
+Replacement: wraps the declarations in extern "C".
+Effect: no behavior change; the allocator functions can be called by name from the Rust runtime and from C tests.
+Why: the Rust runtime links against SR's allocator and cannot call C++-mangled names.
+Evidence: tools/sr_heap.py records the upstream and staged file hashes; tests/heap_lifetime.c.
+
+--- a/Game_memory.h
++++ b/Game_memory.h
+@@ -26,6 +26,8 @@
+ 
+ #ifdef __cplusplus
+ 
++extern "C" {
++
+ int x86_init_malloc(void);
+ void x86_deinit_malloc(void);
+ 
+@@ -44,6 +46,8 @@
+ 
+ #endif
+ 
++} // extern "C"
++
+ #else
+ 
+ #include <stdlib.h>

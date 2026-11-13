@@ -1,0 +1,49 @@
+[workspace]
+members = [".", "runtime/host", "runtime/glide", "patcher"]
+default-members = ["."]
+resolver = "3"
+
+[package]
+name = "maiko-runtime"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+
+[lib]
+path = "runtime/rust/lib.rs"
+crate-type = ["staticlib", "rlib"]
+
+[features]
+llasm = []
+
+[dependencies]
+directories = "6"
+serde_json = "1"
+sdl2 = { version = "=0.38.0", default-features = false, features = ["raw-window-handle", "mixer"] }
+raw-window-handle = "=0.6.2"
+libc = "=0.2.191"
+cap-std = "=3.4.5"
+cap-fs-ext = "=3.4.5"
+sha2 = "=0.11.1"
+egui = { version = "=0.33.3", default-features = false, features = ["default_fonts"] }
+egui_glow = { version = "=0.33.3", default-features = false }
+glow = "=0.16.0"
+
+[profile.release]
+panic = "abort"
+
+# The game runtime that players download (tools/rust_runtime.py): small files, one codegen unit with
+# link-time optimisation and no symbol tables or debug sections in the Rust objects.
+[profile.runtime]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Globalization", "Win32_Foundation", "Win32_System_Memory", "Win32_System_Threading", "Win32_System_Diagnostics_Debug", "Win32_System_SystemInformation", "Win32_Storage_FileSystem", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_WindowsProgramming", "Win32_System_Kernel", "Win32_System_Console", "Win32_System_IO", "Wdk_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile = "=3.23.0"

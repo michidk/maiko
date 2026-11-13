@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="description" content="Maiko turns your own copy of The Elder Scrolls Adventures: Redguard into a native Windows or Linux program, without DOSBox. Build it in your browser; your files never leave your device.">
+  <meta name="theme-color" content="#4a1a2a">
+  <meta name="color-scheme" content="light">
+  <link rel="canonical" href="https://michidk.github.io/maiko/">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Maiko">
+  <meta property="og:title" content="Maiko: play Redguard natively on Windows and Linux">
+  <meta property="og:description" content="Build a native version of The Elder Scrolls Adventures: Redguard from your own game files, right in your browser. No DOSBox, nothing uploaded.">
+  <meta property="og:url" content="https://michidk.github.io/maiko/">
+  <meta property="og:image" content="https://michidk.github.io/maiko/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Maiko: The Elder Scrolls Adventures: Redguard, native on Windows and Linux">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>Maiko: play Redguard natively on Windows and Linux</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <header><nav class="header-inner" aria-label="Main navigation"><a class="wordmark" href="./">Maiko</a><a href="https://github.com/michidk/maiko">GitHub</a></nav></header>
+  <main>
+    <section class="introduction" aria-labelledby="title">
+      <h1 id="title">Maiko</h1><p class="lead">Play <em>The Elder Scrolls Adventures: Redguard</em> natively on Windows and Linux, with an experimental macOS port.</p><p class="sub">Requires your own copy of Redguard. Your executable stays on this device.</p>
+      <ul class="facts" aria-label="What Maiko is">
+        <li><strong>Native</strong><span>Runs as a normal Windows or Linux program. No DOSBox.</span></li>
+        <li><strong>Private</strong><span>Your RGFX.EXE is turned into the game right here in your browser. Nothing is uploaded.</span></li>
+        <li><strong>Original</strong><span>The original menus, movies, music and saves, plus gamepad support.</span></li>
+      </ul>
+    </section>
+    <section class="builder" aria-labelledby="builder-title">
+      <div class="builder-heading"><h2 id="builder-title">Build your package</h2></div>
+      <noscript><p>This builder needs JavaScript and WebAssembly. You can also use the Rust CLI described in the repository documentation.</p></noscript>
+      <fieldset id="platforms"><legend class="step-title">Choose your system</legend>
+        <div class="platform-grid">
+        <label class="platform"><input type="radio" name="target" value="windows"><span><strong>Windows</strong><small>64-bit · Windows 10 or newer</small></span></label>
+        <label class="platform"><input type="radio" name="target" value="linux"><span><strong>Linux</strong><small>64-bit · glibc 2.36+ · X11/XWayland</small></span></label>
+        <label class="platform"><input type="radio" name="target" value="macos" aria-describedby="macos-note"><span><strong>macOS</strong><small>Experimental · macOS 11+ · Apple Silicon / Intel</small></span></label>
+        </div>
+      </fieldset>
+      <p id="detection" class="hint"></p>
+      <section id="macos-guidance" aria-label="Experimental macOS runtime" hidden>
+        <p id="macos-note">The macOS port is experimental. Your ZIP supports Apple Silicon and Intel Macs. Mac builds take longer and need a current desktop browser.</p>
+      </section>
+      <div id="browser-build">
+      <p class="step-title" id="file-title">Add your original RGFX.EXE</p>
+      <p id="file-help" class="hint">It is in your Redguard installation folder. Maiko accepts the two known builds of this file.</p>
+      <label id="dropzone" class="dropzone"><input type="file" id="executable" accept=".exe" aria-describedby="file-help"><span id="dz-name" class="dz-name">Choose RGFX.EXE or drop it here</span><span id="dz-detail" class="dz-detail">Only this one file is needed.</span></label>
+      <p class="step-title" id="build-title">Build and download</p>
+      <div class="actions"><button id="build" disabled>Build package</button><button id="cancel" class="secondary" hidden>Cancel</button><a id="download" class="download" hidden>Download your ZIP</a></div>
+      <progress id="progress" aria-label="Building your package" hidden></progress>
+      <p id="status" role="status" aria-live="polite"></p>
+      <div id="log-panel" hidden>
+        <div class="log-bar"><span id="log-title">Build log</span><button id="copy-log" class="secondary" type="button">Copy log</button></div>
+        <pre id="log" role="log" aria-labelledby="log-title" tabindex="0"></pre>
+      </div>
+      </div>
+    </section>
+    <section id="browser-instructions" class="instructions" aria-labelledby="next-title"><h2 id="next-title">Once your ZIP is ready</h2>
+      <div id="windows-instructions"><ol><li>Extract the ZIP into <strong>its own folder</strong>, anywhere you can write to. Not into your game folder.</li><li>Double-click <code>redguard-native.exe</code>. Maiko looks for your game on its own, in the usual GOG folders among others. If it cannot find it, it asks once for the folder that contains <code>RGFX.EXE</code> and remembers your choice.</li><li>The original book menu opens. Choose <strong>New Game</strong> or <strong>Continue</strong>.</li></ol></div>
+      <div id="linux-instructions" hidden><ol><li>Extract the ZIP into <strong>its own folder</strong>, anywhere you can write to. Not into your game folder.</li><li>Open a terminal in that folder and run <code>./redguard-native</code>. Maiko looks for your game on its own; if it cannot find it, it asks in the terminal for the folder that contains <code>RGFX.EXE</code> and remembers your choice. You can also pass it with <code>--game-dir /path/to/Redguard</code>.</li><li>The original book menu opens. Choose <strong>New Game</strong> or <strong>Continue</strong>.</li></ol></div>
+      <p>Options such as fullscreen are listed in the <a href="https://github.com/michidk/maiko#command-line-options">README</a>. Prefer the terminal? Use the <a href="https://github.com/michidk/maiko/blob/main/docs/client-builder.md">Rust command-line tool</a>.</p></section>
+    <section id="macos-instructions" class="instructions" aria-labelledby="mac-next-title" hidden><h2 id="mac-next-title">Once your Mac ZIP is ready</h2><ol><li>Extract the ZIP into its own folder.</li><li>Open <code>redguard-native</code>. Select your owned Redguard installation if asked. The ZIP contains the runtime; you supply the game files.</li><li>If macOS blocks the download, open Terminal and remove quarantine from the extracted folder:<pre><code>xattr -dr com.apple.quarantine "$HOME/Downloads/maiko-macos-universal"</code></pre>Adjust the path if you extracted it elsewhere, then open <code>redguard-native</code> again.</li></ol><p>Read the <a href="https://github.com/michidk/maiko/blob/feat/macos-backend/platforms/macos/LAUNCH.md">Mac launch guide</a> for details.</p></section>
+    <section class="instructions storage" aria-labelledby="storage-title"><h2 id="storage-title">Saves, settings and logs</h2>
+      <p>Every version keeps your saves and settings in a <code>user-data</code> folder and writes a log of each start. Your game folder is never changed. If something goes wrong, attach the newest log to an <a href="https://github.com/michidk/maiko/issues">issue</a>.</p>
+      <table><thead><tr><th scope="col">System</th><th scope="col">Saves and settings</th><th scope="col">Logs</th></tr></thead><tbody>
+        <tr><th scope="row">Windows</th><td><code>user-data</code> next to <code>redguard-native.exe</code></td><td><code>%LOCALAPPDATA%\Maiko\logs</code></td></tr>
+        <tr><th scope="row">Linux</th><td><code>user-data</code> next to <code>redguard-native</code></td><td><code>~/.local/state/maiko/logs</code></td></tr>
+        <tr><th scope="row">macOS</th><td><code>~/Library/Application Support/Maiko/user-data</code></td><td><code>~/Library/Logs/Maiko</code></td></tr>
+      </tbody></table></section>
+  </main>
+  <footer><p>Independent fan project. Redguard belongs to Bethesda Softworks and ZeniMax.</p><p>Related projects: <a href="https://michidk.github.io/redguard-preservation/">Redguard Preservation</a> (file format and engine documentation), <a href="https://michidk.github.io/cyrus/">Cyrus</a> (a Rust rebuild of the game) and the <a href="https://michidk.github.io/cyrus/viewer/">Cyrus asset viewer</a>.</p></footer>
+</body>
+</html>

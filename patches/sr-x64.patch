@@ -1,0 +1,157 @@
+Patch: SR x86-64 output support for the Redguard engine
+Upstream: https://github.com/M-HT/SR at the commit pinned by SR_COMMIT in tools/pipeline.py, plus the OUTPUT_TYPE switch to OUT_X64 applied by pipeline.build().
+Original: SR's x86-64 backend (SR/SR_full_x64_instr.c) does not translate BSF, JECXZ, JO, JNO, the word and dword forms of SCAS, or the integer MMX instructions (MOVD, MOVQ, PAND, PANDN, POR, PXOR, PADD*, PSUB*, shifts) that the Redguard engine uses. SR_basic.c lets a fixup alias force code analysis of a range the metadata marks as data.
+Replacement: adds those instructions to the x64 translator (SCAS now covers all three widths with the repeat prefix mapped to the right form), makes a fixup alias respect the no-code list, and prints the address of an unsupported jump.
+Effect: the full engine translates to x86-64 without hand-written stubs for these instructions. The generated assembly for a given input is deterministic; tools/pipeline.py compares it when this patch changes.
+Why: stock SR targets 32-bit output; the native Windows and Linux builds are 64-bit.
+Evidence: docs/architecture.md; the Wine and Linux runs record the translated engine executing.
+
+diff --git a/SR/SR_full_win32.c b/SR/SR_full_win32.c
+index 90961bc..40b5b67 100644
+--- a/SR/SR_full_win32.c
++++ b/SR/SR_full_win32.c
+@@ -766,6 +766,7 @@ int SR_disassemble_offset_win32(unsigned int Entry, uint_fast32_t offset)
+                     printf("op type: %i - %i - %i\n", ud_obj.operand[0].type, ud_obj.operand[1].type, ud_obj.operand[2].type);
+                     printf("op size: %i - %i - %i\n", ud_obj.operand[0].size, ud_obj.operand[1].size, ud_obj.operand[2].size);
+ 
++                    fprintf(stderr, "Unsupported jump at 0x%lx: %s\n", (unsigned long)(section[Entry].start + offset), ud_insn_asm(&ud_obj));
+                     return -30;
+                 }
+ 
+diff --git a/SR/SR_full_x64_instr.c b/SR/SR_full_x64_instr.c
+index 69a0521..54dd3b4 100644
+--- a/SR/SR_full_x64_instr.c
++++ b/SR/SR_full_x64_instr.c
+@@ -417,6 +417,7 @@ int SR_disassemble_x64_instruction(unsigned int Entry, output_data *output, regi
+         case UD_Ior:
+         case UD_Ixor:
+             /* CF,OF cleared, AF undefined, SF,ZF,PF - modified */
++        case UD_Ibsf:
+         case UD_Ibsr:
+             /* CF,OF,AF,SF,PF undefined, ZF - modified */
+         case UD_Ibswap:
+@@ -677,6 +678,9 @@ int SR_disassemble_x64_instruction(unsigned int Entry, output_data *output, regi
+             }
+ 
+             break;
++        case UD_Ijecxz:
++        case UD_Ijo:
++        case UD_Ijno:
+         case UD_Ija:
+         case UD_Ijae:
+         case UD_Ijb:
+@@ -1464,26 +1468,13 @@ int SR_disassemble_x64_instruction(unsigned int Entry, output_data *output, regi
+ 
+             break;
+         case UD_Iscasb:
+-            /* OS,SF,ZF,AF,PF,CF - modified */
++        case UD_Iscasw:
++        case UD_Iscasd:
+             {
+-                if (ud_obj.pfx_rep)
+-                {
+-                    OUTPUT_STRING("rep a32 scasb");
+-                }
+-                else if (ud_obj.pfx_repe)
+-                {
+-                    OUTPUT_STRING("repe a32 scasb");
+-                }
+-                else if (ud_obj.pfx_repne)
+-                {
+-                    OUTPUT_STRING("repne a32 scasb");
+-                }
+-                else
+-                {
+-                    OUTPUT_STRING("a32 scasb");
+-                }
++                const char *name = ud_obj.mnemonic == UD_Iscasb ? "scasb" : ud_obj.mnemonic == UD_Iscasw ? "scasw" : "scasd";
++                const char *prefix = ud_obj.pfx_repne ? "repne " : (ud_obj.pfx_rep || ud_obj.pfx_repe) ? "repe " : "";
++                OUTPUT_PARAMSTRING("%sa32 %s", prefix, name);
+             }
+-
+             break;
+         case UD_Iseta:
+         case UD_Isetb:
+@@ -1591,6 +1582,46 @@ int SR_disassemble_x64_instruction(unsigned int Entry, output_data *output, regi
+         case UD_Ifmulp:
+         case UD_Ifsubp:
+             /* no flags affected */
++        case UD_Imovq:
++        case UD_Imovd:
++        case UD_Ipxor:
++        case UD_Ipand:
++        case UD_Ipandn:
++        case UD_Ipor:
++        case UD_Ipaddb:
++        case UD_Ipaddw:
++        case UD_Ipaddd:
++        case UD_Ipsubb:
++        case UD_Ipsubw:
++        case UD_Ipsubd:
++        case UD_Ipsllq:
++        case UD_Ipsrlq:
++        case UD_Ipsllw:
++        case UD_Ipsrlw:
++        case UD_Ipslld:
++        case UD_Ipsrld:
++        case UD_Ipsraw:
++        case UD_Ipsrad:
++        case UD_Ipacksswb:
++        case UD_Ipackssdw:
++        case UD_Ipackuswb:
++        case UD_Ipunpcklbw:
++        case UD_Ipunpcklwd:
++        case UD_Ipunpckldq:
++        case UD_Ipunpckhbw:
++        case UD_Ipunpckhwd:
++        case UD_Ipunpckhdq:
++        case UD_Ipmullw:
++        case UD_Ipmulhw:
++        case UD_Ipmaddwd:
++        case UD_Ipcmpeqb:
++        case UD_Ipcmpeqw:
++        case UD_Ipcmpeqd:
++        case UD_Ipcmpgtb:
++        case UD_Ipcmpgtw:
++        case UD_Ipcmpgtd:
++        case UD_Icpuid:
++        case UD_Iemms:
+         case UD_Ifabs:
+         case UD_Ifchs:
+         case UD_Ifcompp:
+@@ -1600,6 +1631,21 @@ int SR_disassemble_x64_instruction(unsigned int Entry, output_data *output, regi
+         case UD_Ifldln2:
+         case UD_Ifldz:
+         case UD_Ifninit:
++        case UD_Ifpatan:
++        case UD_Ifxtract:
++        case UD_Ifyl2xp1:
++        case UD_If2xm1:
++        case UD_Ifscale:
++        case UD_Ifldl2e:
++        case UD_Ifldl2t:
++        case UD_Ifldlpi:
++        case UD_Ifdecstp:
++        case UD_Ifincstp:
++        case UD_Iftst:
++        case UD_Ifxam:
++        case UD_Ifnclex:
++        case UD_Ifprem:
++        case UD_Ifprem1:
+         case UD_Ifptan:
+         case UD_Ifsin:
+         case UD_Ifsqrt:
+diff --git a/SR/SR_basic.c b/SR/SR_basic.c
+index cc9f680..12ceab7 100644
+--- a/SR/SR_basic.c
++++ b/SR/SR_basic.c
+@@ -95,7 +95,8 @@ static void SR_apply_fixup_alias_init(alias_data *item, void *data)
+         output->has_label = 1;
+     }
+ 
+-    if (section[DATA].type == ST_CODE)
++    if (section[DATA].type == ST_CODE &&
++        !section_nocode_list_CanFindEntryEqual(DATA, item->ofs))
+     {
+         section_entry_list_Insert(DATA, item->ofs);
+         bound = section_bound_list_Insert(DATA, item->ofs);

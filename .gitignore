@@ -1,0 +1,44 @@
+# Downloaded dependencies, translated game code and test output
+.cache/
+artifacts/
+__pycache__/
+*.py[cod]
+/target/
+
+# Local agent state and game/runtime data
+.serena/
+.codex/
+.claude/
+.superpowers/
+.env
+.env.*
+user-data/
+game/
+*.exe
+*.dll
+*.gog
+*.iso
+*.sav
+
+# Client-side builder output
+/node_modules/
+/web/pkg/
+/web/dist/
+
+# Original game media, maps, models, textures and archives
+*.[eE][xX][eE]
+*.[dD][lL][lL]
+*.[gG][oO][gG]
+*.[iI][sS][oO]
+*.[sS][aA][vV]
+*.[sS][mM][kK]
+*.[rR][gG][mM]
+*.[rR][oO][bB]
+*.[rR][tT][xX]
+*.[tT][eE][xX]
+*.[wW][aA][vV]
+*.[oO][gG][gG]
+*.[mM][pP]3
+*.[zZ][iI][pP]
+*.[rR][aA][rR]
+*.7[zZ]
