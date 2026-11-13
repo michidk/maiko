@@ -1,58 +1,26 @@
-name: Build and deploy the client-side builder
+# @orcastrate
+# template: projects/maiko/pages
+# @end-orcastrate
 
+name: Deploy browser builder
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
-
-concurrency:
-  group: github-pages
-  cancel-in-progress: false
-
 jobs:
-  build:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.90.0
-        with:
-          targets: wasm32-unknown-unknown
-          components: rustfmt, clippy
-      - uses: oven-sh/setup-bun@v2
-      - name: Install source-check dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev
-      - name: Check sources
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-          cargo test --workspace --locked
-          sh tests/check_portable.sh
-          python3 tests/check_patch_tables.py
-          python3 -m tools.audit_runtime --check
-      - run: bun install --frozen-lockfile
-      - run: bun test web
-      - name: Install the matching WebAssembly binding generator
-        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
-      - name: Download private release assets for the static site
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          task_kit_tag=$(bun -e 'const kits = await Bun.file("web/kits.json").json(); const tags = Object.values(kits).map(kit => new URL(kit.url).pathname.split("/").at(-2)); if (new Set(tags).size !== 1 || !/^[A-Za-z0-9_.-]+$/.test(tags[0])) throw new Error("Kits must use one pinned release"); console.log(tags[0]);')
-          gh release download "$task_kit_tag" --repo "$GITHUB_REPOSITORY" --pattern linux.zip --pattern windows.zip --dir "$RUNNER_TEMP/maiko-kits"
-      - name: Build the website and verify pinned runtime downloads
-        env:
-          MAIKO_KIT_DIRECTORY: ${{ runner.temp }}/maiko-kits
-        run: bun run build
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: web/dist
-
+  verify:
+    uses: ./.github/workflows/ci.yml
+  web:
+    uses: ./.github/workflows/web.yml
   deploy:
-    needs: build
+    if: github.ref == 'refs/heads/main'
+    needs: [verify, web]
     runs-on: ubuntu-24.04
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
@@ -60,6 +28,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
         id: deployment
-        uses: actions/deploy-pages@v4

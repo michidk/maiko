@@ -1,0 +1,10 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>michidk/workflows//templates/presets/renovate"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["wasm-bindgen", "js-sys", "web-sys"],
+      "groupName": "WebAssembly bindings"
+    }
+  ]
+}

@@ -8,13 +8,13 @@ The result is an experimental runtime snapshot, with the existing project's acce
 
 ## Use the local CLI
 
-Install Rust and [Wasmtime](https://wasmtime.dev/), then build:
+Download the patcher for your system from a versioned release and install [Wasmtime](https://wasmtime.dev/). Alternatively, install Rust and build the patcher yourself:
 
 ```sh
 cargo build --locked --release -p maiko-patcher --bin maiko-patcher
 ```
 
-Download the target's runtime kit from the release linked in `web/kits.json`, and run:
+Download the matching runtime kit from the same release (or the pinned kit release linked in `web/kits.json`), and run:
 
 ```sh
 maiko-patcher build --input /path/to/RGFX.EXE --target linux \
@@ -45,6 +45,24 @@ gh release download client-runtime-20261113 --repo michidk/maiko \
 MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
 ```
 
-`web/kits.json` pins Maiko release URLs and SHA-256 hashes. The site build checks the downloads and serves them from the same origin. The workflow downloads private release assets with its read-only Actions token before building; no credential reaches the static site or browser. For a local build, `MAIKO_KIT_DIRECTORY` can point to a directory with the same checked `linux.zip` and `windows.zip`. The content security policy restricts browser requests to the page's origin.
+`web/kits.json` pins Maiko release URLs and SHA-256 hashes. The site build checks the downloads and serves them from the same origin. The workflow downloads the public, pinned kits and verifies their hashes before building. For a local build, `MAIKO_KIT_DIRECTORY` can point to a directory with the same checked `linux.zip` and `windows.zip`. The content security policy restricts browser requests to the page's origin.
 
-`.github/workflows/pages.yml` runs the source checks, builds Rust/WASM and the static page, uploads the Pages artifact, and deploys on main or manual dispatch. Set **Settings → Pages → Source → GitHub Actions** before deploying. The managed GitHub App needs Pages write permission to enable that setting through the API.
+`.github/workflows/pages.yml` calls the reusable source-check and browser-build workflows and deploys on main or manual dispatch. Set **Settings → Pages → Source → GitHub Actions** before deploying. The managed GitHub App needs Pages write permission to enable that setting through the API.
+
+
+## Versioned releases
+
+Run **Bump version and tag** on `main` to increment all four Rust packages together. It uses the Releaser App to publish a GitHub-signed commit and a `vX.Y.Z` tag. The workflow requires `RELEASER_APP_ID` and `RELEASER_APP_PRIVATE_KEY`, distributed through the shared workflows repository. It checks the published signature and contributor trailers before creating the tag. If tagging fails after the commit succeeds, create the matching tag on that commit to resume; rerunning the bump would increment the version again.
+
+A stable `vX.Y.Z` tag starts the release workflow. Tags must point to a commit on main and match every package version. Source checks, Windows and Linux patcher tests/builds, and the browser build must all succeed before publication. Manual dispatch on an existing tag can retry a failed release.
+
+Each release contains:
+
+- `maiko-patcher-linux-x86_64.tar.gz` and `maiko-patcher-windows-x86_64.tar.gz`: standalone CLI, licence and usage instructions. Wasmtime is installed separately. The Linux CLI is built on Ubuntu 24.04 and requires glibc 2.39 or newer; the runtime kit has its own requirements above.
+- `maiko-browser.tar.gz`: the complete static builder, including its checked support kits.
+- `maiko-runtime-kit-linux.zip` and `maiko-runtime-kit-windows.zip`: the exact kits embedded in that browser build, including their upstream notices and corresponding source files. Pass these filenames to the CLI's `--kit` option.
+- `SHA256SUMS`, `LICENSE` and `README.md`.
+
+The workflow stages all assets in a draft and publishes only after uploads succeed. Retrying preserves an already published release. After publication, Pages deploys the browser artifact from that release run. Main also continues to deploy development builds. Published kits remain pinned snapshots until `web/kits.json` is deliberately updated; a version bump does not regenerate them.
+
+Workflows carry Orcastrate headers referencing `michidk/workflows` project templates. Update those templates alongside changes here so future synchronization preserves the change. Renovate extends the same shared preset used by Cyrus and redguard-preservation.

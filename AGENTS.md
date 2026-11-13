@@ -8,7 +8,7 @@ Maiko is a native Windows and Linux runtime for an owned copy of *The Elder Scro
 - Pull `main` before starting and again before every commit. Reconcile with changes from other sessions; never overwrite peer work and never force-push.
 - Publish through the GitHub API as the managed App so GitHub signs the commit: GraphQL `createCommitOnBranch` on `main` with `expectedHeadOid`. Put `Co-authored-by: Michael Lohr <michael@lohr.dev>` and the agent's own `Co-authored-by` line in `message.body`, then read the commit back and confirm a valid signature and both trailers.
 - Use Conventional Commits (`type(scope): description`). Do not commit game files, CD images, generated translations, build output, saves or `.cache/` and `artifacts/`.
-- The Pages workflow runs the source checks. Run the same checks in [docs/building.md](docs/building.md) before committing.
+- The reusable CI workflow runs the source checks for pull requests, Pages builds and releases. Run the same checks in [docs/building.md](docs/building.md) before committing.
 
 ## What belongs in the repository
 
