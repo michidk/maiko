@@ -68,7 +68,7 @@ def main():
         report['base_toolchain']=ensure_tool_image()
         if subprocess.run(['docker','image','inspect',IMAGE],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
             with (output/'toolchain-build.log').open('w') as log:
-                run(['docker','build','-t',IMAGE,'-f',str(ROOT/'platforms/linux/Dockerfile'),str(ROOT/'platforms/linux')],stdout=log,stderr=subprocess.STDOUT)
+                run(['docker','build','-t',IMAGE,'-f',str(ROOT/'tools/docker/linux.Dockerfile'),str(ROOT/'tools/docker')],stdout=log,stderr=subprocess.STDOUT)
         report['toolchain_image']=subprocess.check_output(['docker','image','inspect',IMAGE,'--format','{{.Id}}'],text=True).strip()
         backend=ROOT/'.cache/openglide-ng'
         archive=subprocess.check_output(['git','archive',BACKEND],cwd=backend)
@@ -85,7 +85,7 @@ def main():
         if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
         run(['docker','exec',name,'mkdir','/src'])
         subprocess.run(['docker','exec','-i',name,'tar','-x','-C','/src'],input=archive,check=True)
-        for directory,destination in [('runtime','/work'),('platforms/linux','/work'),('glide','/work'),('platforms/linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]:
+        for directory,destination in [('runtime','/work'),('glide','/work'),('linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]:
             run(['docker','cp',str(ROOT/directory)+'/.',name+':'+destination])
         # Generated macros include checked game fixes and must overwrite template includes.
         for file in source.iterdir():

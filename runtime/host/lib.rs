@@ -1,8 +1,4 @@
 //! Original-game entry and host-service dispatch. All game logic stays translated.
-use maiko_runtime::rg_log;
-#[cfg(feature = "llasm")]
-mod llasm;
-use maiko_runtime::memory::{guest_address, guest_ptr};
 use maiko_runtime::{
     audio::*,
     crash::*,
@@ -77,13 +73,13 @@ unsafe fn read32(p: *const u8) -> u32 {
     unsafe { p.cast::<u32>().read_unaligned() }
 }
 unsafe fn ctext(p: u32) -> String {
-    unsafe { CStr::from_ptr(guest_ptr::<c_char>(p)) }
+    unsafe { CStr::from_ptr(p as usize as *const c_char) }
         .to_string_lossy()
         .into_owned()
 }
 fn close_requested() {
     if rg_input_pump() == 0 {
-        rg_log!("event=exit-request reason=window-close");
+        eprintln!("Native window close requested; running native exit cleanup");
         rg_clock_stop();
         maiko_runtime::host::exit_cleanly(0);
     }
@@ -105,13 +101,13 @@ unsafe fn runtime_state() {
         let now=rg_clock_milliseconds();let startup=read32(&raw const loc_1A4624);let actor=read32(&raw const loc_1A3865);let ui=read32(&raw const loc_1A824C);state.frames=state.frames.wrapping_add(1);
         if state.rows>=2048 || (state.frames>16 && actor==state.actor && ui==state.ui && startup==state.startup && now.wrapping_sub(state.last)<250) {return;}
         let mut text=format!("STATE ms={now} frame={} ui={ui} actor={actor:08x} startup={startup} whole={} fine={} scale={} fps={} fly={} vertical_bypass={}",state.frames,rg_tick_delta,read32(&raw const loc_1A4620),read32(&raw const loc_1EEC48),read32(&raw const loc_1EEC54),read32(&raw const loc_1F29C4),read32(&raw const loc_1F29E0));
-        let p=guest_ptr::<u8>(actor);
+        let p=actor as usize as *const u8;
         if rg_host_readable(p.cast(),0x276)!=0 {
-            let a=guest_ptr::<u8>(read32(p.add(0x247)));
+            let a=read32(p.add(0x247)) as usize as *const u8;
             text+=&format!(" xyz={},{},{} motion={},{},{} origin={} timer={} jump_key={}",read32(p.add(0xcb)) as i32,read32(p.add(0xcf)) as i32,read32(p.add(0xd3)) as i32,*p.add(0x1b1),*p.add(0x1b2),*p.add(0x1b3),read32(p.add(0x1c2)) as i32,*p.add(0x1c6),keyboard_state[0x39]);
             if rg_host_readable(a.cast(),12)!=0 {text+=&format!(" anim={} model_vertical={}",a.cast::<u16>().read_unaligned(),*a.add(11));}
         }
-        rg_log!("{text}");state.last=now;state.actor=actor;state.startup=startup;state.ui=ui;state.rows+=1;
+        eprintln!("{text}");state.last=now;state.actor=actor;state.startup=startup;state.ui=ui;state.rows+=1;
     });
     }
 }
@@ -147,7 +143,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 if COUNT >= 32 {
                     return;
                 }
-                let p = guest_ptr::<u8>(f.eax as u32);
+                let p = f.eax as u32 as usize as *const u8;
                 let readable = rg_host_readable(p.cast(), 12) != 0;
                 if COUNT < 8 || (!readable && COUNT < 32) {
                     let count = COUNT;
@@ -161,7 +157,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     } else {
                         String::new()
                     };
-                    rg_log!(
+                    eprintln!(
                         "CLIP entry={count} vector={:08x} ecx={:08x} edx={:08x} readable={}{vector}",
                         f.eax as u32,
                         f.ecx as u32,
@@ -176,7 +172,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             }
             if service == 0x8002bd78 {
                 if std::env::var_os("RG_TRACE_INI").is_some() {
-                    rg_log!(
+                    eprintln!(
                         "INI query file={} section={} key={}",
                         ctext(f.eax as u32),
                         ctext(f.edx as u32),
@@ -185,7 +181,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 }
                 return;
             }
-            rg_log!(
+            eprintln!(
                 "TRACE original={:x} eax={:08x} edx={:08x}",
                 service & 0x7fffffff,
                 f.eax as u32,
@@ -207,11 +203,11 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     esp: KEY_STACK,
                     ..Default::default()
                 };
-                rg_call(guest_address(rg_key_event as *const ()), &mut key);
+                rg_call(rg_key_event as *const () as usize as u32, &mut key);
             }
         }
         if service == 0x301b {
-            if rg_movie_clock_callback == guest_address(host_movie_clock_read as *const ()) {
+            if rg_movie_clock_callback == host_movie_clock_read as *const () as usize as u32 {
                 rg_movie_clock_callback = 0;
             }
             return;
@@ -269,8 +265,8 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 return;
             }
             24 => {
-                rg_movie_clock_callback = guest_address(host_movie_clock_read as *const ());
-                rg_movie_clock_shutdown = guest_address(host_movie_clock_stop as *const ());
+                rg_movie_clock_callback = host_movie_clock_read as *const () as usize as u32;
+                rg_movie_clock_shutdown = host_movie_clock_stop as *const () as usize as u32;
                 f.eax = 0;
                 return;
             }
@@ -280,21 +276,21 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             }
             26 | 23 => return,
             22 => {
-                let capacity = rg_low_size(guest_ptr::<c_void>(f.eax as u32));
+                let capacity = rg_low_size(f.eax as u32 as usize as *const c_void);
                 if capacity != 0 {
                     f.eax = capacity as u64;
                     return;
                 }
             }
             21 => {
-                rg_log!(
+                eprintln!(
                     "Legacy VGA DAC clear has no effect on the native Glide display; original Glide palette upload retained"
                 );
                 return;
             }
             20 => {
                 if !rg_input_window(640, 480).is_null() {
-                    rg_log!(
+                    eprintln!(
                         "Native window prepared for original Glide initialization; VGA mode13 unavailable"
                     );
                     return;
@@ -303,7 +299,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             19 => {
                 CRITICAL_VECTOR = f.eax as u32;
                 f.eax = 0;
-                rg_log!(
+                eprintln!(
                     "Native critical-file policy replaces DOS vector 24h; errors return status"
                 );
                 return;
@@ -314,11 +310,11 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     if p.is_null() {
                         blocked(service, f);
                     }
-                    KEY_STACK = guest_address(p) + 65536;
+                    KEY_STACK = p as usize as u32 + 65536;
                 }
                 keyboard_extended_handler = 1;
                 KEYBOARD_INSTALLED = true;
-                rg_log!(
+                eprintln!(
                     "Native keyboard event delivery installed; original key translation retained"
                 );
                 return;
@@ -341,7 +337,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             }
             13 => {
                 HARD_ERROR_CALLBACK = f.eax as u32;
-                rg_log!("Native file errors return status without a DOS critical-error dialog");
+                eprintln!("Native file errors return status without a DOS critical-error dialog");
                 return;
             }
             14 => {
@@ -350,25 +346,24 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             }
             11 | 12 => {
                 f.eax = rg_host_lock(
-                    guest_ptr::<c_void>(f.eax as u32),
+                    f.eax as u32 as usize as *mut c_void,
                     f.edx as u32 as usize,
                     i32::from(service == 12),
                 ) as u64;
                 return;
             }
             9 => {
-                rg_log!(
+                eprintln!(
                     "Original SYSTEM.INI parsed final_version={} memory_manager={}",
-                    final_version,
-                    memory_manager
+                    final_version, memory_manager
                 );
                 KEYBOARD_LOCKS &= !0x10;
-                rg_log!("Native input scroll lock cleared");
+                eprintln!("Native input scroll lock cleared");
                 return;
             }
             10 => {
                 KEYBOARD_LOCKS &= !0x20;
-                rg_log!("Native input num lock cleared");
+                eprintln!("Native input num lock cleared");
                 return;
             }
             8 => {
@@ -384,41 +379,41 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 if !p.is_null() && rg_guest_pointer(p, size as usize, &mut result) == 0 {
                     std::process::abort();
                 }
-                f.eax = guest_address(p).into();
+                f.eax = p as u64;
                 if *TRACE_ALLOC.get_or_init(|| std::env::var_os("RG_TRACE_ALLOC").is_some()) {
-                    rg_log!(
+                    eprintln!(
                         "ALLOC size={size} pointer={:08x} caller={:08x}",
                         p as usize,
-                        read32(guest_ptr::<u8>(f.esp as u32))
+                        read32(f.esp as u32 as usize as *const u8)
                     );
                 }
                 ALLOCATIONS = ALLOCATIONS.wrapping_add(1);
                 if ALLOCATIONS < 12 {
-                    rg_log!("malloc({size}) -> {:08x}", f.eax);
+                    eprintln!("malloc({size}) -> {:08x}", f.eax);
                 }
                 return;
             }
             2 => {
-                let p = guest_ptr::<c_void>(f.eax as u32);
+                let p = f.eax as u32 as usize as *mut c_void;
                 if *TRACE_ALLOC.get_or_init(|| std::env::var_os("RG_TRACE_ALLOC").is_some()) {
-                    rg_log!(
+                    eprintln!(
                         "FREE pointer={:08x} size={} caller={:08x}",
                         f.eax,
                         rg_low_size(p),
-                        read32(guest_ptr::<u8>(f.esp as u32))
+                        read32(f.esp as u32 as usize as *const u8)
                     );
                 }
                 if f.eax != 0 && rg_low_free(p) == 0 {
-                    rg_log!("BLOCKED invalid guest free {:08x}", f.eax);
+                    eprintln!("BLOCKED invalid guest free {:08x}", f.eax);
                     rg_host_exit(2);
                 }
                 return;
             }
             6 => {
-                rg_log!("getcwd buffer={:08x} size={}", f.eax as u32, f.edx as u32);
+                eprintln!("getcwd buffer={:08x} size={}", f.eax as u32, f.edx as u32);
                 let size = rg_host_cwd(0, std::ptr::null_mut());
-                rg_log!("getcwd required={size}");
-                let mut buffer = guest_ptr::<c_char>(f.eax as u32);
+                eprintln!("getcwd required={size}");
+                let mut buffer = f.eax as u32 as usize as *mut c_char;
                 let mut capacity = f.edx as u32;
                 if buffer.is_null() {
                     capacity = capacity.max(size);
@@ -428,12 +423,12 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     f.eax = 0;
                     return;
                 }
-                rg_log!("getcwd result={}", CStr::from_ptr(buffer).to_string_lossy());
-                f.eax = guest_address(buffer).into();
+                eprintln!("getcwd result={}", CStr::from_ptr(buffer).to_string_lossy());
+                f.eax = buffer as u64;
                 return;
             }
             7 => {
-                f.eax = if rg_host_chdir(guest_ptr::<c_char>(f.eax as u32)) != 0 {
+                f.eax = if rg_host_chdir(f.eax as u32 as usize as *const c_char) != 0 {
                     0
                 } else {
                     u32::MAX.into()
@@ -452,7 +447,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 return;
             }
             3 => {
-                rg_log!("Native debug text display initialized");
+                eprintln!("Native debug text display initialized");
                 return;
             }
             4 => {
@@ -487,11 +482,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 }
                 if (f.eax >> 8) & 255 == 0x4c {
                     let status = f.eax as u8;
-                    rg_log!(
-                        "event=exit-request reason=original-dos-termination status={status} eax={:x} guest_sp={:x}",
-                        f.eax,
-                        f.esp
-                    );
+                    eprintln!("Original DOS termination status={status}; exiting native process");
                     rg_clock_stop();
                     maiko_runtime::host::exit_cleanly(status.into());
                 }
@@ -513,11 +504,11 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
 }
 unsafe fn blocked(service: u32, f: &GuestFrame) -> ! {
     unsafe {
-        rg_log!(
+        eprintln!(
             "BLOCKED native service={service:x} eax={:08x} edx={:08x} return={:08x}",
             f.eax,
             f.edx,
-            read32(guest_ptr::<u8>(f.esp as u32))
+            read32(f.esp as u32 as usize as *const u8)
         );
         rg_dump_calls();
         rg_host_exit(2);
@@ -529,26 +520,20 @@ unsafe fn blocked(service: u32, f: &GuestFrame) -> ! {
 /// once on the initial thread with C-compatible process arguments.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rg_native_main(argc: c_int, argv: *const *const c_char) -> c_int {
-    if let Err(error) = maiko_runtime::logging::initialize() {
-        rg_log!("event=logging-unavailable error={error}");
-    }
     unsafe {
         rg_host_setup();
         rg_crash_install();
         overlay::set_panel(overlay_panel);
         if rg_install_select(argc, argv) == 0 || rg_clock_start() == 0 {
-            maiko_runtime::logging::exit("startup-installation-or-clock", 1);
             return 1;
         }
         let storage = rg_low_alloc(65536).cast::<u8>();
         let stack = rg_low_alloc(1024 * 1024);
         if storage.is_null() || stack.is_null() {
-            maiko_runtime::logging::exit("startup-memory-allocation", 1);
             rg_clock_stop();
             return 1;
         }
         if rg_host_cwd(240, storage.cast()) == 0 {
-            maiko_runtime::logging::exit("startup-working-directory", 1);
             rg_clock_stop();
             return 1;
         }
@@ -556,38 +541,36 @@ pub unsafe extern "C" fn rg_native_main(argc: c_int, argv: *const *const c_char)
         storage
             .add(len)
             .copy_from_nonoverlapping(c"\\rgfx.exe".as_ptr().cast(), 10);
-        g_1A9EBC = guest_address(storage.add(512));
-        g_1A9EC0 = guest_address(storage);
-        g_1A9EE9 = guest_address(storage.add(256));
-        g_1A9EC8 = guest_address(stack);
-        g_1A9ECC = guest_address(stack) + 1024 * 1024;
+        g_1A9EBC = storage.add(512) as usize as u32;
+        g_1A9EC0 = storage as usize as u32;
+        g_1A9EE9 = storage.add(256) as usize as u32;
+        g_1A9EC8 = stack as usize as u32;
+        g_1A9ECC = stack as usize as u32 + 1024 * 1024;
         g_1A9EB8 = g_1A9ECC;
         let mut r = GuestRegs {
             esp: g_1A9ECC,
             eax: 255,
             ..Default::default()
         };
-        rg_log!("Entering original CRT initialization dispatcher");
-        rg_call(guest_address(rg_init as *const ()), &mut r);
-        rg_log!(
+        println!("Entering original CRT initialization dispatcher");
+        rg_call(rg_init as *const () as usize as u32, &mut r);
+        println!(
             "CRT complete argc={} argv={:08x}; entering original main",
-            g_34131C,
-            g_341320
+            g_34131C, g_341320
         );
-        rg_log!(
+        eprintln!(
             "main preconditions stack={:08x} argv0={} sizes={}/{} debug={}",
             r.esp,
-            ctext((guest_ptr::<u32>(g_341320)).read_unaligned()),
+            ctext((g_341320 as usize as *const u32).read_unaligned()),
             object_asm_size,
             object_c_size,
             debug_type
         );
         r.eax = g_34131C;
         r.edx = g_341320;
-        rg_call(guest_address(rg_main as *const ()), &mut r);
-        rg_log!("Original main returned {}", r.eax);
+        rg_call(rg_main as *const () as usize as u32, &mut r);
+        println!("Original main returned {}", r.eax);
         rg_clock_stop();
-        maiko_runtime::logging::exit("original-main-return", r.eax as i32);
         r.eax as c_int
     }
 }

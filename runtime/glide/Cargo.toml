@@ -12,8 +12,5 @@ crate-type = ["staticlib", "rlib"]
 test = false
 doctest = false
 
-[features]
-llasm = ["maiko-runtime/llasm"]
-
 [dependencies]
 maiko-runtime = { path = "../.." }

@@ -69,7 +69,7 @@ def main():
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','600'])
         for file in work.glob('*'):
             if file.suffix in ['.asm','.inc','.h']: run(['docker','cp',str(file),name+':/work/'+file.name])
-        for directory,destination in [(ROOT/'runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support'),(ROOT/'glide','/work'),(ROOT/'.cache/glide/include','/glide-sdk')]:
+        for directory,destination in [(ROOT/'runtime','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support'),(ROOT/'glide','/work'),(ROOT/'.cache/glide/include','/glide-sdk')]:
             run(['docker','cp',str(directory)+'/.',name+':'+destination])
         for include in ['extern.inc','macros.inc']:
             run(['docker','cp',str(work/include),name+':/work/'+include])
@@ -86,7 +86,7 @@ def main():
         report['sr_heap']=stage_sr_heap(name)
         report['sr_audio']=stage_sr_audio(name)
         report['sdl_audio']=stage_windows_sdl(name)
-        commands = 'sh /work/build_runtime.sh'
+        commands = 'sh /work/build_windows.sh'
         with (work/'native-build.log').open('w') as log:
             run(['docker','exec',name,'timeout','360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
         report['native_build_status']='linked'

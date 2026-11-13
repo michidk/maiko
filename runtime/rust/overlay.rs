@@ -1,6 +1,5 @@
 //! In-game overlay drawn over the finished Glide frame, toggled with the backtick key.
 //! While it is open the game receives no keyboard, mouse or controller input.
-use crate::rg_log;
 use sdl2::event::Event;
 use sdl2::keyboard::Scancode;
 use sdl2::mouse::MouseButton;
@@ -140,7 +139,7 @@ pub(crate) fn draw(video: &sdl2::VideoSubsystem, points: (u32, u32), pixels: (u3
             match unsafe { painter(video) } {
                 Ok(painter) => overlay.painter = Some(painter),
                 Err(error) => {
-                    rg_log!("Native overlay unavailable: {error}");
+                    eprintln!("Native overlay unavailable: {error}");
                     overlay.failed = true;
                     return;
                 }

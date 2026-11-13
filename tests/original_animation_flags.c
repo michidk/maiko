@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "guest_abi.h"
-#include "guest_address.h"
 #include "crash.h"
 extern void rg_animation_flags(void);
 extern uint32_t rg_tick_delta;
@@ -15,16 +14,16 @@ int main(void) {
     };
     for(unsigned i=0;i<sizeof cases/sizeof cases[0];++i) {
         memset(memory,0,8192);
-        uint32_t animation=cases[i].missing ? 0 : RG_ADDRESS(memory+4096);
+        uint32_t animation=cases[i].missing ? 0 : (uint32_t)(uintptr_t)(memory+4096);
         memcpy(memory+0x247,&animation,4);memcpy(memory+4096,&cases[i].type,2);
         memory[0xc1]=1;memory[0x1b6]=7;memory[0x1ba]=4;memory[0x1be]=3;rg_tick_delta=2;
-        GuestRegs r={0};r.eax=RG_ADDRESS(memory);r.esp=r.eax+65536;
+        GuestRegs r={0};r.eax=(uint32_t)(uintptr_t)memory;r.esp=r.eax+65536;
         r.ebx=0x12345678;r.ecx=0x23456789;r.edx=0x3456789a;
         r.esi=0x456789ab;r.edi=0x56789abc;r.ebp=0x6789abcd;
         printf("Original animation flags[%u] type=%x missing=%d\n",i,cases[i].type,cases[i].missing);
-        rg_call(RG_ADDRESS(rg_animation_flags),&r);
+        rg_call((uint32_t)(uintptr_t)rg_animation_flags,&r);
         assert(memory[0x1b6]==cases[i].expected && memory[0x1ba]==4 && memory[0x1be]==5);
-        assert(r.esp==RG_ADDRESS(memory)+65536);
+        assert(r.esp==(uint32_t)(uintptr_t)memory+65536);
         assert(r.ebx==0x12345678 && r.ecx==0x23456789 && r.edx==0x3456789a);
         assert(r.esi==0x456789ab && r.edi==0x56789abc && r.ebp==0x6789abcd);
     }

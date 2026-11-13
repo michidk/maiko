@@ -1,4 +1,3 @@
-use crate::rg_log;
 use std::ffi::{CString, c_char, c_int};
 use std::fs;
 use std::path::Path;
@@ -17,7 +16,7 @@ fn mount_installed(root: &Path, mut mount: impl FnMut(&Path) -> bool) -> i32 {
         });
         if let Some(candidate) = candidates.next() {
             if candidates.next().is_some() {
-                rg_log!(
+                eprintln!(
                     "Ambiguous installed GOG movie data in {}",
                     directory.display()
                 );
@@ -25,7 +24,7 @@ fn mount_installed(root: &Path, mut mount: impl FnMut(&Path) -> bool) -> i32 {
             }
             let path = candidate.path();
             if mount(&path) {
-                rg_log!(
+                eprintln!(
                     "GOG movies: using bundled installed data {}",
                     path.display()
                 );

@@ -138,9 +138,7 @@ fn export(
                 || name.ends_with(".so")
                 || name.contains(".so.")
                 || name.ends_with(".txt")
-                || name.ends_with(".tar.gz")
-                || name == "RUN.sh"
-                || name == "RUN.cmd")
+                || name.ends_with(".tar.gz"))
         {
             return Err(format!("Unexpected curated runtime file: {name}").into());
         }

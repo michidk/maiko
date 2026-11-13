@@ -7,15 +7,17 @@ const cancel = document.querySelector('#cancel');
 const download = document.querySelector('#download');
 const progress = document.querySelector('#progress');
 const status = document.querySelector('#status');
-const error = document.querySelector('#error');
+const logPanel = document.querySelector('#log-panel');
+const log = document.querySelector('#log');
+const copyLog = document.querySelector('#copy-log');
 let worker = null;
 let downloadUrl = null;
 const selectedTarget = () => document.querySelector('input[name="target"]:checked')?.value;
 
-const detected = detectPlatform(navigator.userAgentData?.platform ?? navigator.platform, navigator.userAgent, navigator.maxTouchPoints);
+const detected = detectPlatform(navigator.userAgentData?.platform ?? navigator.platform, navigator.userAgent);
 if (detected) document.querySelector(`input[value="${detected}"]`).checked = true;
 document.querySelector('#detection').textContent = detected
-  ? `${{ windows: 'Windows', linux: 'Linux', macos: 'macOS' }[detected]} selected automatically.`
+  ? `${detected === 'windows' ? 'Windows' : 'Linux'} selected automatically.`
   : 'Select your target system.';
 
 function resetDownload() {
@@ -26,26 +28,57 @@ function resetDownload() {
 }
 function controls() {
   const busy = worker !== null;
-  const macos = selectedTarget() === 'macos';
-  document.querySelector('#browser-build').hidden = macos;
-  document.querySelector('#browser-instructions').hidden = macos;
-  document.querySelector('#macos-guidance').hidden = !macos;
-  file.disabled = busy || macos;
+  file.disabled = busy;
   platforms.disabled = busy;
   cancel.hidden = !busy;
   progress.hidden = !busy;
-  build.disabled = busy || macos || !file.files?.length || !selectedTarget();
+  build.disabled = busy || !file.files?.length || !selectedTarget();
 }
 function stop() { worker?.terminate(); worker = null; controls(); }
+// The log keeps every progress line and any error so that it can be copied and shared whole.
+// It follows the newest line unless the reader has scrolled up to look at something earlier.
+function logLine(text) {
+  const following = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  log.textContent += (log.textContent ? '\n' : '') + text;
+  logPanel.hidden = false;
+  if (following) log.scrollTop = log.scrollHeight;
+}
+function clearLog() {
+  log.textContent = '';
+  logPanel.hidden = true;
+  copyLog.textContent = 'Copy log';
+}
+function progressLine(message) {
+  status.textContent = message;
+  logLine(message);
+}
 function failure(message) {
   stop();
   status.textContent = 'Build failed.';
-  error.textContent = message;
-  error.hidden = false;
+  logLine(`Build failed.\n${message}`);
+  log.scrollTop = log.scrollHeight;
+  logPanel.scrollIntoView({ block: 'nearest' });
 }
+async function copyTheLog() {
+  const text = log.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Without the clipboard API (or permission), select the text and use the older command.
+    const range = document.createRange();
+    range.selectNodeContents(log);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    if (!document.execCommand?.('copy')) { copyLog.textContent = 'Select and copy manually'; return; }
+  }
+  copyLog.textContent = 'Copied';
+  setTimeout(() => { copyLog.textContent = 'Copy log'; }, 2000);
+}
+copyLog.addEventListener('click', copyTheLog);
 function changed() {
   resetDownload();
-  error.hidden = true;
+  clearLog();
   status.textContent = file.files?.length ? 'Ready to build.' : '';
   controls();
 }
@@ -55,9 +88,9 @@ cancel.addEventListener('click', () => { stop(); status.textContent = 'Build can
 build.addEventListener('click', async () => {
   const input = file.files?.[0];
   const target = selectedTarget();
-  if (!input || !target || target === 'macos') return;
+  if (!input || !target) return;
   resetDownload();
-  error.hidden = true;
+  clearLog();
   if (input.size > 32 * 1024 * 1024) { failure('RGFX.EXE must be smaller than 32 MiB. Select the executable rather than an archive or disc image.'); return; }
   if (typeof WebAssembly === 'undefined' || typeof Worker === 'undefined') { failure('Your browser needs WebAssembly and module workers. Use a current desktop browser or the Rust CLI.'); return; }
   try {
@@ -66,11 +99,11 @@ build.addEventListener('click', async () => {
     const current = new Worker(workerUrl, { type: 'module' });
     worker = current;
     controls();
-    status.textContent = 'Reading your executable locally…';
+    progressLine('Reading your executable locally…');
     current.onerror = event => failure(`The build worker stopped: ${event.message || 'reload the page and try again.'}`);
     current.onmessage = ({ data }) => {
       if (worker !== current) return;
-      if (data.kind === 'progress') status.textContent = data.message;
+      if (data.kind === 'progress') progressLine(data.message);
       else if (data.kind === 'error') failure(data.message);
       else if (data.kind === 'complete') {
         downloadUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'application/zip' }));
@@ -78,7 +111,7 @@ build.addEventListener('click', async () => {
         download.download = `maiko-${target}-x64.zip`;
         download.hidden = false;
         stop();
-        status.textContent = 'Your package is ready.';
+        progressLine('Your package is ready.');
         download.focus();
       }
     };
@@ -87,5 +120,3 @@ build.addEventListener('click', async () => {
   } catch (cause) { failure(cause instanceof Error ? cause.message : String(cause)); }
 });
 window.addEventListener('pagehide', () => { stop(); resetDownload(); });
-
-controls();

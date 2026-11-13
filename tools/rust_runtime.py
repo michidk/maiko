@@ -9,8 +9,7 @@ import shutil
 import subprocess
 from .toolchain import ROOT, IMAGE, ensure_tool_image
 
-TARGETS = ('x86_64-unknown-linux-gnu', 'x86_64-pc-windows-gnu',
-           'aarch64-apple-darwin', 'x86_64-apple-darwin')
+TARGETS = ('x86_64-unknown-linux-gnu', 'x86_64-pc-windows-gnu')
 
 def cross_tools(target):
     env = os.environ.copy()
@@ -37,27 +36,30 @@ def cross_tools(target):
     return env
 
 
-def build(target, *, component="runtime", llasm=False):
+def build(target, *, component="runtime"):
     if component not in ("runtime", "host", "probe", "glide"):
         raise ValueError("Unknown Rust component: "+component)
     if target not in TARGETS:
         raise ValueError('Unsupported runtime target: '+target)
     env = cross_tools(target)
+    # Panic messages embed source paths; do not ship the build machine's folder names.
+    cargo_home = os.environ.get('CARGO_HOME') or str(Path.home()/'.cargo')
+    env['RUSTFLAGS'] = ' '.join(filter(None, [env.get('RUSTFLAGS', ''),
+        f'--remap-path-prefix={cargo_home}=/cargo', f'--remap-path-prefix={ROOT}=/maiko']))
     cargo = shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo')
     output = ROOT/'.cache/rust-runtime'
     output.mkdir(parents=True, exist_ok=True)
-    tag=target+('' if component=='runtime' else '-'+component)+('-llasm' if llasm else '')
+    tag=target+('' if component=='runtime' else '-'+component)
     with (output/(tag+'.log')).open('w') as log:
-        subprocess.run([cargo, 'build', '--locked', '--release', '--target', target, '-p', 'maiko-'+component,
-                        *(['--features', 'maiko-'+component+('/llasm-entry' if component=='host' else '/llasm')] if llasm else [])],
+        subprocess.run([cargo, 'build', '--locked', '--profile', 'runtime', '--target', target, '-p', 'maiko-'+component],
                        cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
     metadata = json.loads(subprocess.check_output(
         [cargo, 'metadata', '--format-version=1', '--no-deps', '--locked'], cwd=ROOT, text=True))
-    archive = Path(metadata['target_directory'])/target/('release/libmaiko_'+component+'.a')
-    sources = [ROOT/'build.rs', ROOT/'Cargo.toml', ROOT/'Cargo.lock', ROOT/'rust-toolchain.toml',
+    archive = Path(metadata['target_directory'])/target/('runtime/libmaiko_'+component+'.a')
+    sources = [ROOT/'Cargo.toml', ROOT/'Cargo.lock', ROOT/'rust-toolchain.toml',
                *sorted((ROOT/'runtime').rglob('*.rs')),
                *sorted((ROOT/'runtime').rglob('Cargo.toml'))]
-    report = dict(target=target, component=component, llasm=llasm, archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
+    report = dict(target=target, component=component, archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
                   source_sha256={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources})
     (output/(tag+'.json')).write_text(json.dumps(report, indent=2)+'\n')
     return archive, report
@@ -73,6 +75,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', choices=TARGETS, required=True)
     parser.add_argument('--component', choices=['runtime','host','probe','glide'], default='runtime')
-    parser.add_argument('--llasm', action='store_true')
     args = parser.parse_args()
-    print(build(args.target, component=args.component, llasm=args.llasm)[0])
+    print(build(args.target, component=args.component)[0])

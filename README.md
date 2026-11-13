@@ -12,22 +12,15 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 ## Play on Windows
 
-1. Extract the ZIP into **its own folder**, anywhere you can write to. Do not extract it into the game folder. Keep the extracted files together:
-   `redguard-native.exe`, `SDL2.dll`, `SDL2_mixer.dll`, `redguard-glide.dll`, `libwinpthread-1.dll`, `RUN.cmd`, and the licence notices.
-2. Open `RUN.cmd` in a text editor and set `GAME_DIR` to the folder that contains `RGFX.EXE`, for example:
-
-   ```bat
-   set "GAME_DIR=C:\GOG Games\Redguard\Redguard"
-   ```
-
-   Leave it empty and a folder chooser opens each time you start the game. You can also run `RUN.cmd "C:\path\to\Redguard"`.
-3. Double-click `RUN.cmd`. The original book menu opens in a window. Choose **New Game** to see the intro and start on the ship, or **Continue** to load your last save.
+1. Extract the ZIP into **its own folder**, anywhere you can write to. Do not extract it into the game folder. Keep the extracted files together: `redguard-native.exe`, `SDL2.dll`, `SDL2_mixer.dll`, `redguard-glide.dll`, `libwinpthread-1.dll` and the licence notices.
+2. Double-click `redguard-native.exe`. It finds the game on its own when it can: the folder it remembered from an earlier start, `REDGUARD_DIR` if you set it, its own folder and the folders around it, and the standard GOG folders such as `C:\GOG Games\Redguard`. Only if none of those holds the game does it ask you to choose the Redguard folder (the one with `RGFX.EXE`, or the GOG folder around it), and it remembers your choice.
+3. The original book menu opens in a window. Choose **New Game** to see the intro and start on the ship, or **Continue** to load your last save.
 
 Nothing is copied into or changed in your game folder. The controls are the original ones from the game's `KEYS.INI`, and the original options menu works.
 
 ### Fullscreen and window size
 
-By default the game opens in a window at its own size. In `RUN.cmd`, set `DISPLAY_ARGS` to `--fullscreen` for a borderless fullscreen window at your desktop resolution, or to `--window-size 1600x1200` (any width and height from 320x240 to 8192x8192) for a window of that size. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. The same options work when you start `redguard-native.exe` yourself.
+By default the game opens in a window at its own size. `--fullscreen` and `--window-size` change that; see [Command-line options](#command-line-options).
 
 ### Game controllers
 
@@ -50,23 +43,35 @@ The stick acts as digital directions, with a 50% activation threshold and a 37.5
 
 The right stick, triggers, vibration and controller-specific remapping are not implemented. Inventory and other screens that require a mouse still need one.
 
-### Startup options
+### Command-line options
 
-Set `OPTIONS` in `RUN.cmd`, or pass the options after `--game-dir` when you start `redguard-native.exe` yourself:
-
-```bat
-set "OPTIONS=--skip-intro --skip-outro --load-save 1"
+```
+redguard-native [--game-dir FOLDER | --choose-game-dir] [--user-dir FOLDER] [--cd-image FILE]
+                [--fullscreen | --window-size WIDTHxHEIGHT]
+                [--skip-intro] [--skip-outro] [--load-save N]
 ```
 
-On Linux, add them after the game folder: `sh RUN.sh /path/to/Redguard --skip-intro --load-save 1`.
+Every option is optional. With none, the program finds the game and starts the original book menu. An unknown option, or a missing or invalid value, makes the program print this usage line and exit with code 1. On Windows, to use options without a terminal, make a shortcut to `redguard-native.exe` and add them after the path in the shortcut's **Target**; from a terminal, add them to the command, for example:
+
+```bat
+redguard-native.exe --fullscreen --skip-intro --load-save 1
+```
 
 | Option | Effect |
 |---|---|
+| `--game-dir FOLDER` | Use `FOLDER`, the one containing `RGFX.EXE`, as the game folder. Nothing is searched, asked or remembered, and a folder that does not hold a recognized game is an error (exit code 1) instead of a question. |
+| `--choose-game-dir` | Ask for the game folder (a folder dialog on Windows, a prompt in the terminal on Linux) instead of using the remembered one. Cannot be combined with `--game-dir`. |
+| `--user-dir FOLDER` | Keep saves and settings in `FOLDER` instead of the `user-data` folder beside the program. |
+| `--cd-image FILE` | Read the intro and other movies from this CD image (`game.gog`, an ISO or a raw 2352-byte image) instead of the installed `game.gog` or loose movie files. Rarely needed. |
+| `--fullscreen` | Borderless fullscreen at your desktop resolution. |
+| `--window-size WIDTHxHEIGHT` | A window of this size, from 320x240 to 8192x8192, for example `--window-size 1600x1200`. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. Without either window option the window has the game's own size. |
 | `--skip-intro` | New Game starts on the ship without the intro movie. |
 | `--skip-outro` | Quitting from the book skips the book-closing animation. |
-| `--load-save N` | Loads save slot `N` (the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message in the log if that save does not exist. |
+| `--load-save N` | Load save slot `N` (0 to 999; the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message if that save does not exist. |
 
 Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.
+
+The program also reads `REDGUARD_DIR`, the game folder; `--game-dir` takes precedence over it. Two variables help when reporting problems: `RG_FLASH_LOG=1` makes the program log every frame that is a single flat colour, and `RG_CAPTURE_DIR=FOLDER` makes it save a still of the game picture there from time to time. They are not needed to play.
 
 ### Overlay
 
@@ -78,37 +83,34 @@ On a GOG installation the intro and other movies play automatically from the gam
 
 ### Saves and settings
 
-Saves and settings are kept in a `user-data` folder next to `RUN.cmd`, separate from the original game. The first time you run, any existing saves and settings from your game folder are copied there once; after that the two stay independent. To keep them somewhere else, change `USER_DIR` in `RUN.cmd`. To start fresh, delete `user-data`.
+Saves and settings are kept in a `user-data` folder next to `redguard-native.exe`, separate from the original game. The first time you run, any existing saves and settings from your game folder are copied there once; after that the two stay independent. The game folder is remembered separately, in your user profile (`%APPDATA%\maiko\config\install.json` on Windows, `~/.config/maiko/install.json` on Linux). Delete that file or start with `--choose-game-dir` to pick another. To start fresh, delete `user-data`.
 
 ### If something goes wrong
 
-`RUN.cmd` writes everything the game printed to `native-test.log` in the same folder and shows it when the game exits. Typical causes:
+If the game cannot start, it shows a message. To see everything it prints, start it from a Command Prompt in its folder and keep the output:
+
+```bat
+redguard-native.exe > maiko-log.txt 2>&1
+```
+
+Typical causes:
 
 | Message or symptom | What to do |
 |---|---|
-| The log says `Game image validation or installation selection failed` | `GAME_DIR` does not point at a folder containing a recognized `RGFX.EXE`. Check the folder; if it is right, your `RGFX.EXE` is not one of the two builds Maiko recognizes, so report its SHA-256 and where you got it. |
-| A black window or no window | Check that your graphics driver supports OpenGL, and include `native-test.log` in a report. |
+| "The game folder could not be used" | The chosen folder does not contain a recognized `RGFX.EXE`. Choose the inner Redguard folder; if it is right, your `RGFX.EXE` is not one of the two builds Maiko recognizes, so report its SHA-256 (the log prints it) and where you got it. |
+| A black window or no window | Check that your graphics driver supports OpenGL, and include the log in a report. |
 | The log says `Native audio device failed` | The game could not open a sound device. Check your default Windows playback device and include the log if it persists. |
-| A message beginning `BLOCKED` | The game reached an instruction Maiko cannot run. This is a bug: report it with `native-test.log` and what you were doing. |
+| A message beginning `BLOCKED` | The game reached an instruction Maiko cannot run. This is a bug: report it with the log and what you were doing. |
 
 ### Reporting problems
 
-Every launch writes a session log under `%LOCALAPPDATA%/Maiko/logs` on Windows,
-`$XDG_STATE_HOME/maiko/logs` or `~/.local/state/maiko/logs` on Linux, and
-`~/Library/Logs/Maiko/` on macOS. The newest seven logs are kept. Set
-`MAIKO_LOG_DIR` to choose a different directory.
-
-Open an issue and attach the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
+Open an issue and attach the log (see above). Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
 
 ## Linux
 
-The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries and require a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver.
+The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries and require a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Extract the package and run `./redguard-native` in a terminal; it looks for the game as on Windows (`~/GOG Games/Redguard`, a Wine prefix's `GOG Games/Redguard`, the default Heroic and Lutris folders and the other standard folders), asks in the terminal if it finds nothing and remembers the answer; or pass `--game-dir /path/to/Redguard`. The options above work the same way.
 
 ## Known limitations
-
-The experimental Mac test has separate [launch instructions](platforms/macos/LAUNCH.md),
-including installation selection, automatic logs and macOS's quarantine warning. Mac runtime output has been supplied by the owner; full gameplay acceptance is
-still pending. The port is outside the supported Windows/Linux packages.
 
 - **CD music needs the GOG disc image.** The music is read from the audio tracks of `game.gog`, using the `game.ins` cue sheet beside it (the GOG release has both next to the game folder). Without them the game runs without music.
 - **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.
@@ -117,6 +119,13 @@ still pending. The port is outside the supported Windows/Linux packages.
 ## Legal
 
 Maiko is released under the [MIT licence](LICENSE). It is an independent fan project and is not affiliated with or endorsed by Bethesda Softworks or ZeniMax. *The Elder Scrolls* and *Redguard* belong to their owners. This repository contains no game code or assets, and generated packages contain content derived from your own installation and must not be redistributed. You must own Redguard to use Maiko. Third-party components and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## Related projects
+
+Maiko runs the original game. Two other projects work from the same game files:
+
+- [Redguard Preservation](https://github.com/michidk/redguard-preservation): the reverse-engineered file format, engine and configuration documentation ([published docs](https://michidk.github.io/redguard-preservation/)) and the `rgpre` tool that reads and converts the game's files.
+- [Cyrus](https://github.com/michidk/cyrus) ([site](https://michidk.github.io/cyrus/)): a rebuild of Redguard in Rust and Bevy, which is early in development, and a finished [asset viewer](https://michidk.github.io/cyrus/viewer/) that opens the game's models, worlds, textures, fonts, animations, scripts and audio.
 
 ## For developers
 

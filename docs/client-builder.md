@@ -1,16 +1,10 @@
 # Build a package in your browser or terminal
 
-The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows, Linux or macOS with a manual override. Windows and Linux selections build and download a ZIP; the experimental macOS selection links to local build and launch instructions. A worker does the work entirely on your device. The page fetches static runtime kits; it never uploads your executable, generated assembly or package.
+The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows or Linux with a manual override, and downloads a ZIP. A worker does the work entirely on your device. The page fetches static runtime kits; it never uploads your executable, generated assembly or package.
 
 Both interfaces use the same Rust library for input validation and package creation. The browser uses an isolated worker; the CLI uses a private temporary directory.
 
 The initial kits predate controller support on main.
-
-macOS uses a separate LLasm/LLVM pipeline. Neither the browser worker nor the
-Rust patcher CLI currently generates Mac packages. The site does not send the
-macOS selection through the Windows/Linux compiler. See the
-[Mac build instructions](../platforms/macos/README.md) and
-[launch/log instructions](../platforms/macos/LAUNCH.md).
 
 ## Use the local CLI
 
@@ -29,11 +23,11 @@ maiko-patcher build --input /path/to/RGFX.EXE --target linux \
 
 Use `--target windows` with `windows.zip` for Windows x64. `--wasmtime PATH` selects a local Wasmtime installation. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
 
-Extract the generated ZIP into a separate writable folder. Windows users open `RUN.cmd` and choose the original game folder. Linux users run `sh RUN.sh /path/to/Redguard`; the package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory. Startup options such as `--skip-intro` go in `OPTIONS` in `RUN.cmd`, or after the game folder for `RUN.sh`; see the README.
+Extract the generated ZIP into a separate writable folder. Windows users double-click `redguard-native.exe`; Linux users run `./redguard-native` in a terminal. The program looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. The Linux package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries that the program finds beside itself. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory. Startup options such as `--skip-intro` are command-line options (a shortcut's Target on Windows); see the README.
 
 ## Runtime kits
 
-The project release provides support libraries, build tools, launchers and licence/source files. It contains no original game executable, game assets or runnable game package. A recognized executable from an owned installation is required to create a package locally.
+The project release provides support libraries, build tools and licence/source files. It contains no original game executable, game assets or runnable game package. A recognized executable from an owned installation is required to create a package locally.
 
 The builder checks the kit checksum, validates its input and verifies the resulting executable against the accepted runtime snapshot before offering a download. Changed or unrecognized inputs fail validation.
 

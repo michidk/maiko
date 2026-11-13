@@ -3,7 +3,7 @@ import argparse
 import json
 from .pipeline import ROOT
 
-PRODUCTION = ('runtime', 'platforms', 'audio', 'glide')
+PRODUCTION = ('runtime', 'linux', 'audio', 'glide')
 
 
 def inventory():
@@ -19,7 +19,8 @@ def inventory():
                 total_files=sum(map(len, groups.values())),
                 total_lines=sum(file['lines'] for files in groups.values() for file in files),
                 fixture_policy='Independent C ABI and renderer contract programs; never shipped in the game executable',
-                excluded=['external SR/SDL/OpenGLide sources', 'translated/handwritten assembly'])
+                excluded=['external SR/SDL/OpenGLide sources', 'translated/handwritten assembly',
+                          'separate Mac branch'])
 
 
 if __name__ == '__main__':

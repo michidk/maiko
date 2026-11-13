@@ -16,6 +16,7 @@ parser.add_argument('--root', type=Path, default=Path('/work'))
 parser.add_argument('--game-dir', default='/work/menu-scenario')
 parser.add_argument('--user-dir', required=True, type=Path)
 parser.add_argument('--label', default='tavern-topics')
+parser.add_argument('--tavern-marker', type=int, help='Load the tavern (world 15) at this marker instead of entering by its door')
 parser.add_argument('--island', action='store_true', help='Talk to characters on the docked island instead of entering the tavern')
 args = parser.parse_args()
 if args.user_dir.exists():
@@ -196,7 +197,25 @@ with out.with_suffix('.log').open('w') as log:
             raise AssertionError('Activation prompt never appeared')
 
         source_frame = root / 'game-frame-latest.ppm'
-        if not args.island:
+        if args.tavern_marker is not None:
+            # Start inside the tavern at an authored marker instead of walking in through the door.
+            opened = log_count('tavern.rgm')
+            console(f'load 15,{args.tavern_marker},0')
+            for _ in range(120):
+                if log_count('tavern.rgm') > opened:
+                    break
+                time.sleep(0.5)
+            assert log_count('tavern.rgm') > opened, 'Tavern did not open'
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                try:
+                    current = snap_retry('tavern-loaded')
+                    if current['ui_mode'] == 31 and current['startup_remaining'] == 0 and current['controls']['lockout'] == 0:
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.5)
+        elif not args.island:
             # Enter the tavern through its real door: load the island at the marker beside it.
             islands = log_count('island.rgm')
             console('load 1,8,0')
@@ -248,8 +267,8 @@ with out.with_suffix('.log').open('w') as log:
             return sorted(ts, key=lambda x: math.dist(pl['position'], x['position']))
 
         def approach(target):
-            stuck, last = 0, None
-            for _ in range(160):
+            stuck, last, sidesteps = 0, None, 0
+            for _ in range(500):
                 cur = snap_retry('approach')
                 pl = next(x for x in cur['actors'] if x['selected'])
                 tg = next((x for x in cur['actors'] if x['actor'] == target['actor']), None)
@@ -262,8 +281,14 @@ with out.with_suffix('.log').open('w') as log:
                 elif math.dist(pl['position'], tg['position']) > 18000:
                     key('Up', 0.15)
                     stuck = stuck + 1 if last == pl['position'] else 0
-                    if stuck >= 8:
-                        return False
+                    if stuck >= 6:
+                        # Blocked by furniture or people: turn away, walk along it, then steer back.
+                        sidesteps += 1
+                        if sidesteps > 12:
+                            return False
+                        key('Left' if sidesteps % 2 else 'Right', 0.45)
+                        key('Up', 0.7)
+                        stuck = 0
                 else:
                     return True
                 last = pl['position']

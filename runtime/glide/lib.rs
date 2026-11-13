@@ -1,7 +1,5 @@
 //! Translation of the DOS Glide ABI into the external OpenGLide host ABI.
 //! Guest pointer-bearing structures are copied into explicit native layouts.
-use maiko_runtime::memory::{guest_address, guest_ptr};
-use maiko_runtime::rg_log;
 use maiko_runtime::{
     guest::GuestFrame,
     input::{draw_overlay, overlay, rg_input_pump, rg_input_window},
@@ -126,13 +124,13 @@ unsafe extern "C" {
 }
 unsafe fn texture(address: u32) -> Texture {
     unsafe {
-        let p = guest_ptr::<u32>(address);
+        let p = address as usize as *const u32;
         Texture {
             small: p.read_unaligned() as i32,
             large: p.add(1).read_unaligned() as i32,
             aspect: p.add(2).read_unaligned() as i32,
             format: p.add(3).read_unaligned() as i32,
-            data: guest_ptr::<c_void>(p.add(4).read_unaligned()),
+            data: p.add(4).read_unaligned() as usize as *const c_void,
         }
     }
 }
@@ -189,7 +187,7 @@ impl Bridge {
             grLfbUnlock(0, 1);
             self.swaps = self.swaps.wrapping_add(1);
             if flat && !self.was_flat {
-                rg_log!(
+                eprintln!(
                     "FLASH flat frame swap={} colour={:04x}",
                     self.swaps,
                     first.unwrap_or(0)
@@ -238,11 +236,9 @@ impl Bridge {
                 out.flush()
             })();
             if result.is_ok() {
-                rg_log!(
+                eprintln!(
                     "Captured original frame {} {}x{}",
-                    self.frame,
-                    self.width,
-                    self.height
+                    self.frame, self.width, self.height
                 );
             }
             grLfbUnlock(0, 1);
@@ -255,10 +251,10 @@ impl Bridge {
             }
             // Each import has its own argument count. Do not construct a slice
             // beyond the caller's arguments at the top of the guest stack.
-            let address = guest_ptr::<u32>((f.esp as u32).wrapping_add(4));
+            let address = (f.esp as u32).wrapping_add(4) as usize as *const u32;
             let a = GuestArgs(address);
             if !self.seen[index as usize] {
-                rg_log!("Native Glide entry {index}");
+                eprintln!("Native Glide entry {index}");
                 self.seen[index as usize] = true;
             }
             match index {
@@ -286,7 +282,7 @@ impl Bridge {
                 37 => grFogMode(a[0]),
                 36 => grFogColorValue(a[0]),
                 65 => {
-                    f.eax = grSstQueryHardware(guest_ptr::<c_void>(a[0])).into();
+                    f.eax = grSstQueryHardware(a[0] as usize as *mut c_void).into();
                 }
                 75 => {
                     (self.width, self.height) = dimensions(a[1]);
@@ -296,11 +292,9 @@ impl Bridge {
                     }
                     f.eax =
                         grSstWinOpen(window as usize, a[1], a[2], a[3], a[4], a[5], a[6]).into();
-                    rg_log!(
+                    eprintln!(
                         "Native Glide window {}x{} opened={}",
-                        self.width,
-                        self.height,
-                        f.eax
+                        self.width, self.height, f.eax
                     );
                 }
                 39 => {
@@ -328,7 +322,7 @@ impl Bridge {
                     grTexDownloadMipMap(a[0], a[1], a[2], &info);
                 }
                 84 => {
-                    grTexDownloadTable(a[0], a[1], guest_ptr::<c_void>(a[2]));
+                    grTexDownloadTable(a[0], a[1], a[2] as usize as *const c_void);
                 }
                 89 => {
                     f.eax = grTexMinAddress(a[0]).into();
@@ -337,20 +331,23 @@ impl Bridge {
                     f.eax = grTexMaxAddress(a[0]).into();
                 }
                 38 => {
-                    grFogTable(guest_ptr::<u8>(a[0]));
+                    grFogTable(a[0] as usize as *const u8);
                 }
                 34 => {
                     grDrawTriangle(
-                        guest_ptr::<c_void>(a[0]),
-                        guest_ptr::<c_void>(a[1]),
-                        guest_ptr::<c_void>(a[2]),
+                        a[0] as usize as *const c_void,
+                        a[1] as usize as *const c_void,
+                        a[2] as usize as *const c_void,
                     );
                 }
                 28 => {
-                    grDrawLine(guest_ptr::<c_void>(a[0]), guest_ptr::<c_void>(a[1]));
+                    grDrawLine(
+                        a[0] as usize as *const c_void,
+                        a[1] as usize as *const c_void,
+                    );
                 }
                 31 => {
-                    grDrawPoint(guest_ptr::<c_void>(a[0]));
+                    grDrawPoint(a[0] as usize as *const c_void);
                 }
                 49 => {
                     if a[0] > 1 || (a[2] > 2 && a[2] != 255) {
@@ -360,7 +357,7 @@ impl Bridge {
                     if lock.guest != 0 {
                         return false;
                     }
-                    let info = guest_ptr::<u32>(a[5]);
+                    let info = a[5] as usize as *mut u32;
                     if info.read_unaligned() != 20 {
                         return false;
                     }
@@ -388,7 +385,7 @@ impl Bridge {
                         .copy_from_nonoverlapping(lock.native.pointer.cast(), bytes);
                     info.cast::<[u32; 5]>().write_unaligned([
                         20,
-                        guest_address(lock.guest as *const u8),
+                        lock.guest as u32,
                         lock.native.stride,
                         lock.native.mode as u32,
                         lock.native.origin as u32,
@@ -415,7 +412,7 @@ impl Bridge {
                     *lock = Lock::default();
                 }
                 _ => {
-                    rg_log!("Unsupported Glide entry {index}");
+                    eprintln!("Unsupported Glide entry {index}");
                     return false;
                 }
             }

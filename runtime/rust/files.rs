@@ -1,8 +1,6 @@
 //! Original DOS file handles and DTA searches, with one host-independent policy.
 use crate::guest::GuestFrame;
 use crate::media::rg_cd_service;
-use crate::memory::guest_ptr;
-use crate::rg_log;
 use crate::storage::{self, STORAGE, Storage};
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::OpenOptions;
@@ -49,8 +47,11 @@ fn dos_error(error: io::Error) -> u32 {
     match error.kind() {
         io::ErrorKind::NotFound => 2,
         io::ErrorKind::NotADirectory => 3,
-        _ if crate::os::too_many_open_files(&error) => 4,
-        _ => 5,
+        _ => match error.raw_os_error() {
+            Some(24 | 23) if cfg!(unix) => 4,
+            Some(4) if cfg!(windows) => 4,
+            _ => 5,
+        },
     }
 }
 
@@ -96,11 +97,54 @@ fn dos_time(meta: &Metadata) -> (u16, u16) {
     else {
         return (0, 0);
     };
-    crate::os::dos_timestamp(seconds)
+    #[cfg(unix)]
+    {
+        let seconds = seconds as libc::time_t;
+        let mut tm = std::mem::MaybeUninit::<libc::tm>::zeroed();
+        if unsafe { libc::localtime_r(&seconds, tm.as_mut_ptr()) }.is_null() {
+            return (0, 0);
+        }
+        let tm = unsafe { tm.assume_init() };
+        if !(80..208).contains(&tm.tm_year) {
+            return (0, 0);
+        }
+        (
+            ((tm.tm_hour << 11) | (tm.tm_min << 5) | (tm.tm_sec / 2)) as u16,
+            (((tm.tm_year - 80) << 9) | ((tm.tm_mon + 1) << 5) | tm.tm_mday) as u16,
+        )
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::FILETIME;
+        use windows_sys::Win32::Storage::FileSystem::FileTimeToLocalFileTime;
+        use windows_sys::Win32::System::WindowsProgramming::FileTimeToDosDateTime;
+        let value = (seconds + 11644473600) * 10000000;
+        let time = FILETIME {
+            dwLowDateTime: value as u32,
+            dwHighDateTime: (value >> 32) as u32,
+        };
+        let mut local = std::mem::MaybeUninit::<FILETIME>::zeroed();
+        let (mut date, mut clock) = (0, 0);
+        unsafe {
+            if FileTimeToLocalFileTime(&time, local.as_mut_ptr()) != 0 {
+                FileTimeToDosDateTime(local.as_ptr(), &mut date, &mut clock);
+            }
+        }
+        (clock, date)
+    }
 }
 
-fn attributes(meta: &Metadata, name: &str) -> u8 {
-    crate::os::file_attributes(meta, name)
+fn attributes(meta: &Metadata, _name: &str) -> u8 {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        (meta.file_attributes() & 0x3f) as u8
+    }
+    #[cfg(unix)]
+    {
+        u8::from(meta.is_dir()) * 16
+            + u8::from(_name.starts_with('.') && _name != "." && _name != "..") * 2
+    }
 }
 
 fn open_file(
@@ -196,7 +240,7 @@ impl Files {
                         writable: access != 0,
                     });
                     frame.success(slot as u32);
-                    rg_log!("OPEN {request} -> {slot}");
+                    eprintln!("OPEN {request} -> {slot}");
                 } else {
                     frame.error(4)
                 }
@@ -229,7 +273,8 @@ impl Files {
                     parent.remove_file(leaf)
                 }
                 0x56 => {
-                    let target = unsafe { storage::path_from_c(guest_ptr::<_>(frame.edi as u32)) }?;
+                    let target =
+                        unsafe { storage::path_from_c(frame.edi as u32 as usize as *const _) }?;
                     let relative = storage.relative(&target.to_string_lossy())?;
                     let (destination, name, _) = storage.parent(&relative, true, true)?;
                     if !parent
@@ -247,7 +292,7 @@ impl Files {
             Ok(()) => frame.success(0),
             Err(e) => frame.error(dos_error(e)),
         }
-        rg_log!(
+        eprintln!(
             "FILE mutation={op:02x} path={request} result={} carry={}",
             frame.eax,
             frame.flags & 1
@@ -264,7 +309,7 @@ impl Files {
                 frame.error(4);
                 return true;
             };
-            let request = unsafe { storage::path_from_c(guest_ptr::<_>(frame.edx as u32)) };
+            let request = unsafe { storage::path_from_c(frame.edx as u32 as usize as *const _) };
             let entries =
                 request.and_then(|p| entries(storage, &p.to_string_lossy(), frame.ecx as u32));
             let entries = match entries {
@@ -319,13 +364,13 @@ impl Files {
         let storage = storage.as_ref();
         match op {
             0x1a => {
-                self.dta = guest_ptr::<u8>(frame.edx as u32) as usize;
+                self.dta = frame.edx as u32 as usize;
                 return true;
             }
             0x4e | 0x4f => return self.search(frame, op, storage),
             0x39 | 0x3a | 0x3c | 0x3d | 0x41 | 0x43 | 0x56 => {
                 let request =
-                    match unsafe { storage::path_from_c(guest_ptr::<_>(frame.edx as u32)) } {
+                    match unsafe { storage::path_from_c(frame.edx as u32 as usize as *const _) } {
                         Ok(p) => p,
                         Err(e) => {
                             frame.error(dos_error(e));
@@ -358,12 +403,37 @@ impl Files {
                 return true;
             }
             0x19 => {
-                let drive = crate::os::current_drive(storage.is_some());
+                #[cfg(unix)]
+                let drive = 2;
+                #[cfg(windows)]
+                let mut drive = 2;
+                #[cfg(windows)]
+                if storage.is_none()
+                    && let Ok(cwd) = std::env::current_dir()
+                {
+                    let text = cwd.to_string_lossy();
+                    if text.as_bytes().get(1) == Some(&b':') {
+                        drive = u64::from(text.as_bytes()[0].to_ascii_uppercase() - b'A');
+                    }
+                }
                 frame.eax = (frame.eax & !255) | drive;
                 return true;
             }
             0x0e => {
-                let count = crate::os::select_drive((frame.edx & 255) as u8, storage.is_some());
+                #[cfg(unix)]
+                let count = 3u64;
+                #[cfg(windows)]
+                let mut count = 4u64;
+                #[cfg(windows)]
+                if storage.is_none() {
+                    let drive = (frame.edx & 255) as u8;
+                    if drive < 26 {
+                        let _ = std::env::set_current_dir(format!("{}:", char::from(b'A' + drive)));
+                    }
+                    let drives =
+                        unsafe { windows_sys::Win32::Storage::FileSystem::GetLogicalDrives() };
+                    count = u64::from(32 - drives.leading_zeros());
+                }
                 frame.eax = (frame.eax & !255) | count;
                 return true;
             }
@@ -374,7 +444,7 @@ impl Files {
             0x40 if handle == 1 || handle == 2 => {
                 let data = unsafe {
                     std::slice::from_raw_parts(
-                        guest_ptr::<u8>(frame.edx as u32),
+                        frame.edx as u32 as usize as *const u8,
                         frame.ecx as u32 as usize,
                     )
                 };
@@ -421,7 +491,7 @@ impl Files {
             0x3f => {
                 let data = unsafe {
                     std::slice::from_raw_parts_mut(
-                        guest_ptr::<u8>(frame.edx as u32),
+                        frame.edx as u32 as usize as *mut u8,
                         frame.ecx as u32 as usize,
                     )
                 };
@@ -443,7 +513,7 @@ impl Files {
                 } else {
                     let data = unsafe {
                         std::slice::from_raw_parts(
-                            guest_ptr::<u8>(frame.edx as u32),
+                            frame.edx as u32 as usize as *const u8,
                             frame.ecx as u32 as usize,
                         )
                     };
@@ -488,7 +558,7 @@ impl Files {
 }
 
 fn entries(storage: Option<&Storage>, request: &str, filter: u32) -> io::Result<Vec<Entry>> {
-    rg_log!("FIND {request} attributes={:02x}", filter & 255);
+    eprintln!("FIND {request} attributes={:02x}", filter & 255);
     let normalized = request.replace('\\', "/");
     let (parent, pattern) = normalized.rsplit_once('/').unwrap_or((".", &normalized));
     let parent = if parent.is_empty() { "C:/" } else { parent };
