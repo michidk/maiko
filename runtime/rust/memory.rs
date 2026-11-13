@@ -1,4 +1,5 @@
 //! Guest-addressable allocation tracking around the pinned external SR heap.
+use crate::rg_log;
 use std::ffi::{c_int, c_void};
 use std::sync::Mutex;
 #[cfg(feature = "llasm")]
@@ -46,7 +47,7 @@ pub fn guest_address<T>(pointer: *const T) -> u32 {
     }
     let mut address = 0;
     if unsafe { rg_guest_pointer(pointer.cast(), 0, &mut address) } == 0 {
-        eprintln!("BLOCKED host pointer outside guest address window: {pointer:p}");
+        rg_log!("BLOCKED host pointer outside guest address window: {pointer:p}");
         std::process::abort();
     }
     address

@@ -2,6 +2,7 @@
 use crate::guest::GuestFrame;
 use crate::media::rg_cd_service;
 use crate::memory::guest_ptr;
+use crate::rg_log;
 use crate::storage::{self, STORAGE, Storage};
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::OpenOptions;
@@ -195,7 +196,7 @@ impl Files {
                         writable: access != 0,
                     });
                     frame.success(slot as u32);
-                    eprintln!("OPEN {request} -> {slot}");
+                    rg_log!("OPEN {request} -> {slot}");
                 } else {
                     frame.error(4)
                 }
@@ -246,7 +247,7 @@ impl Files {
             Ok(()) => frame.success(0),
             Err(e) => frame.error(dos_error(e)),
         }
-        eprintln!(
+        rg_log!(
             "FILE mutation={op:02x} path={request} result={} carry={}",
             frame.eax,
             frame.flags & 1
@@ -487,7 +488,7 @@ impl Files {
 }
 
 fn entries(storage: Option<&Storage>, request: &str, filter: u32) -> io::Result<Vec<Entry>> {
-    eprintln!("FIND {request} attributes={:02x}", filter & 255);
+    rg_log!("FIND {request} attributes={:02x}", filter & 255);
     let normalized = request.replace('\\', "/");
     let (parent, pattern) = normalized.rsplit_once('/').unwrap_or((".", &normalized));
     let parent = if parent.is_empty() { "C:/" } else { parent };

@@ -1,6 +1,6 @@
 # macOS backend work
 
-For the personal test ZIP, follow [Launching the Mac test](LAUNCH.md), including
+For the runtime ZIP, follow [Launching Maiko on macOS](LAUNCH.md), including
 the package-specific quarantine command if macOS blocks opening it.
 
 M-HT/SR's [Albion build configuration](https://github.com/M-HT/SR/blob/ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3/games/Albion/SR-Main/SConstruct#L259) selects llasm/LLVM for both Intel and ARM64 Macs. Apple Silicon can use native ARM code through that route. Our Redguard macOS game port is incomplete.
@@ -28,10 +28,31 @@ python3 -m tools.check_macos_backend \
 
 This builds `redguard-native-arm64` and `redguard-native-x86_64` with the Rust CPU-state host, upstream offset heap, audio support and renderer. It requires at least 60 GB of free disk space and gives the offline compiler container 6 GB of memory. The full engine uses `opt -O2` and `llc -O=2`; the smaller diagnostics use O3. A successful link sets `macos_game_built`, while `macos_runtime_verified` and `full_game_verified` remain false.
 
-Both complete engine binaries have cross-linked. The same CPU-state/offset backend starts the original engine on Linux, and original clipping, numeric parsing, packed vertex, animation flags and attribute tests pass. The strict Linux book-menu check verifies fresh-start selection, disabled Continue, Options navigation, different rendered pages and clean original Quit. A bounded New Game probe reaches the ship, opens and closes inventory, delivers sword and attack inputs and observes vertical jump motion. Dummy audio and software GL were used, so this does not establish hardware audio or rendering. An upstream emitter fix preserves indexed x87 store values while calculating their relocated destinations; without it, the camera translation became zero and the menu rendered gray. The instruction fixture covers those floating, integer, control-word and status-word stores. No game or diagnostic has run on macOS.
+Both complete engine binaries have cross-linked. The same CPU-state/offset backend starts the original engine on Linux, and original clipping, numeric parsing, packed vertex, animation flags and attribute tests pass. The strict Linux book-menu check verifies fresh-start selection, disabled Continue, Options navigation, different rendered pages and clean original Quit. A bounded New Game probe reaches the ship, opens and closes inventory, delivers sword and attack inputs and observes vertical jump motion. Dummy audio and software GL were used, so this does not establish hardware audio or rendering. An upstream emitter fix preserves indexed x87 store values while calculating their relocated destinations; without it, the camera translation became zero and the menu rendered gray. The instruction fixture covers those floating, integer, control-word and status-word stores. The owner has supplied Mac runtime output showing movie/audio activity and a clean exit path. Full gameplay acceptance on macOS remains pending.
 
 With the original disc image present, the Linux offset backend decodes movie PCM, skips the intro's configured frame points, detects CD music tracks and reaches initialized ship gameplay. A missing zero-flag producer for absent Smacker audio tracks previously sent a zero sample rate to the audio service; the flag metadata now preserves that producer at the shared branch. The longer movie probe still times out at its final Quit step, which also reproduces on the existing native Linux backend. It does not pass the complete movie acceptance check.
 
-The triangle test needs the matching `libredguard-glide-ARCH.dylib` renamed to `libredguard-glide.dylib` beside it and the official SDL2 framework in a `Frameworks` directory beside it. It writes `backend-smoke.ppm` in the working directory. Full-game builds also stage a `runtime/` directory with both executables, a universal renderer, SDL frameworks and `RUN.command`. The launcher chooses the host architecture and resolves the adjacent `game/` directory relative to itself. The SDK and compiler remain outside that directory. This staging folder still needs the owned game files and licence notices before packaging.
+The triangle test needs the matching `libredguard-glide-ARCH.dylib` renamed to
+`libredguard-glide.dylib` beside it and the official SDL2 framework in an adjacent
+`Frameworks` directory. It writes `backend-smoke.ppm` in the working directory.
+Full-game builds stage `runtime/redguard-native` as a universal executable, a
+universal renderer, SDL frameworks and launch instructions. No command launcher,
+original installation, disc image, SDK or compiler belongs in that runtime ZIP.
+The executable discovers an adjacent or remembered owned installation and uses
+macOS's built-in folder picker when necessary. Saves and logs use the user's
+standard directories. See [launch instructions](LAUNCH.md).
 
-For a personal test ZIP, add the owned installation under `runtime/game/`, including `game.gog` and `game.ins` for disc media. Include Maiko, SR, OpenGLide, SDL, SDL_mixer and Rust dependency notices, and provide the renderer's corresponding source and build files alongside the ZIP. Preserve the framework symlinks and the launcher's executable permission in the archive. The resulting package can be extracted and launched without copying a separate Windows installation. Mark it as cross-built and unverified on macOS until a real Mac run passes. Game assets belong only in an authorized personal test download, not Git or source archives.
+After adding complete `LICENSES.txt` notices for Maiko, SR, OpenGLide, SDL,
+SDL_mixer and Rust dependencies, package the runtime with:
+
+```sh
+cargo run --locked -p maiko-patcher --bin maiko-macos-package -- \
+  artifacts/<timestamp>-macos-backend/runtime redguard-macos-runtime.zip
+```
+
+The packager accepts only the executable, renderer, two SDL frameworks,
+`README.md` and `LICENSES.txt`. It rejects extra top-level files, game folders,
+disc media and command launchers. Framework symlinks must stay inside the runtime
+directory; the archive preserves them and executable permissions. Supply the
+renderer's corresponding source and build files alongside the ZIP, as required
+by its licence. Original game files must never be added to runtime packages.

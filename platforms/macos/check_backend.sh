@@ -72,14 +72,14 @@ if [ -f /game/rgfx.llasm ]; then
         rm -r "$directory"
     done
     mkdir -p /results/runtime/Frameworks
-    cp /results/redguard-native-* /results/runtime/
+    llvm-lipo-14 -create /results/redguard-native-x86_64 /results/redguard-native-arm64 \
+        -output /results/runtime/redguard-native
+    chmod +x /results/runtime/redguard-native
     llvm-lipo-14 -create /results/libredguard-glide-x86_64.dylib \
         /results/libredguard-glide-arm64.dylib \
         -output /results/runtime/libredguard-glide.dylib
     cp -a /frameworks/SDL2.framework /frameworks/SDL2_mixer.framework \
         /results/runtime/Frameworks/
-    cp /work/platforms/macos/RUN.command /results/runtime/
     cp /work/platforms/macos/LAUNCH.md /results/runtime/README.md
-    chmod +x /results/runtime/RUN.command
     rm /results/libmaiko-host-*.a /results/game.bc
 fi

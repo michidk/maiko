@@ -31,6 +31,7 @@ impl Report {
     }
     pub(crate) fn output(&self) {
         crate::os::write_stderr(&self.bytes[..self.length]);
+        crate::logging::fatal_console(&self.bytes[..self.length]);
     }
 }
 impl Write for Report {

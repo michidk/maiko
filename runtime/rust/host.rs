@@ -7,10 +7,12 @@ pub extern "C" fn rg_host_setup() {
 }
 /// Run registered CRT cleanup callbacks on every host.
 pub fn exit_cleanly(code: i32) -> ! {
+    crate::logging::exit("crt-cleanup", code);
     unsafe { libc::exit(code) }
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_host_exit(code: u32) {
+    crate::logging::exit("host-termination", code as i32);
     os::exit(code);
 }
 #[unsafe(no_mangle)]

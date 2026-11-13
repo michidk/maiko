@@ -1,6 +1,7 @@
 //! Translation of the DOS Glide ABI into the external OpenGLide host ABI.
 //! Guest pointer-bearing structures are copied into explicit native layouts.
 use maiko_runtime::memory::{guest_address, guest_ptr};
+use maiko_runtime::rg_log;
 use maiko_runtime::{
     guest::GuestFrame,
     input::{draw_overlay, overlay, rg_input_pump, rg_input_window},
@@ -188,7 +189,7 @@ impl Bridge {
             grLfbUnlock(0, 1);
             self.swaps = self.swaps.wrapping_add(1);
             if flat && !self.was_flat {
-                eprintln!(
+                rg_log!(
                     "FLASH flat frame swap={} colour={:04x}",
                     self.swaps,
                     first.unwrap_or(0)
@@ -237,9 +238,11 @@ impl Bridge {
                 out.flush()
             })();
             if result.is_ok() {
-                eprintln!(
+                rg_log!(
                     "Captured original frame {} {}x{}",
-                    self.frame, self.width, self.height
+                    self.frame,
+                    self.width,
+                    self.height
                 );
             }
             grLfbUnlock(0, 1);
@@ -255,7 +258,7 @@ impl Bridge {
             let address = guest_ptr::<u32>((f.esp as u32).wrapping_add(4));
             let a = GuestArgs(address);
             if !self.seen[index as usize] {
-                eprintln!("Native Glide entry {index}");
+                rg_log!("Native Glide entry {index}");
                 self.seen[index as usize] = true;
             }
             match index {
@@ -293,9 +296,11 @@ impl Bridge {
                     }
                     f.eax =
                         grSstWinOpen(window as usize, a[1], a[2], a[3], a[4], a[5], a[6]).into();
-                    eprintln!(
+                    rg_log!(
                         "Native Glide window {}x{} opened={}",
-                        self.width, self.height, f.eax
+                        self.width,
+                        self.height,
+                        f.eax
                     );
                 }
                 39 => {
@@ -410,7 +415,7 @@ impl Bridge {
                     *lock = Lock::default();
                 }
                 _ => {
-                    eprintln!("Unsupported Glide entry {index}");
+                    rg_log!("Unsupported Glide entry {index}");
                     return false;
                 }
             }

@@ -14,3 +14,9 @@ pub(crate) use memory::*;
 pub(crate) use window::renderer_window;
 
 pub(crate) const NAME: &str = "Windows native x64";
+
+mod logging;
+pub(crate) use logging::{capture_output, write_console};
+
+mod paths;
+pub(crate) use paths::{default_game, default_user_directory, log_directory, remember_game};

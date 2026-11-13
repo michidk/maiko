@@ -1,4 +1,5 @@
 //! Installation selection and exact original-executable validation on native hosts.
+use crate::rg_log;
 use crate::{media::rg_cd_mount, storage};
 use sha2::{Digest, Sha256};
 use std::ffi::{OsString, c_char, c_int};
@@ -122,14 +123,14 @@ fn validate(path: &Path) -> io::Result<()> {
         PRIMARY => 0,
         ALTERNATE => 1,
         _ => {
-            eprintln!("Unsupported RGFX.EXE build: {hex}; supported {PRIMARY} or {ALTERNATE}");
+            rg_log!("Unsupported RGFX.EXE build: {hex}; supported {PRIMARY} or {ALTERNATE}");
             return Err(storage::denied());
         }
     };
     unsafe {
         rg_exe_variant = variant;
     }
-    eprintln!("Recognized RGFX.EXE variant={variant} sha256={hex}");
+    rg_log!("Recognized RGFX.EXE variant={variant} sha256={hex}");
     Ok(())
 }
 fn adjacent_game(directory: &Path) -> Option<PathBuf> {
@@ -146,7 +147,7 @@ fn select(selection: Selection) -> io::Result<()> {
     } else {
         let executable = std::env::current_exe()?;
         let directory = executable.parent().ok_or_else(storage::absent)?;
-        if let Some(game) = adjacent_game(directory) {
+        if let Some(game) = adjacent_game(directory).or_else(crate::os::default_game) {
             game
         } else {
             choose()?
@@ -161,13 +162,16 @@ fn select(selection: Selection) -> io::Result<()> {
         (root.resolved("C:\\RGFX.EXE")?, root.game.path.clone())
     };
     validate(&image)?;
-    if let Some(user) = selection.user {
+    if let Some(user) = selection.user.or_else(crate::os::default_user_directory) {
         storage::STORAGE
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .as_mut()
             .ok_or_else(storage::absent)?
             .initialize_user(&user)?;
+    }
+    if let Err(error) = crate::os::remember_game(&game) {
+        rg_log!("event=installation-cache-write-failed error={error}");
     }
     if let Some(slot) = selection.load_save {
         let save = storage::STORAGE
@@ -177,7 +181,7 @@ fn select(selection: Selection) -> io::Result<()> {
             .ok_or_else(storage::absent)?
             .resolved(&format!("C:\\SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV"));
         if !save.is_ok_and(|save| save.is_file()) {
-            eprintln!("Save slot {slot} not found: SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV");
+            rg_log!("Save slot {slot} not found: SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV");
             return Err(storage::absent());
         }
     }
@@ -202,7 +206,7 @@ fn select(selection: Selection) -> io::Result<()> {
     {
         return Err(storage::denied());
     }
-    eprintln!("Verified original game directory: {}", game.display());
+    rg_log!("Verified original game directory: {}", game.display());
     Ok(())
 }
 /// # Safety
@@ -229,11 +233,11 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
                 unsafe { storage::path_from_c(arg) }.map(PathBuf::into_os_string)
             })
             .collect::<io::Result<Vec<_>>>()?;
-        let selection=Selection::parse(args).inspect_err(|_| eprintln!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
+        let selection=Selection::parse(args).inspect_err(|_| rg_log!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
         select(selection)
     })();
     if let Err(e) = &result {
-        eprintln!(
+        rg_log!(
             "Game image validation or installation selection failed before original code execution: {e}"
         );
     }

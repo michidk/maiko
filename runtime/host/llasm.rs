@@ -3,6 +3,7 @@
 use super::{GuestFrame, GuestRegs, guest_base, rg_host_service};
 use maiko_runtime::llasm::Cpu;
 use maiko_runtime::memory::{rg_low_alloc, rg_low_free};
+use maiko_runtime::rg_log;
 
 unsafe extern "C" {
     fn c_rg_dispatch(cpu: *mut Cpu);
@@ -27,7 +28,7 @@ pub unsafe extern "C" fn rg_call(target: u32, registers: *mut GuestRegs) {
     // CPU would truncate those pointers outside the offset window.
     let state = rg_low_alloc(std::mem::size_of::<Cpu>()).cast::<Cpu>();
     if state.is_null() {
-        eprintln!("BLOCKED could not allocate guest-addressable CPU state");
+        rg_log!("BLOCKED could not allocate guest-addressable CPU state");
         std::process::abort();
     }
     let cpu = Cpu {
@@ -122,43 +123,43 @@ pub extern "C" fn rg_llasm_variant() -> u32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_translation_trap(address: u32) -> ! {
-    eprintln!("BLOCKED unsupported original instruction at {address:08x}");
+    rg_log!("BLOCKED unsupported original instruction at {address:08x}");
     std::process::abort()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn X86_InPortProcedure(port: u16, size: u32) -> ! {
-    eprintln!("BLOCKED untranslated hardware input port={port:04x} size={size}");
+    rg_log!("BLOCKED untranslated hardware input port={port:04x} size={size}");
     std::process::abort()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn X86_OutPortProcedure(port: u16, size: u32, value: u32) -> ! {
-    eprintln!("BLOCKED untranslated hardware output port={port:04x} size={size} value={value:08x}");
+    rg_log!("BLOCKED untranslated hardware output port={port:04x} size={size} value={value:08x}");
     std::process::abort()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn X86_ReadFsDword(address: u32) -> ! {
-    eprintln!("BLOCKED untranslated FS read address={address:08x}");
+    rg_log!("BLOCKED untranslated FS read address={address:08x}");
     std::process::abort()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn X86_WriteFsDword(address: u32, value: u32) -> ! {
-    eprintln!("BLOCKED untranslated FS write address={address:08x} value={value:08x}");
+    rg_log!("BLOCKED untranslated FS write address={address:08x} value={value:08x}");
     std::process::abort()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn X86_ReadMemProcedure(address: u32, size: u32) -> ! {
-    eprintln!("BLOCKED untranslated DOS memory read address={address:08x} size={size}");
+    rg_log!("BLOCKED untranslated DOS memory read address={address:08x} size={size}");
     std::process::abort()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn X86_WriteMemProcedure(address: u32, size: u32, value: u32) -> ! {
-    eprintln!(
+    rg_log!(
         "BLOCKED untranslated DOS memory write address={address:08x} size={size} value={value:08x}"
     );
     std::process::abort()

@@ -9,6 +9,7 @@
 //! has to be consistent; it is converted to 2352-byte sectors at 75 per second.
 use crate::guest::GuestFrame;
 use crate::host::rg_host_readable;
+use crate::rg_log;
 use std::ffi::c_int;
 use std::fs::File;
 use std::io;
@@ -182,7 +183,7 @@ impl Player {
             self.state = None;
             return self.status();
         }
-        eprintln!(
+        rg_log!(
             "CD music: playing track {} ({start_ms} ms to {end_ms} ms)",
             disc.track_at(start)
         );
@@ -287,11 +288,11 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
             if player.disc.is_none() {
                 match locate(Path::new(".")).map(|(image, cue)| Disc::open(&image, &cue)) {
                     Some(Ok(disc)) => {
-                        eprintln!("CD music: {} tracks on the game disc image", disc.tracks());
+                        rg_log!("CD music: {} tracks on the game disc image", disc.tracks());
                         player.disc = Some(disc);
                     }
-                    Some(Err(error)) => eprintln!("CD music unavailable: {error}"),
-                    None => eprintln!("CD music unavailable: no game.gog with game.ins found"),
+                    Some(Err(error)) => rg_log!("CD music unavailable: {error}"),
+                    None => rg_log!("CD music unavailable: no game.gog with game.ins found"),
                 }
             }
             u64::from(if player.disc.is_some() { HANDLE } else { 0 })

@@ -4,7 +4,7 @@
 |---|---|
 | `linux/` | Native ELF renderer and runtime builds, function checks, POSIX ABI headers and `RUN.sh` |
 | `windows/` | MinGW runtime build and Wine checks, Windows storage ABI header, `RUN.cmd` and base compiler container |
-| `macos/` | LLasm backend checks, renderer cross-build, Darwin probe header, `RUN.command` and [launch instructions](macos/LAUNCH.md) |
+| `macos/` | LLasm backend checks, renderer cross-build, Darwin probe header, universal executable staging and [launch instructions](macos/LAUNCH.md) |
 
 Shared build orchestration remains in `tools/`. Its commands run from the
 repository root, for example `python3 -m tools.build_linux --help` and

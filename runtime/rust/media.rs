@@ -1,6 +1,7 @@
 //! Read-only ISO root files exposed to the original DOS movie player.
 use crate::guest::GuestFrame;
 use crate::memory::guest_ptr;
+use crate::rg_log;
 use std::ffi::{CStr, c_char, c_int};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -195,7 +196,7 @@ impl Media {
             } else if let Some(slot) = self.handles.iter().position(Option::is_none) {
                 self.handles[slot] = Some(Handle { entry, position: 0 });
                 frame.success(FIRST_HANDLE + slot as u32);
-                eprintln!(
+                rg_log!(
                     "OPEN D:\\{} -> {} (CD image)",
                     String::from_utf8_lossy(&self.entries[entry].name),
                     FIRST_HANDLE + slot as u32
@@ -302,10 +303,10 @@ pub unsafe extern "C" fn rg_cd_mount(path: *const c_char) -> c_int {
         return 0;
     };
     let Some(opened) = Media::open(&native_path) else {
-        eprintln!("CD image unavailable or invalid: {}", native_path.display());
+        rg_log!("CD image unavailable or invalid: {}", native_path.display());
         return 0;
     };
-    eprintln!(
+    rg_log!(
         "Native CD image mounted read-only as D: layout={}/{} root_files={}",
         opened.sector,
         opened.header,

@@ -93,7 +93,12 @@ Saves and settings are kept in a `user-data` folder next to `RUN.cmd`, separate 
 
 ### Reporting problems
 
-Open an issue and attach `native-test.log`. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
+Every launch writes a session log under `%LOCALAPPDATA%/Maiko/logs` on Windows,
+`$XDG_STATE_HOME/maiko/logs` or `~/.local/state/maiko/logs` on Linux, and
+`~/Library/Logs/Maiko/` on macOS. The newest seven logs are kept. Set
+`MAIKO_LOG_DIR` to choose a different directory.
+
+Open an issue and attach the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
 
 ## Linux
 
@@ -102,8 +107,8 @@ The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages.
 ## Known limitations
 
 The experimental Mac test has separate [launch instructions](platforms/macos/LAUNCH.md),
-including how to handle macOS's download quarantine warning. It has not yet been
-verified on a Mac and is outside the supported Windows/Linux packages.
+including installation selection, automatic logs and macOS's quarantine warning. Mac runtime output has been supplied by the owner; full gameplay acceptance is
+still pending. The port is outside the supported Windows/Linux packages.
 
 - **CD music needs the GOG disc image.** The music is read from the audio tracks of `game.gog`, using the `game.ins` cue sheet beside it (the GOG release has both next to the game folder). Without them the game runs without music.
 - **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.

@@ -3,6 +3,7 @@
 //! is opened without following links; installation data is never writable.
 use crate::os::{canonical, inside, path_cstring, sync_directory};
 pub(crate) use crate::os::{path_from_c, rename_noreplace};
+use crate::rg_log;
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, OpenOptions};
@@ -200,11 +201,11 @@ impl Storage {
                 if let Ok((_, _, path)) = self.parent(&format!("{folder}{leaf}"), false, false)
                     && std::fs::metadata(&path).is_ok_and(|m| m.is_file())
                 {
-                    eprintln!("MOVIE loose {request} -> {}", path.display());
+                    rg_log!("MOVIE loose {request} -> {}", path.display());
                     return Ok(path);
                 }
             }
-            eprintln!(
+            rg_log!(
                 "MOVIE missing {request}; searched GAME_DIR, MOVIES, ANIMS, VIDEO; no installed file found"
             );
             return Err(absent());
@@ -283,7 +284,7 @@ impl Storage {
             path: target,
             dir,
         });
-        eprintln!(
+        rg_log!(
             "Isolated native user storage: {}",
             self.user.as_ref().unwrap().path.display()
         );
@@ -465,7 +466,7 @@ pub unsafe extern "C" fn rg_user_storage_init(game: *const c_char, user: *const 
         Ok::<_, io::Error>(())
     })();
     if let Err(error) = &result {
-        eprintln!("Native user storage initialization failed: {error}");
+        rg_log!("Native user storage initialization failed: {error}");
     }
     result.is_ok() as c_int
 }

@@ -27,7 +27,7 @@ pub(crate) unsafe fn disk(drive: u32, available: *mut u64, total: *mut u64) -> c
         let (available_blocks, total_blocks, block_size) = (
             u64::from(info.f_bavail),
             u64::from(info.f_blocks),
-            u64::from(info.f_frsize),
+            info.f_frsize,
         );
         #[cfg(not(target_os = "macos"))]
         let (available_blocks, total_blocks, block_size) =

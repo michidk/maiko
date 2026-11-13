@@ -14,7 +14,7 @@ class SourceManifest(unittest.TestCase):
     def test_changed_and_added_sources_are_rejected_but_bytecode_is_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
+            for name in ['build.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
                          'tools/check_macos_backend.py', 'tools/rust_runtime.py',
                          'tools/sr_heap.py', 'tools/sr_audio.py',
                          'platforms/macos/test.c', 'runtime/test.h',

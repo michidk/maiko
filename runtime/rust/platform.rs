@@ -3,6 +3,7 @@ use crate::guest::GuestFrame;
 use crate::input::rg_mouse_service;
 use crate::memory::rg_low_alloc;
 use crate::memory::{guest_address, guest_ptr};
+use crate::rg_log;
 use std::ffi::{c_char, c_int};
 use std::sync::Mutex;
 
@@ -50,7 +51,7 @@ pub unsafe extern "C" fn rg_int386(frame: *mut GuestFrame) -> c_int {
             unsafe {
                 (guest_ptr::<[u32; 12]>(registers[5])).write_unaligned(info);
             }
-            eprintln!("Native guest memory largest={largest} available_pages={pages}");
+            rg_log!("Native guest memory largest={largest} available_pages={pages}");
         }
         _ => return 0,
     }
@@ -109,7 +110,7 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
     let platform = crate::os::NAME;
     info[0x17c..0x17c + platform.len()].copy_from_slice(platform.as_bytes());
     frame.eax = guest_address(pointer as *const u8).into();
-    eprintln!("Native platform inventory: {platform}; DOS/BIOS features absent");
+    rg_log!("Native platform inventory: {platform}; DOS/BIOS features absent");
 }
 
 /// # Safety
@@ -119,7 +120,7 @@ pub unsafe extern "C" fn rg_video_service(frame: *const GuestFrame) -> c_int {
     if unsafe { frame.as_ref() }.is_none_or(|f| f.eax & 65535 != 3) {
         return 0;
     }
-    eprintln!("Original text-mode3 restore uses existing native console");
+    rg_log!("Original text-mode3 restore uses existing native console");
     1
 }
 

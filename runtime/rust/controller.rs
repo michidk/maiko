@@ -1,5 +1,6 @@
 //! SDL gamepads translated to the original keyboard controls, without guest patches.
 use super::dos_scan;
+use crate::rg_log;
 use sdl2::GameControllerSubsystem;
 use sdl2::controller::{Axis, Button, GameController};
 use sdl2::event::Event;
@@ -109,7 +110,7 @@ impl Controllers {
                 {
                     return;
                 }
-                eprintln!("Native controller connected: {}", handle.name());
+                rg_log!("Native controller connected: {}", handle.name());
                 let mut device = Device {
                     handle,
                     buttons: 0,
@@ -119,7 +120,7 @@ impl Controllers {
                 device.refresh();
                 self.devices.push(device);
             }
-            Err(error) => eprintln!("Native controller could not open: {error}"),
+            Err(error) => rg_log!("Native controller could not open: {error}"),
         }
     }
 

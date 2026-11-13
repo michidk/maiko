@@ -3,6 +3,7 @@ use crate::guest::GuestFrame;
 use crate::host::{rg_host_lock, rg_host_readable};
 use crate::memory::{guest_address, guest_ptr};
 use crate::memory::{rg_guest_pointer, rg_low_alloc, rg_low_free};
+use crate::rg_log;
 use crate::stream::{
     PcmStream, rg_stream_load, rg_stream_ready, rg_stream_reset, rg_stream_status,
 };
@@ -221,14 +222,14 @@ impl Audio {
             Game_MixerChannels = 0;
         }
         self.opened = false;
-        eprintln!(
+        rg_log!(
             "Native movie stream buffers={} nonzero_frames={} consumed_frames={} starved_frames={}",
             BUFFERS.load(Relaxed),
             STREAM_NONZERO.load(Relaxed),
             STREAM_MIXED.load(Relaxed),
             UNDERRUN.load(Relaxed)
         );
-        eprintln!(
+        rg_log!(
             "Native audio closed samples_started={} mixed_frames={} nonzero_frames={}",
             STARTS.load(Relaxed),
             MIXED.load(Relaxed),
@@ -247,7 +248,7 @@ impl Audio {
         if unsafe { sys::SDL_InitSubSystem(sys::SDL_INIT_AUDIO) } != 0
             || unsafe { Mix_OpenAudio(44100, sys::AUDIO_S16LSB as u16, 2, 1024) } != 0
         {
-            eprintln!("Native audio device failed: {}", sdl2::get_error());
+            rg_log!("Native audio device failed: {}", sdl2::get_error());
             unsafe {
                 sys::SDL_QuitSubSystem(sys::SDL_INIT_AUDIO);
             }
@@ -312,7 +313,7 @@ impl Audio {
         } else {
             unsafe { CStr::from_ptr(driver) }.to_string_lossy()
         };
-        eprintln!(
+        rg_log!(
             "Native audio device={driver} rate={rate} channels={channels} backend=SR/SDL_mixer"
         );
         true
@@ -477,7 +478,7 @@ impl Audio {
                         frame.eax = Game_AIL_sample_status(handle).into();
                         if !self.observed && NONZERO.load(Relaxed) != 0 {
                             self.observed = true;
-                            eprintln!(
+                            rg_log!(
                                 "Native audio mixed nonzero_frames={} samples_started={}",
                                 NONZERO.load(Relaxed),
                                 STARTS.load(Relaxed)
@@ -582,9 +583,12 @@ impl Audio {
                     return false;
                 }
                 pcm.rate = a[2];
-                eprintln!(
+                rg_log!(
                     "Native movie PCM source_rate={} format={} flags={} output_rate={}",
-                    pcm.rate, pcm.format, pcm.flags, pcm.output_rate
+                    pcm.rate,
+                    pcm.format,
+                    pcm.flags,
+                    pcm.output_rate
                 );
             }
             6 => {

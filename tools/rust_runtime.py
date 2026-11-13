@@ -54,7 +54,7 @@ def build(target, *, component="runtime", llasm=False):
     metadata = json.loads(subprocess.check_output(
         [cargo, 'metadata', '--format-version=1', '--no-deps', '--locked'], cwd=ROOT, text=True))
     archive = Path(metadata['target_directory'])/target/('release/libmaiko_'+component+'.a')
-    sources = [ROOT/'Cargo.toml', ROOT/'Cargo.lock', ROOT/'rust-toolchain.toml',
+    sources = [ROOT/'build.rs', ROOT/'Cargo.toml', ROOT/'Cargo.lock', ROOT/'rust-toolchain.toml',
                *sorted((ROOT/'runtime').rglob('*.rs')),
                *sorted((ROOT/'runtime').rglob('Cargo.toml'))]
     report = dict(target=target, component=component, llasm=llasm, archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),

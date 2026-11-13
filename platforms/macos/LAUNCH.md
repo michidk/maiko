@@ -1,69 +1,65 @@
-# Launching the Mac test
+# Launching Maiko on macOS
 
-This experimental package requires macOS 11 or newer on Apple Silicon or Intel.
-It was cross-built on Linux and has not been verified on a Mac. It is not
-notarized, so macOS can show an "Apple could not verify" warning when opening it.
+The experimental runtime requires macOS 11 or newer on Apple Silicon or Intel.
+The package contains a universal `redguard-native` executable, its renderer and
+SDL frameworks. It contains no Redguard installation, game assets or disc media.
+You must supply your own copy of Redguard.
 
 ## First launch
 
-1. Extract the entire ZIP into a writable folder. Keep `RUN.command`, both
-   executables, `libredguard-glide.dylib`, `Frameworks/` and `game/` together.
-   The personal test download includes the owned game files and disc media.
-2. If macOS blocks the download, dismiss the warning with **Done**. For this
-   trusted test package, open Terminal and remove the quarantine attribute from
-   the extracted package folder:
+1. Extract the whole runtime ZIP. Keep `redguard-native`,
+   `libredguard-glide.dylib` and `Frameworks/` together.
+2. If macOS blocks this trusted test build, dismiss the warning with **Done**
+   and run this in Terminal, adjusting the extracted folder path:
 
    ```sh
-   xattr -dr com.apple.quarantine "$HOME/Downloads/Maiko Mac Test"
+   xattr -dr com.apple.quarantine "$HOME/Downloads/Maiko Mac Runtime"
    ```
 
-   Change the path if you extracted it elsewhere. This recursively removes the
-   download quarantine flag from this folder, including its bundled libraries.
-   It does not sign or notarize the package. Use it only for a package you trust.
-3. Double-click `RUN.command`, or launch it from Terminal:
+   This removes quarantine from that package and its libraries. The build is
+   not notarized. Use this command only for a package you trust.
+3. Open `redguard-native` directly. No command launcher is needed. If no game
+   installation is found beside it, a folder picker asks for the owned folder
+   containing `RGFX.EXE`, `SYSTEM.INI` and `FXART`.
 
-   ```sh
-   cd "$HOME/Downloads/Maiko Mac Test"
-   ./RUN.command
-   ```
+The executable runs natively on both Mac architectures. It checks `game/`
+beside itself, then its own directory, then the remembered installation before
+opening the picker. Only recognized original `RGFX.EXE` images are accepted.
+Use `--choose-game-dir` to choose a different installation, or
+`--game-dir /path/to/Redguard` to select one explicitly.
 
-The launcher chooses `redguard-native-arm64` on Apple Silicon and
-`redguard-native-x86_64` on Intel. It supplies the adjacent `game/` folder explicitly. Use `RUN.command` with the
-original test ZIP: that engine executable does not discover `game/` when opened
-directly. New builds also discover that folder without launcher arguments.
+Saves and settings go to `~/Library/Application Support/Maiko/user-data/`,
+separate from the installation. The selected game folder is remembered under
+`~/Library/Application Support/Maiko/`. Original disc media is optional; Maiko
+reads `game.gog` and `game.ins` from your installation or its parent when present.
+Do not copy those files into a runtime download.
 
-## Troubleshooting
+## Logs and troubleshooting
 
-If Terminal reports `permission denied` for the launcher, restore its executable
-permission with `chmod +x RUN.command` from the package folder, then retry.
-If the same error names an engine executable, restore its permission with
-`chmod +x redguard-native-arm64 redguard-native-x86_64`.
+Every launch automatically writes a new log under `~/Library/Logs/Maiko/`.
+The newest seven session logs are kept. Set `MAIKO_LOG_DIR` to override that
+location. If that directory cannot be opened, Maiko tries `Maiko-logs/` in the
+system temporary directory and reports the fallback. No shell redirection is needed. The log includes build revision,
+platform, architecture, CPU backend, arguments, installation checks, runtime
+messages, exit reason/status and fatal diagnostics. It includes local paths;
+check those before sharing it.
 
-To capture startup output, run these commands in the package folder:
+For a problem report, attach the newest log and describe what happened just
+before the window closed. A normal `event=exit` with status zero records a clean
+exit; `BLOCKED` or `event=panic` indicates a fatal failure. A clean exit can still
+be unintended, so include what you were doing. Pressing Escape/F10 or requesting
+a window close is logged to help establish that sequence.
 
-```sh
-./RUN.command > mac-test.log 2>&1
-```
+To try without the intro, run `./redguard-native --skip-intro` in the package
+folder. If Terminal reports `permission denied`, use `chmod +x redguard-native`.
+If a `dyld` error occurs before Maiko starts, no session log may be created;
+include that loader error and ensure the complete framework directories and
+symlinks were extracted.
 
-To try starting without the intro movie:
+## Verification
 
-```sh
-./RUN.command --skip-intro > mac-test.log 2>&1
-```
-
-If it fails, share `mac-test.log`, your macOS version, whether your Mac uses Apple
-Silicon or Intel, and what appeared on screen. A `dyld` missing-library error
-usually needs the complete package extracted with its framework symlinks intact.
-Keep the renderer and frameworks beside the executables.
-
-## Test limits
-
-The same CPU-state backend has rendered the original menu and opening ship on
-Linux using software OpenGL and dummy audio. Mac graphics, input, hardware audio
-and full-game completion remain unverified. On Linux, the longer movie probe
-reaches the ship but times out at its final Quit action on both the offset and
-existing native backends. The fresh book-menu Quit check passes.
-
-Original Redguard assets remain proprietary and are included only in the owner's
-authorized personal test download. See the package's licence notices and the
-separate renderer source archive.
+Both architectures cross-link. The same CPU-state backend has rendered the menu
+and opening ship on Linux with software OpenGL and dummy audio. The owner has
+also supplied Mac runtime output showing movie/audio activity and a clean exit
+path. That output alone does not establish hardware quality or full-game
+completion. The longer Linux movie probe still times out at its final Quit step.

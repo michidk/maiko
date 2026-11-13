@@ -87,7 +87,7 @@ def run(*args, **kwargs):
 
 
 def source_manifest(root=ROOT):
-    paths = [root / name for name in ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']]
+    paths = [root / name for name in ['build.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']]
     paths += [root / 'tools' / name for name in
               ('check_macos_backend.py', 'rust_runtime.py', 'sr_heap.py', 'sr_audio.py')]
     paths += [root / 'patches' / name for name in PATCHES]

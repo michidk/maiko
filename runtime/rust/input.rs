@@ -1,4 +1,5 @@
 //! SDL window and DOS keyboard/mouse state shared by the Windows/Linux hosts.
+use crate::rg_log;
 #[path = "controller.rs"]
 mod controller;
 #[path = "overlay.rs"]
@@ -162,7 +163,7 @@ impl Input {
     fn scan(&mut self, code: u16, release: bool) {
         let needed = if code & 256 != 0 { 2 } else { 1 };
         if self.queue.len() + needed > 256 {
-            eprintln!("BLOCKED native keyboard queue overflow");
+            rg_log!("BLOCKED native keyboard queue overflow");
             self.closed = true;
             return;
         }
@@ -268,7 +269,7 @@ impl Input {
             self.controllers_initialized = true;
             match Controllers::new(sdl) {
                 Ok(controllers) => self.controllers = Some(controllers),
-                Err(error) => eprintln!("Native controllers unavailable: {error}"),
+                Err(error) => rg_log!("Native controllers unavailable: {error}"),
             }
             self.controller_keys();
         }
@@ -294,7 +295,10 @@ impl Input {
                 | Event::Window {
                     win_event: WindowEvent::Close,
                     ..
-                } => self.closed = true,
+                } => {
+                    rg_log!("event=input-exit-request source={event:?}");
+                    self.closed = true;
+                }
                 Event::Window {
                     win_event: WindowEvent::FocusGained,
                     ..
@@ -321,6 +325,17 @@ impl Input {
                     scancode: Some(key),
                     ..
                 } => {
+                    if matches!(
+                        key,
+                        sdl2::keyboard::Scancode::Escape | sdl2::keyboard::Scancode::F10
+                    ) && matches!(event, Event::KeyDown { repeat: false, .. })
+                    {
+                        rg_log!(
+                            "event=input-navigation key={key:?} focused={} overlay={}",
+                            self.focused,
+                            overlay::is_open()
+                        );
+                    }
                     let code = dos_scan(key);
                     if self.focused && code != 0 {
                         let release = matches!(event, Event::KeyUp { .. });
@@ -382,7 +397,7 @@ pub extern "C" fn rg_input_window(width: u32, height: u32) -> *mut c_void {
             .borrow_mut()
             .window(width, height)
             .unwrap_or_else(|error| {
-                eprintln!("Native SDL window failed: {error}");
+                rg_log!("Native SDL window failed: {error}");
                 std::ptr::null_mut()
             })
     })
