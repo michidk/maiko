@@ -40,7 +40,6 @@ extern host_audio_sample_get_user
 extern host_audio_alloc
 extern host_audio_free
 extern host_audio_startup
-extern host_audio_cd_open
 
 extern host_audio_stream_allocate
 extern host_audio_stream_release
@@ -53,3 +52,16 @@ extern host_movie_clock_read
 extern host_movie_clock_stop
 extern host_audio_buffer_unlock
 extern host_audio_buffer_lock
+extern host_redbook_open_drive
+extern host_redbook_close
+extern host_redbook_status
+extern host_redbook_tracks
+extern host_redbook_track
+extern host_redbook_track_info
+extern host_redbook_play
+extern host_redbook_stop
+extern host_redbook_pause
+extern host_redbook_resume
+extern host_redbook_position
+extern host_redbook_volume
+extern host_redbook_set_volume

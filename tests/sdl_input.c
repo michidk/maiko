@@ -4,7 +4,7 @@
 #include <stdio.h>
 static void push(SDL_Event *event) {assert(SDL_PushEvent(event)==1);assert(rg_input_pump());}
 int main(void) {
-    SDL_Window *window=rg_input_window(640,480);assert(window);assert(rg_input_pump());
+    RgWindow window=rg_input_window(640,480);assert(window);assert(rg_input_pump());
     while(rg_input_take_scan()>=0) {}
     const struct {SDL_Scancode key;unsigned code;} cases[]={
         {SDL_SCANCODE_KP_0,0x52},{SDL_SCANCODE_KP_1,0x4f},{SDL_SCANCODE_KP_2,0x50},

@@ -1,7 +1,16 @@
+Patch: OpenGLide-ng SDL window handle width
+Upstream: https://github.com/eugenenuke/openglide-ng at the commit named by BACKEND in tools/package_native.py; applied by tools/build_linux.py.
+Original: on 64-bit builds InitialiseOpenGLWindow assumes a window handle is a 32-bit value and takes the 32-bit path for foreign window ids.
+Replacement: the 64-bit path is skipped when RG_SDL_WINDOW_POINTER is defined, so the handle passed in is used as the SDL window pointer.
+Effect: with RG_SDL_WINDOW_POINTER the renderer draws into the window the Rust runtime created instead of misreading its pointer.
+Why: the runtime creates the SDL window and hands its pointer to the renderer.
+Evidence: glide/bridge.cpp; the Glide window checks in the Linux run.
+
 diff --git a/platform/sdl/window.cpp b/platform/sdl/window.cpp
 --- a/platform/sdl/window.cpp
 +++ b/platform/sdl/window.cpp
-@@ -109,7 +109,7 @@ bool InitialiseOpenGLWindow(FxU wnd, int x, int y, int width, int height)
+@@ -109,7 +109,7 @@
+         self_wnd = (window)? true:false;
      }
      else {
 -#if (SIZEOF_INT_P == 8)

@@ -1,0 +1,12 @@
+{
+  "name": "maiko-builder-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun web/build.mjs",
+    "test": "bun test web"
+  },
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.4.2"
+  }
+}

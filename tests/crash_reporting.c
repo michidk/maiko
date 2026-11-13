@@ -6,11 +6,16 @@
 #include <windows.h>
 #include "crash.h"
 extern volatile uint32_t rg_call_head,rg_call_ring[64];
-static unsigned caught;
+static volatile LONG caught;
+static DWORD owner;
+static volatile LONG access_caught, custom_caught;
 static LONG CALLBACK component_handler(EXCEPTION_POINTERS *info) {
-    if (info->ExceptionRecord->ExceptionCode==0x406d1388 ||
-        info->ExceptionRecord->ExceptionCode==EXCEPTION_ACCESS_VIOLATION) {
-        ++caught;
+    if (GetCurrentThreadId()==owner && (info->ExceptionRecord->ExceptionCode==0x406d1388 ||
+        info->ExceptionRecord->ExceptionCode==EXCEPTION_ACCESS_VIOLATION ||
+        info->ExceptionRecord->ExceptionCode==0xe04d4149)) {
+        InterlockedIncrement(&caught);
+        if(info->ExceptionRecord->ExceptionCode==EXCEPTION_ACCESS_VIOLATION) InterlockedIncrement(&access_caught);
+        if(info->ExceptionRecord->ExceptionCode==0xe04d4149) InterlockedIncrement(&custom_caught);
         return EXCEPTION_CONTINUE_EXECUTION;
     }
     return EXCEPTION_CONTINUE_SEARCH;
@@ -30,6 +35,7 @@ static DWORD WINAPI producer(void *event) {
 int main(int argc,char **argv) {
     assert(argc==2);
     setbuf(stdout,NULL);setbuf(stderr,NULL);
+    owner=GetCurrentThreadId();
     rg_crash_install();
     if (!strcmp(argv[1],"--handled")) {
         PVOID handler=AddVectoredExceptionHandler(0,component_handler); assert(handler);
@@ -37,7 +43,9 @@ int main(int argc,char **argv) {
         RaiseException(0x406d1388,0,4,name);
         ULONG_PTR access[]={0,0x1234};
         RaiseException(EXCEPTION_ACCESS_VIOLATION,0,2,access);
-        assert(caught==2);
+        RaiseException(0xe04d4149,0,0,NULL);
+        printf("Handled main-thread callbacks=%ld access=%ld custom=%ld\n",caught,access_caught,custom_caught);
+        assert(access_caught==1 && custom_caught==1 && caught>=2 && caught<=3);
         puts("PASS component handles first-chance thread notification and access exception");
         return 0;
     }

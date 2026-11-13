@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="description" content="Build a native Windows or Linux version of Redguard from your own executable. The Rust patcher runs entirely on your device.">
+  <title>Maiko · Build your native Redguard package</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <header><nav class="header-inner" aria-label="Main navigation"><a class="wordmark" href="./">Maiko</a><a href="https://github.com/michidk/maiko">GitHub</a></nav></header>
+  <main>
+    <section class="introduction" aria-labelledby="title">
+      <h1 id="title">Maiko</h1><p class="lead">Play <em>The Elder Scrolls Adventures: Redguard</em> natively on Windows or Linux, without DOSBox.</p><p class="sub">Requires your own copy of Redguard. Your executable stays on this device.</p>
+    </section>
+    <section class="builder" aria-labelledby="builder-title">
+      <div class="builder-heading"><h2 id="builder-title">Build your package</h2></div>
+      <noscript><p>This builder needs JavaScript and WebAssembly. You can also use the Rust CLI described in the repository documentation.</p></noscript>
+      <fieldset id="platforms"><legend>Where will you play?</legend>
+        <label class="platform"><input type="radio" name="target" value="windows"><span><strong>Windows</strong><small>64-bit · Windows 10 or newer</small></span></label>
+        <label class="platform"><input type="radio" name="target" value="linux"><span><strong>Linux</strong><small>64-bit · glibc 2.36+ · X11/XWayland</small></span></label>
+      </fieldset>
+      <p id="detection" class="hint"></p>
+      <label class="file-label" for="executable">Your original RGFX.EXE</label>
+      <p id="file-help" class="hint">Select RGFX.EXE from your Redguard installation.</p>
+      <input type="file" id="executable" accept=".exe" aria-describedby="file-help">
+      <div class="actions"><button id="build" disabled>Build package</button><button id="cancel" class="secondary" hidden>Cancel</button><a id="download" class="download" hidden>Download your ZIP</a></div>
+      <progress id="progress" aria-label="Building your package" hidden></progress>
+      <p id="status" role="status" aria-live="polite"></p>
+      <pre id="error" role="alert" hidden></pre>
+    </section>
+    <section class="instructions" aria-labelledby="next-title"><h2 id="next-title">Once your ZIP is ready</h2><ol><li>Extract it into its own folder, outside your game installation.</li><li>On Windows, open <code>RUN.cmd</code>. On Linux, run <code>./RUN.sh /path/to/Redguard</code> in a terminal.</li><li>Saves and settings go into the package's <code>user-data</code> folder.</li></ol><p>Prefer the terminal? Use the <a href="https://github.com/michidk/maiko/blob/main/docs/client-builder.md">Rust command-line tool</a>.</p></section>
+  </main>
+  <footer><p>Independent fan project. Redguard belongs to Bethesda Softworks and ZeniMax.</p></footer>
+</body>
+</html>

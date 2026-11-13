@@ -8,9 +8,11 @@ import subprocess
 import time
 import tempfile
 import uuid
-from .build_windows import ROOT, IMAGE, run, ensure_tool_image
+from .toolchain import ROOT, IMAGE, run, ensure_tool_image
 from .le_image import Image
 from .sr_heap import stage_sr_heap
+from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
+from .windows_sdl import stage_windows_sdl
 from glide.imports import emit
 
 COMMIT='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
@@ -38,20 +40,26 @@ def main():
     report=dict(commit=COMMIT,status='started',native_windows_verified=False,menu_verified=False)
     try:
         report['toolchain']=ensure_tool_image()
+        rust_glide=build_rust_runtime('x86_64-pc-windows-gnu',component='glide')
         run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--tmpfs','/readonly:ro','--name',name,IMAGE,'sleep','360'])
         run(['docker','exec',name,'mkdir','/src'])
         subprocess.run(['docker','exec','-i',name,'tar','-x','-C','/src'],input=archive,check=True)
+        run(['docker','cp',str(ROOT/'tests/init_wine.sh'),name+':/work/init_wine.sh'])
         for folder in ['runtime','glide']:
             run(['docker','cp',str(ROOT/folder)+'/.',name+':/work/'])
+        for fixture in ['backend_smoke.cpp','bridge_test.cpp']:
+            run(['docker','cp',str(ROOT/'tests'/fixture),name+':/work/'+fixture])
         run(['docker','cp',str(output/'glide_imports.h'),name+':/work/'])
         report['sr_heap']=stage_sr_heap(name)
+        report['rust_runtime']=stage_rust_runtime(name,rust_glide)
+        report['sdl_runtime']=stage_windows_sdl(name)
         commands='''set -e
-x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -c guest_memory.cpp -o guest_memory.o
+x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.o
+sh /work/init_wine.sh /tmp/glide-wine
 sh /work/build_backend.sh
 cd /work
 WINEDEBUG=-all WINEPREFIX=/tmp/glide-wine LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a /usr/lib/wine/wine64 backend-smoke.exe readonly
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -c input.c
-x86_64-w64-mingw32-g++ -std=c++11 -Wall -Wextra -Werror -O2 -I/src -I/work bridge_test.cpp bridge.cpp guest_memory.o input.o -L/work -lredguard-glide -luser32 -static-libgcc -static-libstdc++ -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -o bridge-test.exe
+x86_64-w64-mingw32-g++ -std=c++11 -Wall -Wextra -Werror -O2 -I/src -I/work bridge_test.cpp guest_memory.o /work/libmaiko_glide.a -Wl,--gc-sections -L/work -lredguard-glide -luser32 -static-libgcc -static-libstdc++ -L/sdl/lib -lSDL2_mixer -lSDL2 -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp -o bridge-test.exe
 WINEDEBUG=-all WINEPREFIX=/tmp/glide-wine LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a /usr/lib/wine/wine64 bridge-test.exe
 '''
         with (output/'build.log').open('w') as log:

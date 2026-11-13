@@ -1,145 +1,116 @@
 # Maiko
 
-Maiko is an experimental native port of *The Elder Scrolls Adventures: Redguard* using static recompilation. It translates the original DOS engine with [M-HT/SR](https://github.com/M-HT/SR) and replaces DOS platform services with native Windows and Linux code. It does not use DOSBox to run the translated game.
+Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows and Linux, without DOSBox. It provides native graphics, input, sound, file and timing services for your own installation.
 
-You need your own Redguard installation. Game executables, assets, CD images, generated translations and builds are excluded from this source repository. The runtime recognizes the two inspected RGFX.EXE variants in [metadata/image_variants.json](metadata/image_variants.json). Translation currently requires the canonical variant described below.
+Maiko contains no game files. **You need your own copy of Redguard.** The GOG release is the supported one.
 
-This project started as an experiment in [redguard-preservation](https://github.com/michidk/redguard-preservation) and is separate from [Cyrus](https://github.com/michidk/cyrus). This branch contains the Windows/Linux implementation.
+## What you need
 
-## Current state
+- Windows 10 or newer, 64-bit, with a graphics driver that supports OpenGL.
+- A Redguard installation that contains `RGFX.EXE`, the Glide version of the game executable. The GOG release includes it. Maiko recognizes two builds of this file and refuses any other, so it never runs code it was not checked against.
+- A runtime ZIP built from your own executable using the [client-side browser builder](https://michidk.github.io/maiko/) or [Rust CLI](docs/client-builder.md). Your executable stays on your device. [Source checks](docs/building.md) are available for contributors.
 
-- Windows x64 runs original game code. User testing confirms movement, sound and music, but reports endless rising after one jump on the opening ship, startup bypassing the book, initial acceleration, missing movies and distant fog artifacts. Combat progression and full-game completion remain unverified.
-- Linux x64 development tests cover the original book menu, bounded ship/island movement, inventory/logbook, isolated save/reload and sample audio. Broader gameplay, hardware audio and distribution support remain unverified.
-- Original intro video and a bounded decoded-audio prefix pass Linux and Wine checks with compatible owned movie media. This does not establish movies in the user's installation, full playback or audio/video synchronization.
+## Play on Windows
 
-Build success, Wine execution and real-platform acceptance are recorded separately. Twelve diagnostic traps remain in unsupported mixed-mode system code and stop execution if reached.
+1. Extract the ZIP into **its own folder**, anywhere you can write to. Do not extract it into the game folder. Keep the extracted files together:
+   `redguard-native.exe`, `SDL2.dll`, `SDL2_mixer.dll`, `redguard-glide.dll`, `libwinpthread-1.dll`, `RUN.cmd`, and the licence notices.
+2. Open `RUN.cmd` in a text editor and set `GAME_DIR` to the folder that contains `RGFX.EXE`, for example:
 
-See [the build and runtime notes](#reproduce), [the gameplay plan](docs/development/GAMEPLAY_PLAN.md), [research history](docs/research/RESEARCH.md) and [decision trail](docs/research/decisions.tsv). Historical research links into ignored artifacts refer to the original development workspace; those artifacts are not published here.
+   ```bat
+   set "GAME_DIR=C:\GOG Games\Redguard\Redguard"
+   ```
 
-## Repository layout
+   Leave it empty and a folder chooser opens each time you start the game. You can also run `RUN.cmd "C:\path\to\Redguard"`.
+3. Double-click `RUN.cmd`. The original book menu opens in a window. Choose **New Game** to see the intro and start on the ship, or **Continue** to load your last save.
 
-- `tools/`: translation, build, verification and packaging commands. Run entry points as `python3 -m tools.<name>` from the repository root.
-- `runtime/`, `linux/`, `glide/`, `audio/`: native runtime and platform adapters.
-- `metadata/`, `native-metadata/`, `probe-only/`, `patches/`: translator inputs and upstream changes.
-- `tests/`: synthetic checks and game-backed development probes.
-- `docs/development/`: implementation plans and validation notes.
-- `docs/research/`: research history and the decision trail.
-- `.cache/`, `artifacts/`: ignored dependencies, generated translations and local test output.
+Nothing is copied into or changed in your game folder. The controls are the original ones from the game's `KEYS.INI`, and the original options menu works.
 
-## Reproduce
+### Fullscreen and window size
 
-Run the source-only checks without game data or Docker:
+By default the game opens in a window at its own size. In `RUN.cmd`, set `DISPLAY_ARGS` to `--fullscreen` for a borderless fullscreen window at your desktop resolution, or to `--window-size 1600x1200` (any width and height from 320x240 to 8192x8192) for a window of that size. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. The same options work when you start `redguard-native.exe` yourself.
 
-```sh
-sh tests/check_portable.sh
+### Game controllers
+
+SDL2-compatible gamepads work on Windows and Linux. Connect one before starting or plug it in while playing. The layout uses the button positions below, with Xbox names as a reference. Multiple connected controllers can provide input.
+
+| Control | Original key | Action with the default game settings |
+|---|---|---|
+| Left stick or D-pad | Arrow keys | Move forward/backward and turn; navigate menus |
+| A / bottom face button | Space | Jump |
+| X / left face button | Left Ctrl | Attack or interact |
+| B / right face button | Escape | Back or cancel |
+| Y / top face button | S | Draw or sheathe sword |
+| Left shoulder | Left Shift | Walk modifier |
+| Right shoulder | Left Alt | Alt modifier |
+| Start / Menu | Escape | Open the book menu or go back |
+| Back / View | I | Inventory |
+| Left-stick click | Enter | Confirm menu selection |
+
+The stick acts as digital directions, with a 50% activation threshold and a 37.5% release threshold to avoid drift and repeated changes near the edge. Controller presses use the same keyboard path as physical keys, so changing those keys in the game's settings also changes their controller actions. Keyboard and mouse remain usable alongside the controller. Unplugging a controller releases its inputs; switching away from the window releases all game inputs, and held controller inputs resume when focus returns.
+
+The right stick, triggers, vibration and controller-specific remapping are not implemented. Inventory and other screens that require a mouse still need one.
+
+### Startup options
+
+Set `OPTIONS` in `RUN.cmd`, or pass the options after `--game-dir` when you start `redguard-native.exe` yourself:
+
+```bat
+set "OPTIONS=--skip-intro --skip-outro --load-save 1"
 ```
 
+On Linux, add them after the game folder: `sh RUN.sh /path/to/Redguard --skip-intro --load-save 1`.
 
-Use Linux, Python 3.11 with venv support, GCC/G++, Git and Docker. The Docker game builds and package verifier currently require bind-mounted inputs to resolve below `/home/vibepod/workspaces`. This applies to `tools/build_native.py`, `tools/build_linux.py` and `tools/verify_native_package.py`, including selected game, CD-image and verifier input paths. The scripts retain this development-environment restriction; a clone elsewhere can run the source-only checks, but must stage those inputs under that directory for Docker runs. The source build installs pinned SCons into a local virtual environment. Everything downloaded or generated is ignored under `.cache/` and `artifacts/`.
+| Option | Effect |
+|---|---|
+| `--skip-intro` | New Game starts on the ship without the intro movie. |
+| `--skip-outro` | Quitting from the book skips the book-closing animation. |
+| `--load-save N` | Loads save slot `N` (the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message in the log if that save does not exist. |
 
-```sh
-export REDGUARD_DIR=/path/to/Redguard
-python3 -m tools.pipeline inspect
-python3 -m tools.pipeline build
+Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.
 
-# Honest compatibility gate: currently fails at a mixed-mode far transfer.
-python3 -m tools.pipeline translate
+### Overlay
 
-# Explicit diagnostic mode: unresolved CPU/system boundaries become fatal traps.
-python3 -m tools.pipeline translate --probe-traps
+Press the backtick key (`` ` ``, left of `1` on a US keyboard) to open or close a small overlay with the current world number, Cyrus's position and which skip options are active. While it is open the game receives no keyboard, mouse or controller input.
 
-docker build -t redguard-recomp-tools:bookworm .
-# Substitute the artifact directory printed by the preceding translation.
-python3 -m tools.build_windows artifacts/TIMESTAMP-probe --wine
-```
+### Movies
 
-The Docker build downloads tools; the build/run container has networking disabled and no game-install mount. Containers are removed after each run. `--wine` checks the expected diagnostic exit and message, not gameplay. The generated report keeps `menu_verified` and `native_windows_verified` false.
+On a GOG installation the intro and other movies play automatically from the game's `game.gog` file, which Maiko finds inside the game folder or the folder above it. If your copy keeps movies as loose `.SMK` files, put them in the game folder or in a `MOVIES`, `ANIMS` or `VIDEO` folder inside it. A damaged or ambiguous `game.gog` stops startup with a message in the log.
 
-The translation input is pinned to SHA-256 `844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852ac1607ee4dfdf`. It reads the installation without changing it. Source code is pinned to SR `ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3` and patched by `patches/sr-x64.patch`.
+### Saves and settings
 
-## Continue the native target
+Saves and settings are kept in a `user-data` folder next to `RUN.cmd`, separate from the original game. The first time you run, any existing saves and settings from your game folder are copied there once; after that the two stay independent. To keep them somewhere else, change `USER_DIR` in `RUN.cmd`. To start fresh, delete `user-data`.
 
-```sh
-python3 -m tools.build_glide --install /path/to/Redguard
-python3 -m tools.pipeline translate --native --install /path/to/Redguard
-python3 -m tools.build_native artifacts/TIMESTAMP-native --install /path/to/Redguard
-```
+### If something goes wrong
 
-The native build runs synthetic adapter, file and platform tests before the original game. It mounts the install read-only, uses native Win32 services, and keeps unresolved CPU instructions as explicit fatal traps. Original CRT constructors execute before the original main function. A successful build is not a successful menu run; inspect `report.json` and `native-wine.log` for the reached boundary. Automated Windows-target checks run under Wine. The user has tested the game on real Windows; full acceptance remains open.
+`RUN.cmd` writes everything the game printed to `native-test.log` in the same folder and shows it when the game exits. Typical causes:
 
-## Windows startup test
+| Message or symptom | What to do |
+|---|---|
+| The log says `Game image validation or installation selection failed` | `GAME_DIR` does not point at a folder containing a recognized `RGFX.EXE`. Check the folder; if it is right, your `RGFX.EXE` is not one of the two builds Maiko recognizes, so report its SHA-256 and where you got it. |
+| A black window or no window | Check that your graphics driver supports OpenGL, and include `native-test.log` in a report. |
+| The log says `Native audio device failed` | The game could not open a sound device. Check your default Windows playback device and include the log if it persists. |
+| A message beginning `BLOCKED` | The game reached an instruction Maiko cannot run. This is a bug: report it with `native-test.log` and what you were doing. |
 
-Extract the runtime ZIP into its own writable folder. Edit the `GAME_DIR` setting near the top of `RUN.cmd` to the directory containing the original `RGFX.EXE`, then run it. Leaving the setting empty opens a folder selector. `RUN.cmd "C:\path\to\Redguard"` and `redguard-native.exe --game-dir "C:\path\to\Redguard"` also select a directory. Nothing needs to be copied into the game installation. `RUN.cmd` uses its own `user-data` folder for saves and settings. Edit `USER_DIR` to select another location outside the original installation. Existing saves/settings are imported once; later changes and deletions remain local to that folder.
+### Reporting problems
 
-The runtime ZIP contains seven files: the executable, four required DLLs, the editable CMD and consolidated licence notices. Renderer sources, build reports and reference logs are in a separate optional development ZIP. Return `native-test.log` and describe New Game, movement, inventory, sound and saving. Bounded original gameplay passes on Linux and under Wine; full-game completion and full Windows acceptance remain unverified.
+Open an issue and attach `native-test.log`. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
 
-The two exact RGFX hashes in `metadata/image_variants.json` are recognized. They differ at three bytes in two branch sites. The native profile preserves both behaviors with a hash-selected, flag-preserving branch adapter. Neither image is established as the unmodified release. All other image hashes remain rejected.
+## Linux
 
-Without `--user-dir`, the game-file adapter denies writes. With that option, original save/config writes go to an isolated folder outside the installation. The graphics wrapper may create its configuration and log in the selected game directory. Wine development checks and actual Windows game rendering remain separate acceptance fields.
+The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries and require a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver.
 
-## Native Linux feasibility target
+## Known limitations
 
-SDL2 provides the shared window, input and timer modules in `runtime/input_sdl.c` and `runtime/timing_sdl.c`. OpenGLide's SDL2 backend provides the graphics context and Glide implementation. The Windows test currently retains its tested Win32 backend; switching Windows to the shared SDL path is a separate follow-up.
+- **CD music needs the GOG disc image.** The music is read from the audio tracks of `game.gog`, using the `game.ins` cue sheet beside it (the GOG release has both next to the game folder). Without them the game runs without music.
+- **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.
+- **macOS is not supported.**
 
-The Linux x86-64 host uses the same native SR output and original startup code. Its OS adapters provide low-address memory, read-only DOS file/path/search behavior, executable hashing and signal diagnostics. These are compatibility services that SDL does not supply.
+## Legal
 
-```sh
-python3 -m tools.build_linux artifacts/TIMESTAMP-native \
-  --install /path/to/Redguard \
-  --menu-autosave /path/to/SAVEGAME.SAV
-```
+Maiko is released under the [MIT licence](LICENSE). It is an independent fan project and is not affiliated with or endorsed by Bethesda Softworks or ZeniMax. *The Elder Scrolls* and *Redguard* belong to their owners. This repository contains no game code or assets, and generated packages contain content derived from your own installation and must not be redistributed. You must own Redguard to use Maiko. Third-party components and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 
-The install must resolve below `/home/vibepod/workspaces` for the Docker mount. The command creates a separate Linux artifact directory and leaves the input translation and install unchanged. It builds an ELF64 executable and replaceable Glide library, runs original-function and adapter regressions, then exercises Options, Escape and original Quit through X11 keyboard events under Xvfb/Mesa. No Wine is involved. The scenario uses a copied autosave and disables sound/CD audio by default. Add `--sound --redbook` to test sample audio and the explicit absent-CD-device path. Use `--test-image /path/to/RGFX.EXE` to check either inspected image in that disposable scenario.
+## For developers
 
-This is a Linux feasibility target, not a distributable Linux release. It currently depends on Debian12 SDL2, OpenGL, OpenSSL and C/C++ runtimes. Other distributions, Wayland, other graphics drivers, audible hardware output, sustained gameplay and ARM game execution remain unverified. The report distinguishes the tested Linux menu sequence from overall menu and real Windows acceptance.
-
-The Linux test suite also exercises 9000 simultaneous guest allocations, long host filenames during DOS directory searches, keypad/extended-key mappings and a native SDL window pointer above 4 GiB. The Glide window argument preserves the full host pointer. Captures are OpenGLide back-buffer readbacks, not screenshots of the presented desktop window.
-
-Remaining Linux limits include incomplete game-loading coverage, unsorted DOS searches without generated long-name aliases and signal alternate stacks installed only on the initializing thread. Isolated save/config writes are available with `--user-dir`; guest memory uses the shared SR pooled heap. SDL's SIGINT/SIGTERM behavior during a game loop that stops pumping events remains untested; use an external timeout with a kill escalation for manual runs. The current 618 NASM byte-immediate warnings were audited against matching generated source and are sign-extended negative byte immediates. This does not prove unexercised translated code correct.
-
-Add `--gameplay both --gameplay-seconds 30` to record bounded Continue/New Game observations. `--world-controls` measures original player position after walking and attempts in-game Quit. With `--writable-gameplay`, that stricter probe now completes original autosave and Quit. Add `--save-roundtrip` to verify exact player-position persistence in a second process, and `--exercise` for original inventory open/close and bounded action input. `--modal-ui` on Continue seeds one synthetic logbook entry in disposable storage and checks the original logbook interface. Map opening is reported separately and remains unverified in the current seed. A timeout or observation-only report is never full-game acceptance. See [whole-game plan](docs/development/GAMEPLAY_PLAN.md).
-
-The game now uses SR's pooled below2GiB heap through a shared native wrapper. The build exports and hashes the exact upstream sources from the pinned revision. DOS path and file services remain platform-specific; SDL alone does not supply them.
-
-## Files
-
-- `tools/sr_audio.py`, `audio/` and `tools/windows_sdl.py`: pinned SR sample playback through SDL_mixer and official Windows SDK staging.
-- `linux/user_storage.c` and `runtime/windows_storage.c`: isolated opt-in save/config storage.
-- `tools/sr_heap.py` and `runtime/guest_memory.cpp`: pinned pooled SR heap staging and checked native allocation API.
-- `tools/le_image.py`: hash-checked LE inspection and page loading.
-- `tools/pipeline.py`: pinned dependency build, metadata validation, translation and assembly compaction.
-- `metadata/`: exact-build roots and overlapping-instruction adaptations.
-- `probe-only/`: explicit fatal substitutions for unsupported boundaries.
-- `runtime/`: shared startup/ABI contracts, SDL input/timers and Windows host adapters. Every unimplemented service terminates.
-- `linux/` and `tools/build_linux.py`: Linux host adapters and reusable native ELF build/menu verification.
-- `tools/build_glide.py` and `glide/`: pinned native renderer build, pixel smoke tests, guest layouts and original-stub mapping.
-- `tools/build_native.py`: native runtime integration, ABI/input/file tests and original startup tracing.
-- `tools/build_windows.py`: reproducible Windows linking and Wine boundary check.
-- `tools/package_native.py`: package the observed Windows gameplay test and renderer sources/notices.
-- `tools/verify_native_package.py`: extract and run the actual seven-file ZIP under Wine with a host D: install, the shipped GAME_DIR preset, no-image menu navigation and saved path-error exits. Optional media mode also checks an independent movie PCM reference.
-- `tests/check_movie_pcm.py`: compare a bounded original Smacker source prefix byte-for-byte with FFmpeg in the Linux development image.
-- `runtime/cd_image.c` and `tests/check_cd_image.py`: shared read-only ISO/MODE1 CD root-file adapter and synthetic sector/handle tests.
-- `tools/package_diagnostic.py`: package a hash-matched Wine-verified diagnostic and runtime notices.
-- `Dockerfile`: isolated MinGW/NASM/Wine toolchain.
-
-## Acceptance still required
-
-The original translated book menu must draw, respond to input and exit in a normal Windows window. A linked executable, a recreated menu, or an emulator-assisted run does not satisfy that milestone. Wine evidence now includes the original book, Options navigation, Escape recovery and clean original Quit from the actual extracted ZIP. The user has exercised gameplay on real Windows; full menu, other menu paths and focus acceptance remain open. Do not ship the diagnostic substitutions as game support.
-
-Launcher default: `RUN.cmd` presets `GAME_DIR=D:\Games\GOG Galaxy\Redguard\Redguard` and leaves `CD_IMAGE` empty. Keep the runtime outside the game directory. Installed menu artwork and textures load from `GAME_DIR` without a CD image. The user reports no image in their GOG installation; the image present in our local extracted installer does not establish their layout. Cyrus supports installed artwork independently, and its movie adapter can read loose SMK files when `animation_drive` is configured as a relative path. The Windows adapter maps root-level DOS D: SMK reads to matching loose files in GAME_DIR, MOVIES, ANIMS or VIDEO. It reports the exact missing request. This does not establish whether the user installation contains those files. Image-backed movies remain supported.
-
-Optional movie media: Pass `--game-dir PATH --user-dir SAVE_PATH --cd-image PATH_TO_GAME_GOG` to use movies from the owned CD image. The optional `CD_IMAGE` setting in `RUN.cmd` passes the same path. The adapter accepts ordinary ISO2048 and MODE1/2352 images, supports root files required by the shipped movie layout, and denies writes. It does not implement CD music, general MSCDEX or nested ISO directories.
-
-Report fields: `movie_video_skip_to_ship_verified` covers observed intro frames, skip points and world entry. `movie_playback_verified` requires broader movie acceptance including audio, and remains false. `cd_playback_verified` means CD music playback, not reading files from the image.
-
-Windows exposes original game cwd and current-drive queries as virtual C:, while the selected CD image supplies D:. The selected host game/user directories stay separate. A real Windows drive-letter, UNC or alias installation still requires acceptance on that machine.
-
-Movie-audio checks now convert to the negotiated device rate and record all consumed frames separately from nonzero and starved frames. An opt-in developer capture, `RG_MOVIE_PCM_CAPTURE`, records at most256KiB of pre-conversion source PCM for independent comparison. It is absent from normal launcher runs and packages contain no captured PCM. The Linux movie gate compares32768 bytes with FFmpeg after2s uninterrupted playback. Correct decoding of that prefix and zero starvation in the skip scenario do not establish full-movie quality, hardware playback or synchronization.
-
-Windows gameplay feedback, 2026-11-12: the user reports movement and audio working, a single jump on the opening ship that never falls, immediate ship startup, initial acceleration, missing movies and distant fog artifacts. The same shipped executable rises, descends and lands in Wine on both ship and island. These checks do not resolve the Windows report. New bounded STATE lines record the original position, jump/fall state, animation vertical-control flag, jump key, fly flag and timing fields. No replacement gravity or timing implementation is introduced. Original startup may skip the book when no usable autosave exists; copied-autosave tests and fresh-start tests are separate.
-
-## macOS backend in progress
-
-This branch also contains the unfinished Intel/Apple Silicon port. `python3 -m tools.check_macos_backend` builds and executes synthetic LLVM instruction fixtures on x86-64 Linux and emulated ARM64 Linux, and cross-links diagnostics and the renderer for both Mac architectures. See [macos/README.md](macos/README.md) and [MACOS_PLAN.md](docs/development/MACOS_PLAN.md).
-
-There is no Mac game executable or package and nothing has run on macOS. The original-game LLasm analysis still stops at an unresolved flag contract. Most native replacements, the CPU-state host-service adapter and the guest offset arena remain incomplete.
+- [docs/building.md](docs/building.md): source checks.
+- [docs/architecture.md](docs/architecture.md): runtime structure.
+- [AGENTS.md](AGENTS.md): repository workflow and rules for contributors and coding agents.

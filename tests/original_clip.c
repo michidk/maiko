@@ -53,7 +53,9 @@ int main(void) {
         {11,-11,10,40},{-11,11,10,20},{0,0,1,0},{0,0,10000,0},
         {-10,10,10,0},{10,-10,10,0}
     };
-    for (unsigned i=0;i<sizeof cases/sizeof cases[0];++i) {
+    const unsigned case_count=sizeof cases/sizeof cases[0];
+    for (unsigned trial=0;trial<3*case_count;++trial) {
+        unsigned i=trial%case_count;
         vector[0]=cases[i].x; vector[1]=cases[i].y; vector[2]=cases[i].z;
         GuestRegs r={0}; r.eax=(uint32_t)(uintptr_t)vector;
         r.esp=(uint32_t)(uintptr_t)memory+65536;

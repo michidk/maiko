@@ -21,7 +21,8 @@ for number in [1,2]:
     result=subprocess.run(['python3','/tests/probe_gameplay.py','--controls','--user-dir',str(user),'--seconds','45']+(['--wine'] if a.wine else []),timeout=100)
     evidence=json.loads((root/'gameplay-continue.json').read_text())
     for suffix in ['.log','.json','-world-before.ppm','-world-after.ppm','-world-book.ppm']:
-        shutil.copyfile(root/('gameplay-continue'+suffix),root/(f'save-roundtrip-{number}'+suffix))
+        artifact=root/('gameplay-continue'+suffix)
+        if artifact.exists():shutil.copyfile(artifact,root/(f'save-roundtrip-{number}'+suffix))
     assert result.returncode==0 and evidence['natural_exit']==0 and evidence['world_controls_verified'],evidence
     assert not evidence['blocked'] and digest(source)==original
     evidence['saved_sha256']=digest(user/'SAVEGAME/SAVEGAME.001/SAVEGAME.SAV')

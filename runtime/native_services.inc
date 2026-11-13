@@ -3,8 +3,8 @@ HOST_SERVICE host_free, 2
 HOST_SERVICE host_debug_clear, 3
 HOST_SERVICE host_debug_char, 4
 HOST_SERVICE x86_int, INTERRUPT
-HOST_SERVICE probe_boundary, 255
-%include "probe_helpers.inc"
+HOST_SERVICE host_unsupported_hardware, 255
+%include "hardware_boundaries.inc"
 HOST_SERVICE host_signal, 5
 HOST_SERVICE host_getcwd, 6
 HOST_SERVICE host_chdir, 7
@@ -29,6 +29,7 @@ HOST_SERVICE host_poll_input, 23
 HOST_SERVICE host_movie_clock_init, 24
 HOST_SERVICE host_movie_clock_read, 25
 HOST_SERVICE host_movie_clock_stop, 26
+HOST_SERVICE host_startup_clock_pace, 27
 HOST_SERVICE host_audio_init, 12288
 HOST_SERVICE host_audio_shutdown, 12289
 HOST_SERVICE host_audio_sample_init, 12290
@@ -47,7 +48,6 @@ HOST_SERVICE host_audio_sample_get_user, 12302
 HOST_SERVICE host_audio_alloc, 12303
 HOST_SERVICE host_audio_free, 12304
 HOST_SERVICE host_audio_startup, 12305
-HOST_SERVICE host_audio_cd_open, 12306
 
 HOST_SERVICE host_audio_stream_allocate, 12308
 HOST_SERVICE host_audio_stream_release, 12309
@@ -58,3 +58,16 @@ HOST_SERVICE host_audio_stream_minimum, 12313
 HOST_SERVICE host_audio_callbacks_prepare, 12315
 HOST_SERVICE host_audio_buffer_unlock, 12316
 HOST_SERVICE host_audio_buffer_lock, 12317
+HOST_SERVICE host_redbook_open_drive, 12544
+HOST_SERVICE host_redbook_close, 12545
+HOST_SERVICE host_redbook_status, 12546
+HOST_SERVICE host_redbook_tracks, 12547
+HOST_SERVICE host_redbook_track, 12548
+HOST_SERVICE host_redbook_track_info, 12549
+HOST_SERVICE host_redbook_play, 12550
+HOST_SERVICE host_redbook_stop, 12551
+HOST_SERVICE host_redbook_pause, 12552
+HOST_SERVICE host_redbook_resume, 12553
+HOST_SERVICE host_redbook_position, 12554
+HOST_SERVICE host_redbook_volume, 12555
+HOST_SERVICE host_redbook_set_volume, 12556

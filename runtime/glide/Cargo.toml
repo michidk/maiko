@@ -1,0 +1,16 @@
+[package]
+name = "maiko-glide"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+
+[lib]
+path = "lib.rs"
+crate-type = ["staticlib", "rlib"]
+test = false
+doctest = false
+
+[dependencies]
+maiko-runtime = { path = "../.." }

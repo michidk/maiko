@@ -9,19 +9,22 @@ import shutil
 import subprocess
 import struct
 import time
+from book_menu import BookMenu
+from jump_trace import assess_jump
 
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--runtime-dir',type=Path,default=Path('/work'),help='Run the actual extracted runtime without replacing its executable or libraries')
 p.add_argument('--game-dir',default='/work/menu-scenario',help='Disposable development fixture directory')
 p.add_argument('--cd-image',help='Owned ISO or MODE1/2352 image mounted read-only as DOS D:')
 p.add_argument('--action',choices=['continue','new'],default='continue')
-p.add_argument('--fresh-start',action='store_true',help='Observe original startup without an autosave or a book selection')
+p.add_argument('--fresh-start',action='store_true',help='Require the startup book with Continue disabled, then select New Game without an autosave')
 p.add_argument('--seconds',type=float,default=30)
 p.add_argument('--wine-game-dir',help='Optional Windows drive path for the selected Linux game fixture')
 p.add_argument('--wine',action='store_true',help='Run the Windows host under Wine with posted window messages')
 p.add_argument('--controls',action='store_true',help='Measure original movement, return to book and Quit after Continue')
 p.add_argument('--uncaptured',action='store_true',help='Avoid framebuffer readback overhead while measuring timing and physics')
 p.add_argument('--jump-cycle',action='store_true',help='Observe original jump ascent, descent and landing after releasing the jump key')
+p.add_argument('--jump-count',type=int,default=1,help='Number of separate released jumps to verify, from1 to5')
 p.add_argument('--window-close',action='store_true',help='Close the native window after the jump cycle and require clean process exit')
 p.add_argument('--movie-skip',action='store_true',help='Inspect original Smacker playback, skip configured points and verify entry into the ship')
 p.add_argument('--movie-lead-seconds',type=float,default=2,help='Uninterrupted initial movie playback before skip input, from0 to10 seconds')
@@ -34,6 +37,7 @@ if sum((a.controls,a.exercise,a.modal_ui,a.movie_skip,a.jump_cycle))>1:p.error('
 if a.controls and a.action!='continue':p.error('--controls requires --action continue')
 if a.window_close and (not a.jump_cycle or not a.wine):p.error('--window-close requires --jump-cycle --wine')
 if a.fresh_start and a.action!='new':p.error('--fresh-start requires --action new')
+if not 1<=a.jump_count<=5 or (a.jump_count!=1 and not a.jump_cycle):p.error('--jump-count requires --jump-cycle and must be from1 to5')
 # Every probe writes shared captures; fail before touching them if another is active.
 probe_lock=open('/tmp/redguard-game-probe.lock','w')
 fcntl.flock(probe_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -59,17 +63,24 @@ began=time.monotonic();peak=0
 with prefix.with_suffix('.log').open('w') as log:
     process=subprocess.Popen(command,env=environment,stdout=log,stderr=subprocess.STDOUT)
     try:
-        if not a.fresh_start:
-            deadline=time.monotonic()+40
-            while 'CLIP entry=7' not in prefix.with_suffix('.log').read_text():
-                if process.poll() is not None:raise RuntimeError('Original game stopped before menu')
-                if time.monotonic()>deadline:raise TimeoutError('Original menu initialization')
-                time.sleep(.1)
-            time.sleep(3)
         if not a.wine:
-            window=subprocess.check_output(['xdotool','search','--name','^Redguard native experiment$'],text=True,timeout=5).splitlines()[0]
+            window_deadline=time.monotonic()+40
+            while True:
+                found=subprocess.run(['xdotool','search','--name','^Redguard native experiment$'],text=True,capture_output=True,timeout=5)
+                if found.returncode==0:
+                    window=found.stdout.splitlines()[0]
+                    break
+                if process.poll() is not None:raise RuntimeError('Original game stopped before window creation')
+                if time.monotonic()>window_deadline:raise TimeoutError('Native SDL window creation')
+                time.sleep(.1)
             subprocess.run(['xdotool','windowfocus','--sync',window],check=True,timeout=5)
-        if not a.uncaptured and not a.fresh_start:shutil.copyfile(root/'game-frame-latest.ppm',str(prefix)+'-menu.ppm')
+        book=BookMenu(process,root/('native-symbols.txt' if a.wine else 'linux-symbols.txt'))
+        book.wait_ready(timeout=40)
+        report['startup_book_before_input_verified']=True
+        report['startup_continue_available']=book.continue_available()
+        if a.fresh_start:
+            assert not report['startup_continue_available'],'Continue available without a valid autosave'
+        if not a.uncaptured:shutil.copyfile(root/'game-frame-latest.ppm',str(prefix)+'-menu.ppm')
         def key(name,hold=.15,observations=None):
             def observe_for(seconds):
                 until=time.monotonic()+seconds
@@ -91,11 +102,8 @@ with prefix.with_suffix('.log').open('w') as log:
                 try:observe_for(hold)
                 finally:subprocess.run(['xdotool','keyup',name],check=True,timeout=5)
             observe_for(.5)
-        if not a.fresh_start:
-            if a.action=='new':
-                for _ in range(3):key('Up')
-            key('Return');report['selection_sent']=True
-        else:report['fresh_start_without_selection']=True
+        book.select_main_action(10 if a.action=='new' else -1,key)
+        key('Return');report['selection_sent']=True
         deadline=time.monotonic()+a.seconds
         world_at=None;state_address=None;ui_address=None;extra_symbols={}
         if a.controls or a.exercise or a.modal_ui or a.movie_skip or a.jump_cycle:
@@ -122,14 +130,16 @@ with prefix.with_suffix('.log').open('w') as log:
                 for label in ['loc_1A4620','rg_tick_delta','loc_1EEC48','loc_1EEC54','loc_1A4624']:
                     if label in extra_symbols:
                         memory.seek(extra_symbols[label]);timing[label]=int.from_bytes(memory.read(4),'little')
+                memory.seek(extra_symbols['keyboard_state']+2*0x39)
+                jump_key=int.from_bytes(memory.read(2),'little')
                 ui_mode=None
                 if ui_address:memory.seek(ui_address);ui_mode=struct.unpack('<I',memory.read(4))[0]
-            return {'actor':hex(actor),'position':position,'animation_group':group,'health':health,'ui_mode':ui_mode,'motion':motion,'fall_origin':origin,'fall_timer':timer,'timing':timing}
+            return {'actor':hex(actor),'position':position,'animation_group':group,'health':health,'ui_mode':ui_mode,'motion':motion,'fall_origin':origin,'fall_timer':timer,'timing':timing,'jump_key':jump_key}
         def movie_state():
             with open(f'/proc/{process.pid}/mem','rb',buffering=0) as memory:
                 def read(address,n=4):memory.seek(address);return int.from_bytes(memory.read(n),'little')
                 pointer=read(extra_symbols['loc_1FA7B4'])
-                result={'handle':pointer,'sample_starts':read(extra_symbols['starts'],8),'nonzero_frames':read(extra_symbols['nonzero'],8),'stream_buffers':read(extra_symbols['stream_buffers'],8),'stream_nonzero':read(extra_symbols['stream_nonzero'],8),'stream_mixed':read(extra_symbols['stream_mixed'],8),'stream_underrun':read(extra_symbols['stream_underrun'],8)}
+                result={'handle':pointer,'sample_starts':read(extra_symbols['rg_audio_starts'],8),'nonzero_frames':read(extra_symbols['rg_audio_nonzero'],8),'stream_buffers':read(extra_symbols['rg_audio_stream_buffers'],8),'stream_nonzero':read(extra_symbols['rg_audio_stream_nonzero'],8),'stream_mixed':read(extra_symbols['rg_audio_stream_mixed'],8),'stream_underrun':read(extra_symbols['rg_audio_stream_underrun'],8)}
                 if pointer:
                     result.update(width=read(pointer+4),height=read(pointer+8),frames=read(pointer+12),frame=read(pointer+0x374),audio_track=read(pointer+0x444))
                 return result
@@ -151,11 +161,33 @@ with prefix.with_suffix('.log').open('w') as log:
                         assert snapshots[index]['frame']>snapshots[index-1]['frame'],'Original movie frame counter did not advance'
                     assert snapshots[4]['handle']==0,'Original movie handle remained open after final skip'
                     report['movie_audio_mixed_verified']=any(x.get('audio_track',4294967295)!=4294967295 for x in snapshots[:4]) and snapshots[3]['stream_buffers']>snapshots[0]['stream_buffers'] and snapshots[3]['stream_nonzero']>snapshots[0]['stream_nonzero']
-                    until=time.monotonic()+25
-                    while process.poll() is None and state() is None and time.monotonic()<until:time.sleep(.2)
-                    report['world_after_movie']=state()
-                    assert report['world_after_movie'],'Original movie did not return to world'
-                    key('Escape');time.sleep(3);key('Up');key('Return')
+                    until=time.monotonic()+30
+                    ready_since=None
+                    while process.poll() is None and time.monotonic()<until:
+                        current=state()
+                        if (current and current['ui_mode']==31 and current['health'] is not None
+                                and current['health']>0 and current['animation_group'] is not None
+                                and current['timing'].get('loc_1A4624')==0):
+                            if ready_since is None:ready_since=time.monotonic()
+                            elif time.monotonic()-ready_since>=.3:break
+                        else:ready_since=None
+                        time.sleep(.04)
+                    else:raise TimeoutError('Original movie did not return to initialized gameplay after warm-up')
+                    report['world_after_movie']=current
+                    report['movie_world_warmup_finished_verified']=True
+                    # World rendering can be slower than a150ms key tap under
+                    # software GL. Wait for the actual book mode before Quit.
+                    key('Escape',.6)
+                    until=time.monotonic()+10
+                    while process.poll() is None and time.monotonic()<until:
+                        current=state()
+                        if current and current['ui_mode']==30:break
+                        time.sleep(.1)
+                    assert current and current['ui_mode']==30,'Original book did not open after movie'
+                    report['movie_quit_book_observed']=True
+                    # Read the current selection instead of assuming a fixed
+                    # number of taps from the item restored after the movie.
+                    book.select_main_action(-2,key);key('Return')
                     assert process.wait(timeout=15)==0
                     report['movie_skip_to_world_verified']=True
                     break
@@ -166,27 +198,32 @@ with prefix.with_suffix('.log').open('w') as log:
                 current=state()
                 if current and world_at is None:world_at=time.monotonic()
                 if current and time.monotonic()-world_at>4:
-                    samples=[state()];report['jump_samples']=samples
-                    key('space',.15,samples)
-                    end=time.monotonic()+8
-                    while process.poll() is None and time.monotonic()<end:
-                        sample=state()
-                        if sample:samples.append(sample)
-                        time.sleep(.04)
-                    assert process.poll() is None,'Original game stopped during jump'
-                    initial=samples[0]['position'][1];lowest=min(x['position'][1] for x in samples)
-                    report['jump_ascent_observed']=lowest<initial-256
-                    apex=next(i for i,x in enumerate(samples) if x['position'][1]==lowest)
-                    report['jump_descent_observed']=any(x['position'][1]>lowest+256 for x in samples[apex+1:])
-                    report['jump_landed_observed']=any(abs(x['position'][1]-initial)<=512 and x['motion'][1:]==[0,0] for x in samples[apex+1:])
-                    assert report['jump_ascent_observed'] and report['jump_descent_observed'] and report['jump_landed_observed'],'Jump must rise, descend and land after key release'
+                    report['jump_cycles']=[]
+                    for trial in range(a.jump_count):
+                        samples=[state()]
+                        cycle=dict(trial=trial+1,samples=samples)
+                        report['jump_cycles'].append(cycle)
+                        if trial==0:report['jump_samples']=samples
+                        key('space',.15,samples)
+                        end=time.monotonic()+8
+                        while process.poll() is None and time.monotonic()<end:
+                            sample=state()
+                            if sample:samples.append(sample)
+                            time.sleep(.04)
+                        assert process.poll() is None,'Original game stopped during jump'
+                        cycle['assessment']=assess_jump(samples)
+                        assert all(cycle['assessment'][flag] for flag in ['ascent','descent','landed']),('Jump must rise, descend and land after key release',cycle['assessment'])
+                    report['jump_ascent_observed']=True
+                    report['jump_descent_observed']=True
+                    report['jump_landed_observed']=True
+                    report['repeated_jumps_verified']=a.jump_count>1
                     if a.window_close:
                         key('close');code=process.wait(timeout=15)
                         report['window_close_exit']=code
                         assert code==0,('Native window close must exit cleanly',code)
                         report['window_close_verified']=True
                     else:
-                        key('Escape');time.sleep(3);key('Up');key('Return')
+                        key('Escape');book.wait_ready();key('Up');key('Return')
                         assert process.wait(timeout=15)==0
                     report['jump_cycle_verified']=True
                     break
@@ -208,7 +245,7 @@ with prefix.with_suffix('.log').open('w') as log:
                         if label=='logbook':assert snapshot['ui_mode']==30,'Original logbook did not open'
                         if label=='logbook-close':assert snapshot['ui_mode']==31,'Original logbook did not close'
                     report['map_open_observed']='OPEN SYSTEM\\MAPMAP.GXA' in prefix.with_suffix('.log').read_text()
-                    key('Escape');time.sleep(3)
+                    key('Escape',.6);book.wait_ready()
                     key('Up');key('Return')
                     code=process.wait(timeout=15);assert code==0,code
                     report['modal_ui_verified']=True
@@ -248,7 +285,7 @@ with prefix.with_suffix('.log').open('w') as log:
                     shutil.copyfile(root/'game-frame-latest.ppm',str(prefix)+'-world-after.ppm')
                     key('Right',1);time.sleep(2)
                     report['world_after_turn']=state()
-                    key('Escape');time.sleep(3)
+                    key('Escape',.6);book.wait_ready()
                     shutil.copyfile(root/'game-frame-latest.ppm',str(prefix)+'-world-book.ppm')
                     key('Up');key('Return')
                     code=process.wait(timeout=15)

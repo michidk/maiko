@@ -7,7 +7,8 @@ from pathlib import Path
 import subprocess
 import time
 import uuid
-from .build_windows import ROOT,IMAGE,ensure_tool_image,run
+from .toolchain import ROOT,IMAGE,ensure_tool_image,run,is_mountable,MOUNT_ROOT
+from .gog_install import movie_bundle
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -22,24 +23,27 @@ def main():
     p.add_argument('--fresh-start',action='store_true')
     p.add_argument('--cd-image',type=Path,help='Optional owned image for the additional movie test')
     p.add_argument('--loose-movie',type=Path,help='Owned INTRO.SMK fixture to test installed-file playback without an image')
+    p.add_argument('--installed-gog',action='store_true',help='Test the owned installed GOG movie data without passing a runtime media argument')
     p.add_argument('--pcm-reference',type=Path,help='Independent PCM report, required with --cd-image')
     a=p.parse_args()
     began=time.monotonic()
-    if a.cd_image and a.loose_movie:p.error('Choose image or loose-file media, not both')
-    if bool(a.cd_image or a.loose_movie)!=bool(a.pcm_reference):
+    if sum(bool(source) for source in [a.cd_image,a.loose_movie,a.installed_gog])>1:p.error('Choose one movie source')
+    if bool(a.cd_image or a.loose_movie or a.installed_gog)!=bool(a.pcm_reference):
         p.error('Supply media and --pcm-reference together, or omit both for the no-media menu test')
     if a.window_close and not a.jump_cycle:p.error('--window-close requires --jump-cycle')
-    if a.fresh_start and (not a.jump_cycle or a.jump_action!='new' or a.cd_image or a.loose_movie):p.error('--fresh-start requires --jump-cycle --jump-action new without movie media')
+    if a.fresh_start and (not a.jump_cycle or a.jump_action!='new' or a.cd_image or a.loose_movie or a.installed_gog):p.error('--fresh-start requires --jump-cycle --jump-action new without movie media')
     for path in [a.install]+([a.cd_image] if a.cd_image else []):
-        if not path.resolve().is_relative_to('/home/vibepod/workspaces'):
-            p.error('Docker mounts must resolve under /home/vibepod/workspaces')
+        if not is_mountable(path):
+            p.error(f'Docker mounts must resolve under {MOUNT_ROOT}')
     reference=json.loads(a.pcm_reference.read_text()) if a.pcm_reference else None
+    media=movie_bundle(a.install) if a.installed_gog else a.cd_image.resolve() if a.cd_image else None
     if reference and (reference.get('original_pcm_reference_verified') is not True or reference.get('bytes_compared')!=32768):
         p.error('Requires an independent32768-byte PCM comparison report')
     directory=a.package.resolve();archive=directory/'redguard-native-startup-test.zip'
     (directory/'package-verification.json').unlink(missing_ok=True)
     name='rg-package-'+uuid.uuid4().hex[:10]
-    invocation=dict(container=name,game_mount_readonly=True,cd_mount_readonly=bool(a.cd_image),
+    invocation=dict(container=name,game_mount_readonly=True,cd_mount_readonly=bool(media),
+                    installed_gog=a.installed_gog,game_install=str(a.install.resolve()),
                     zip_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
                     test_image_sha256=hashlib.sha256(a.test_image.read_bytes()).hexdigest(),
                     pcm_reference_report_sha256=hashlib.sha256(a.pcm_reference.read_bytes()).hexdigest() if reference else None,
@@ -49,7 +53,7 @@ def main():
         run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2',
              '--env','SDL_AUDIODRIVER=dummy','--name',name,
              '--mount',f'type=bind,src={a.install.resolve()},dst=/game,readonly',
-             *(['--mount',f'type=bind,src={a.cd_image.resolve()},dst=/media/owned CD image.gog,readonly'] if a.cd_image else []),
+             *(['--mount',f'type=bind,src={media},dst=/media/owned CD image.gog,readonly'] if media else []),
              IMAGE,'sleep','240'])
         run(['docker','cp',str(ROOT/'tests')+'/.',name+':/tests'])
         for source,destination in [(archive,'runtime.zip'),(a.test_image,'user-RGFX.EXE'),
@@ -68,13 +72,15 @@ def main():
             command+=['--cd-image','/media/owned CD image.gog','--movie-pcm-sha256',reference['sha256']]
         if a.loose_movie:
             command+=['--loose-movie','/work/INTRO.SMK','--movie-pcm-sha256',reference['sha256']]
+        if a.installed_gog:
+            command+=['--installed-gog','--movie-pcm-sha256',reference['sha256']]
         invocation['command']=command
         with (directory/'package-test.log').open('w') as log:
             run(command,stdout=log,stderr=subprocess.STDOUT)
     finally:
         invocation['seconds']=round(time.monotonic()-began,3)
         (directory/'package-invocation.json').write_text(json.dumps(invocation,indent=2)+'\n')
-        for file in ['package-verification.json','package-movie.json','package-movie.log',
+        for file in ['package-verification.json','package-cmd-output.log','package-movie.json','package-movie.log',
                      'package-native-test.log','package-invalid-cd.log','gameplay-continue.json','gameplay-continue.log','gameplay-new.json','gameplay-new.log']:
             subprocess.run(['docker','cp',name+':/work/'+file,str(directory/file)],
                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

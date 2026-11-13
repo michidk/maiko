@@ -2,7 +2,7 @@
 import hashlib
 import re
 import subprocess
-from .build_windows import ROOT
+from .toolchain import ROOT
 from .pipeline import SR_COMMIT
 
 def stage_sr_audio(container,patched=True):
@@ -20,7 +20,7 @@ def stage_sr_audio(container,patched=True):
             sample=re.search(r'typedef struct _Game_sample \{.*?\} Game_sample;',text,re.S).group()
             data=(notice+'#pragma once\n#include <stdint.h>\n#include <SDL.h>\n#include <stddef.h>\n#define CCALL\n#define GAME_MIXER_CHANNELS_INITIAL 16\n#define GAME_SAMPLE_CACHE_SIZE 32\n'+sample+'\n').encode()
         subprocess.run(['docker','exec','-i',container,'tee','/audio/'+name],input=data,stdout=subprocess.DEVNULL,check=True)
-    for name in ['Game_vars.h','Game_memory.h','stream_pcm.c','stream_pcm.h']:
+    for name in ['Game_vars.h','Game_memory.h','stream_pcm.h']:
         subprocess.run(['docker','cp',str(ROOT/'audio'/name),container+':/audio/'+name],check=True)
     patch=ROOT/'patches/sr-audio.patch'
     if patched and patch.exists():
