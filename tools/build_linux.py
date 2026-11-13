@@ -68,7 +68,7 @@ def main():
         report['base_toolchain']=ensure_tool_image()
         if subprocess.run(['docker','image','inspect',IMAGE],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
             with (output/'toolchain-build.log').open('w') as log:
-                run(['docker','build','-t',IMAGE,'-f',str(ROOT/'linux/Dockerfile'),str(ROOT)],stdout=log,stderr=subprocess.STDOUT)
+                run(['docker','build','-t',IMAGE,'-f',str(ROOT/'tools/docker/linux.Dockerfile'),str(ROOT/'tools/docker')],stdout=log,stderr=subprocess.STDOUT)
         report['toolchain_image']=subprocess.check_output(['docker','image','inspect',IMAGE,'--format','{{.Id}}'],text=True).strip()
         backend=ROOT/'.cache/openglide-ng'
         archive=subprocess.check_output(['git','archive',BACKEND],cwd=backend)

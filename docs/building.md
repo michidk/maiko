@@ -27,3 +27,9 @@ Cargo uses its configured shared target directory; do not override it.
 The runtime and package builders have command-line help for their supported options. Downloaded dependencies and generated output stay in ignored `.cache/` and `artifacts/` directories. Original installations and media are read-only inputs. Generated packages are for the owner's local use and must not be uploaded as release assets.
 
 A Linux or Wine check does not establish real-Windows acceptance. Dummy audio and software rendering checks do not establish hardware playback or rendering.
+
+## Local development containers
+
+`tools/docker/Dockerfile` defines the optional compiler, assembler and Wine environment used by the local build and test tools. `tools/docker/linux.Dockerfile` extends it with SDL/OpenGL development libraries and debugging tools. These images are development dependencies; the browser builder, release pipeline and generated game packages run without Docker.
+
+The tools build these images automatically when needed, using only `tools/docker/` as the build context. Game files, caches and the rest of the checkout are excluded from that context without a `.dockerignore` file.

@@ -78,13 +78,13 @@ def main():
         package.writestr('build-report.json',json.dumps(report,indent=2)+'\n')
         package.writestr('LICENSES.txt',licence)
         package.writestr('sources/openglide-ng-'+BACKEND+'.tar.gz',gzip.compress(archive,mtime=0))
-        for filename in ['patches/openglide-x64.patch','glide/build_backend.sh','tests/backend_smoke.cpp','Dockerfile']:
+        for filename in ['patches/openglide-x64.patch','glide/build_backend.sh','tests/backend_smoke.cpp','tools/docker/Dockerfile']:
             package.write(ROOT/filename,'sources/'+filename)
         package.writestr('sources/README.txt','OpenGLide-ng upstream: https://github.com/eugenenuke/openglide-ng\n'
                          'Extract the source archive to /src, apply patches/openglide-x64.patch with patch -p1,\n'
                          'copy glide/build_backend.sh and tests/backend_smoke.cpp into /work, then run\n'
                          'sh /work/build_backend.sh\n'
-                         'inside the supplied Dockerfile toolchain. The build script creates the SDK header.\n')
+                         'inside the supplied tools/docker/Dockerfile toolchain. The build script creates the SDK header.\n')
     digest=hashlib.sha256(destination.read_bytes()).hexdigest()
     source_digest=hashlib.sha256(development.read_bytes()).hexdigest()
     (args.output/'RUN.cmd').write_bytes(launcher.encode('utf-8'))
