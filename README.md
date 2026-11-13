@@ -101,7 +101,7 @@ The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages.
 
 ## Known limitations
 
-- **CD music is not implemented.** Sound effects, speech and movie audio work. Music that the original played from CD tracks is silent.
+- **CD music needs the GOG disc image.** The music is read from the audio tracks of `game.gog`, using the `game.ins` cue sheet beside it (the GOG release has both next to the game folder). Without them the game runs without music.
 - **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.
 - **macOS is not supported.**
 

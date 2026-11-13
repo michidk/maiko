@@ -185,17 +185,17 @@ loc_2FAF8,3,mov eax,[eax+0x25]|test eax,eax|jz loc_2FB23
 loc_11A380,168,CALL host_movie_clock_init|RET
 
 # == Audio startup and shutdown
-# Original: loc_C84C0 is the audio initialization routine (305 bytes replaced): after calling loc_C85F4 it calls the Miles startup function at 0xCB580 and further initialization helpers. loc_CB580 is the first instruction (three PUSHes) of that startup function. loc_D03A0 is the first instruction (two PUSHes) of the Redbook CD-audio open.
-# Replacement: loc_C84C0 keeps the original call to loc_C85F4, then calls host_audio_init (service 0x3000) and returns. loc_CB580 and loc_D03A0 become host_audio_startup (0x3011) and host_audio_cd_open (0x3012), each followed by RET.
-# Effect: sample audio goes through the native mixer; the CD-audio open takes the original no-device path. CD music is not implemented.
+# Original: loc_C84C0 is the audio initialization routine (305 bytes replaced): after calling loc_C85F4 it calls the Miles startup function at 0xCB580 and further initialization helpers. loc_CB580 is the first instruction (three PUSHes) of that startup function. loc_D03A0 is the first instruction (two PUSHes) of AIL_redbook_open_drive, the CD-audio open.
+# Replacement: loc_C84C0 keeps the original call to loc_C85F4, then calls host_audio_init (service 0x3000) and returns. loc_CB580 becomes host_audio_startup (0x3011) and loc_D03A0 becomes host_redbook_open_drive (0x3100), each followed by RET.
+# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (native-metadata/external_procedures.sci).
 # Why: the Miles driver, DOS audio hardware and a CD-ROM device are not available natively.
-# Evidence: runtime/host/lib.rs service 0x3000; runtime/rust/audio.rs; docs/architecture.md.
+# Evidence: runtime/host/lib.rs service 0x3000 and 0x3100; runtime/rust/audio.rs; runtime/rust/redbook.rs; docs/architecture.md.
 # sha256: 0235edcd76b8bb6e428c3fe36bc889a383a502520068e9f2cdaedbbe4643d37e
 loc_C84C0,305,CALL loc_C85F4|CALL host_audio_init|RET
 # sha256: 4b065669e47a4cb45505bace1c278a15421fba8813ffeb939cc9a175f2d7a2b0
 loc_CB580,3,CALL host_audio_startup|RET
 # sha256: 072f005fc3f2a49f2e29225d116c10a3904c326a1b810a6eb840d9a574526694
-loc_D03A0,2,CALL host_audio_cd_open|RET
+loc_D03A0,2,CALL host_redbook_open_drive|RET
 
 # == Miles callback preparation
 # Original: MOV EDX,[0x3A258] loads the first Miles callback pointer.

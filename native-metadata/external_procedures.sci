@@ -36,7 +36,6 @@ loc_D24A0,host_audio_sample_get_user
 loc_D4880,host_audio_alloc
 loc_D47F0,host_audio_free
 loc_CB580,host_audio_startup
-loc_D03A0,host_audio_cd_open
 
 loc_D3DF0,host_audio_stream_allocate
 loc_D3C80,host_audio_stream_release
@@ -48,3 +47,18 @@ loc_F2000,host_movie_clock_read
 loc_F1FF0,host_movie_clock_stop
 loc_F9AE0,host_audio_buffer_unlock
 loc_F9B00,host_audio_buffer_lock
+
+# CD music: the AIL_redbook_* entry points (runtime/rust/redbook.rs).
+loc_D03A0,host_redbook_open_drive
+loc_D0310,host_redbook_close
+loc_D0130,host_redbook_status
+loc_D0040,host_redbook_tracks
+loc_CFF80,host_redbook_track
+loc_CFED0,host_redbook_track_info
+loc_CFC70,host_redbook_play
+loc_CFBB0,host_redbook_stop
+loc_CFAF0,host_redbook_pause
+loc_CFA30,host_redbook_resume
+loc_CFD50,host_redbook_position
+loc_CF970,host_redbook_volume
+loc_CF8A0,host_redbook_set_volume

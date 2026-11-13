@@ -131,6 +131,7 @@ unsafe extern "C" fn postmix(_: *mut c_void, data: *mut u8, length: c_int) {
             }
         }
     }
+    crate::redbook::mix(output);
     MIXED.fetch_add((output.len() / 4) as u64, Relaxed);
     NONZERO.fetch_add(
         output
@@ -173,6 +174,7 @@ impl Audio {
 
     fn close(&mut self) {
         self.started = false;
+        crate::redbook::close();
         if !self.opened {
             return;
         }
@@ -317,13 +319,6 @@ impl Audio {
 
     unsafe fn service(&mut self, service: u32, frame: &mut GuestFrame) -> bool {
         match service {
-            18 => {
-                eprintln!(
-                    "Native CD audio unavailable: no virtual CD device configured; continuing without CD music"
-                );
-                frame.eax = 0;
-                return true;
-            }
             17 => {
                 frame.eax = u64::from(!self.started);
                 self.started = true;

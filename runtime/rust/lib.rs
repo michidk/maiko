@@ -12,6 +12,7 @@ pub mod media;
 pub mod memory;
 pub mod movies;
 pub mod platform;
+pub mod redbook;
 pub mod storage;
 pub mod stream;
 pub mod timing;

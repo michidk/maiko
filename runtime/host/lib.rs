@@ -221,6 +221,11 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             }
             close_requested();
         }
+        if service & 0xff00 == 0x3100
+            && maiko_runtime::redbook::rg_redbook_service(service & 0xff, f) != 0
+        {
+            return;
+        }
         if service & 0xff00 == 0x3000 {
             if service == 0x3000 {
                 if rg_audio_open((&raw mut rg_sound_handles).cast()) != 0 {
