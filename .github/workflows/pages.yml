@@ -36,7 +36,15 @@ jobs:
       - run: bun test web
       - name: Install the matching WebAssembly binding generator
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - name: Download private release assets for the static site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          task_kit_tag=$(bun -e 'const kits = await Bun.file("web/kits.json").json(); const tags = Object.values(kits).map(kit => new URL(kit.url).pathname.split("/").at(-2)); if (new Set(tags).size !== 1 || !/^[A-Za-z0-9_.-]+$/.test(tags[0])) throw new Error("Kits must use one pinned release"); console.log(tags[0]);')
+          gh release download "$task_kit_tag" --repo "$GITHUB_REPOSITORY" --pattern linux.zip --pattern windows.zip --dir "$RUNNER_TEMP/maiko-kits"
       - name: Build the website and verify pinned runtime downloads
+        env:
+          MAIKO_KIT_DIRECTORY: ${{ runner.temp }}/maiko-kits
         run: bun run build
       - uses: actions/upload-pages-artifact@v3
         with:

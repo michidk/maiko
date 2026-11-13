@@ -56,9 +56,11 @@ Use Bun, Rust's `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.129:
 ```sh
 bun install --frozen-lockfile
 bun test web
-bun run build
+gh release download client-runtime-20261113 --repo michidk/maiko \
+  --pattern linux.zip --pattern windows.zip --dir .cache/site-kits
+MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
 ```
 
-`web/kits.json` pins immutable Maiko release URLs and SHA-256 hashes. The site build checks the downloads and serves them from the same origin. For a local build, `MAIKO_KIT_DIRECTORY` can point to a directory with the same checked `linux.zip` and `windows.zip`. The content security policy restricts browser requests to the page's origin.
+`web/kits.json` pins Maiko release URLs and SHA-256 hashes. The site build checks the downloads and serves them from the same origin. The workflow downloads private release assets with its read-only Actions token before building; no credential reaches the static site or browser. For a local build, `MAIKO_KIT_DIRECTORY` can point to a directory with the same checked `linux.zip` and `windows.zip`. The content security policy restricts browser requests to the page's origin.
 
 `.github/workflows/pages.yml` runs the source checks, builds Rust/WASM and the static page, uploads the Pages artifact, and deploys on main or manual dispatch. Set **Settings → Pages → Source → GitHub Actions** before deploying. The managed GitHub App needs Pages write permission to enable that setting through the API.
