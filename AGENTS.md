@@ -5,7 +5,6 @@ Maiko is a native Windows and Linux runtime for an owned copy of *The Elder Scro
 ## Branches and publishing
 
 - **All work lands directly on `main`.** Commit validated, completed work to `main` and push it. Do not open pull requests and do not keep long-lived feature branches. This is a standing instruction from the owner for this repository and replaces the usual "feature branch, no direct push to `main`" rule.
-- **macOS is the one exception.** Mac work stays on `feat/macos-backend` and its draft PR. Do not merge it into `main`, do not rebase it onto `main` and do not touch it unless the owner asks. Mac development is on hold.
 - Pull `main` before starting and again before every commit. Reconcile with changes from other sessions; never overwrite peer work and never force-push.
 - Publish through the GitHub API as the managed App so GitHub signs the commit: GraphQL `createCommitOnBranch` on `main` with `expectedHeadOid`. Put `Co-authored-by: Michael Lohr <michael@lohr.dev>` and the agent's own `Co-authored-by` line in `message.body`, then read the commit back and confirm a valid signature and both trailers.
 - Use Conventional Commits (`type(scope): description`). Do not commit game files, CD images, generated translations, build output, saves or `.cache/` and `artifacts/`.
