@@ -443,8 +443,7 @@ pub(crate) fn rename_noreplace(
         use std::os::{fd::AsRawFd, unix::ffi::OsStrExt};
         let old = CString::new(old.as_bytes()).map_err(|_| denied())?;
         let new = CString::new(new.as_bytes()).map_err(|_| denied())?;
-        #[cfg(target_os = "linux")]
-        let result = unsafe {
+        if unsafe {
             libc::renameat2(
                 source.as_raw_fd(),
                 old.as_ptr(),
@@ -452,18 +451,8 @@ pub(crate) fn rename_noreplace(
                 new.as_ptr(),
                 libc::RENAME_NOREPLACE,
             )
-        };
-        #[cfg(target_os = "macos")]
-        let result = unsafe {
-            libc::renameatx_np(
-                source.as_raw_fd(),
-                old.as_ptr(),
-                destination.as_raw_fd(),
-                new.as_ptr(),
-                libc::RENAME_EXCL,
-            )
-        };
-        if result != 0 {
+        } != 0
+        {
             return Err(io::Error::last_os_error());
         }
     }

@@ -9,8 +9,7 @@ sys.path.insert(0, str(ROOT))
 from tools.pipeline import read_replacements, replacement_text
 
 TABLES = {'native-metadata/instruction_replacements.sci': True,
-          'metadata/instruction_replacements.sci': True,
-          'llasm-metadata/instruction_replacements.sci': True}
+          'metadata/instruction_replacements.sci': True}
 for name, hashed in TABLES.items():
     entries = read_replacements(ROOT / name, require_hash=hashed)
     assert entries, name

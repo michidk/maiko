@@ -12,10 +12,6 @@ crate-type = ["staticlib"]
 test = false
 doctest = false
 
-[features]
-llasm = ["maiko-runtime/llasm", "maiko-glide/llasm"]
-llasm-entry = ["llasm"]
-
 [dependencies]
 maiko-runtime = { path = "../.." }
 maiko-glide = { path = "../glide" }

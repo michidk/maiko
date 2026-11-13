@@ -1,6 +1,5 @@
 //! Read-only ISO root files exposed to the original DOS movie player.
 use crate::guest::GuestFrame;
-use crate::memory::guest_ptr;
 use std::ffi::{CStr, c_char, c_int};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -260,7 +259,7 @@ impl Media {
                         + u64::from(handle.position % 2048);
                     let out = unsafe {
                         std::slice::from_raw_parts_mut(
-                            guest_ptr::<u8>(frame.edx as u32).add(done as usize),
+                            (frame.edx as u32 as usize + done as usize) as *mut u8,
                             part as usize,
                         )
                     };
@@ -284,7 +283,7 @@ unsafe fn cd_path<'a>(pointer: u32) -> Option<&'a [u8]> {
     if pointer == 0 {
         return None;
     }
-    let bytes = unsafe { CStr::from_ptr(guest_ptr::<c_char>(pointer)) }.to_bytes();
+    let bytes = unsafe { CStr::from_ptr(pointer as usize as *const c_char) }.to_bytes();
     (bytes.len() >= 2 && bytes[0].eq_ignore_ascii_case(&b'd') && bytes[1] == b':')
         .then(|| &bytes[2..])
 }

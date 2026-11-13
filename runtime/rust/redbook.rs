@@ -267,9 +267,8 @@ pub fn close() {
 }
 
 unsafe fn put_u32(address: u32, value: u32) {
-    let pointer = crate::memory::guest_ptr::<u32>(address);
-    if address != 0 && rg_host_readable(pointer.cast(), 4) != 0 {
-        unsafe { pointer.write_unaligned(value) };
+    if address != 0 && rg_host_readable(address as usize as *const _, 4) != 0 {
+        unsafe { (address as usize as *mut u32).write_unaligned(value) };
     }
 }
 
@@ -282,7 +281,7 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return 0;
     };
-    let stack = crate::memory::guest_ptr::<u32>(frame.esp as u32);
+    let stack = frame.esp as u32 as usize as *const u32;
     if rg_host_readable(stack.cast(), 5 * 4) == 0 {
         return 0;
     }

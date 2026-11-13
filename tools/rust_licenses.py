@@ -24,11 +24,11 @@ def generated_mit(package):
             + str(package['repository']) + ')\n\nCopyright (c) ' + holders + '\n\n' + MIT + '\n')
 
 
-def notices(target='x86_64-pc-windows-gnu'):
+def notices():
     cargo = shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo')
     metadata = json.loads(subprocess.check_output([
         cargo, 'metadata', '--format-version=1', '--locked', '--offline',
-        '--filter-platform', target], cwd=ROOT, text=True))
+        '--filter-platform', 'x86_64-pc-windows-gnu'], cwd=ROOT, text=True))
     packages = {package['id']: package for package in metadata['packages']}
     nodes = {node['id']: node for node in metadata['resolve']['nodes']}
     included = set()

@@ -2,7 +2,6 @@
 use crate::guest::GuestFrame;
 use crate::input::rg_mouse_service;
 use crate::memory::rg_low_alloc;
-use crate::memory::{guest_address, guest_ptr};
 use std::ffi::{c_char, c_int};
 use std::sync::Mutex;
 
@@ -12,11 +11,7 @@ unsafe extern "C" {
 static INVENTORY: Mutex<usize> = Mutex::new(0);
 
 fn memory() -> Option<(u64, u64)> {
-    #[cfg(target_os = "macos")]
-    {
-        crate::darwin::memory()
-    }
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     unsafe {
         let mut info = std::mem::MaybeUninit::<libc::sysinfo>::zeroed();
         if libc::sysinfo(info.as_mut_ptr()) != 0 {
@@ -38,70 +33,60 @@ fn memory() -> Option<(u64, u64)> {
 }
 
 fn guest_space() -> Option<(u64, u64)> {
-    #[cfg(target_os = "macos")]
-    return crate::darwin::guest_space();
-    #[cfg(not(target_os = "macos"))]
+    let (mut cursor, mut total, mut largest) = (0x20000000u64, 0, 0);
+    #[cfg(unix)]
     {
-        let base = crate::memory::guest_base() as u64;
-        #[cfg(feature = "llasm")]
-        let limit = base.checked_add(0x8000_0000)?;
-        #[cfg(not(feature = "llasm"))]
-        let limit = 0xe000_0000;
-        let (mut cursor, mut total, mut largest) = (base.checked_add(0x2000_0000)?, 0, 0);
-        #[cfg(unix)]
-        {
-            let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
-            for line in maps.lines() {
-                let (start, end) = line.split_whitespace().next()?.split_once('-')?;
-                let (start, end) = (
-                    u64::from_str_radix(start, 16).ok()?,
-                    u64::from_str_radix(end, 16).ok()?,
-                );
-                if end <= cursor {
-                    continue;
-                }
-                let start = start.min(limit);
-                if start > cursor {
-                    let bytes = start - cursor;
-                    total += bytes;
-                    largest = largest.max(bytes);
-                }
-                cursor = cursor.max(end);
-                if cursor >= limit {
-                    break;
-                }
+        let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+        for line in maps.lines() {
+            let (start, end) = line.split_whitespace().next()?.split_once('-')?;
+            let (start, end) = (
+                u64::from_str_radix(start, 16).ok()?,
+                u64::from_str_radix(end, 16).ok()?,
+            );
+            if end <= cursor {
+                continue;
+            }
+            let start = start.min(0xe0000000);
+            if start > cursor {
+                let bytes = start - cursor;
+                total += bytes;
+                largest = largest.max(bytes);
+            }
+            cursor = cursor.max(end);
+            if cursor >= 0xe0000000 {
+                break;
             }
         }
-        #[cfg(windows)]
-        {
-            use windows_sys::Win32::System::Memory::*;
-            while cursor < limit {
-                let mut info = std::mem::MaybeUninit::<MEMORY_BASIC_INFORMATION>::zeroed();
-                if unsafe {
-                    VirtualQuery(
-                        cursor as usize as *const _,
-                        info.as_mut_ptr(),
-                        std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-                    )
-                } == 0
-                {
-                    return None;
-                }
-                let info = unsafe { info.assume_init() };
-                let end = (info.BaseAddress as u64 + info.RegionSize as u64).min(limit);
-                if end <= cursor {
-                    return None;
-                }
-                if info.State == MEM_FREE {
-                    let bytes = end - cursor;
-                    total += bytes;
-                    largest = largest.max(bytes);
-                }
-                cursor = end;
-            }
-        }
-        Some((total, largest.min(0x10000000)))
     }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Memory::*;
+        while cursor < 0xe0000000 {
+            let mut info = std::mem::MaybeUninit::<MEMORY_BASIC_INFORMATION>::zeroed();
+            if unsafe {
+                VirtualQuery(
+                    cursor as usize as *const _,
+                    info.as_mut_ptr(),
+                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                )
+            } == 0
+            {
+                return None;
+            }
+            let info = unsafe { info.assume_init() };
+            let end = (info.BaseAddress as u64 + info.RegionSize as u64).min(0xe0000000);
+            if end <= cursor {
+                return None;
+            }
+            if info.State == MEM_FREE {
+                let bytes = end - cursor;
+                total += bytes;
+                largest = largest.max(bytes);
+            }
+            cursor = end;
+        }
+    }
+    Some((total, largest.min(0x10000000)))
 }
 
 /// # Safety
@@ -111,7 +96,7 @@ pub unsafe extern "C" fn rg_int386(frame: *mut GuestFrame) -> c_int {
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return 0;
     };
-    let mut registers = unsafe { (guest_ptr::<[u32; 7]>(frame.edx as u32)).read_unaligned() };
+    let mut registers = unsafe { (frame.edx as u32 as usize as *const [u32; 7]).read_unaligned() };
     match frame.eax & 255 {
         0x33 => {
             if unsafe { rg_mouse_service(registers.as_mut_ptr()) } == 0 {
@@ -139,7 +124,7 @@ pub unsafe extern "C" fn rg_int386(frame: *mut GuestFrame) -> c_int {
             info[6] = (total / 4096).min(u64::from(info[2])) as u32;
             info[7] = pages;
             unsafe {
-                (guest_ptr::<[u32; 12]>(registers[5])).write_unaligned(info);
+                (registers[5] as usize as *mut [u32; 12]).write_unaligned(info);
             }
             eprintln!("Native guest memory largest={largest} available_pages={pages}");
         }
@@ -147,7 +132,7 @@ pub unsafe extern "C" fn rg_int386(frame: *mut GuestFrame) -> c_int {
     }
     registers[6] = 0;
     unsafe {
-        (guest_ptr::<[u32; 7]>(frame.ebx as u32)).write_unaligned(registers);
+        (frame.ebx as u32 as usize as *mut [u32; 7]).write_unaligned(registers);
     }
     frame.eax = registers[0].into();
     1
@@ -167,7 +152,7 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
         }
         *cached
     } else {
-        guest_ptr::<u8>(frame.eax as u32) as usize
+        frame.eax as u32 as usize
     };
     if pointer == 0 {
         frame.eax = 0;
@@ -209,13 +194,11 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
     }
     let platform = if cfg!(windows) {
         "Windows native x64"
-    } else if cfg!(target_os = "macos") {
-        "macOS native"
     } else {
         "Linux native x64"
     };
     info[0x17c..0x17c + platform.len()].copy_from_slice(platform.as_bytes());
-    frame.eax = guest_address(pointer as *const u8).into();
+    frame.eax = pointer as u64;
     eprintln!("Native platform inventory: {platform}; DOS/BIOS features absent");
 }
 

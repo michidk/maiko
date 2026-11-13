@@ -6,7 +6,6 @@
 #include <windows.h>
 #endif
 #include "guest_abi.h"
-#include "guest_address.h"
 extern void rg_atoi(void);
 #ifdef _WIN32
 static LONG CALLBACK fault(EXCEPTION_POINTERS *info) {
@@ -18,9 +17,9 @@ static LONG CALLBACK fault(EXCEPTION_POINTERS *info) {
 #endif
 static void conversion(GuestRegs *r, const char *text, uint32_t expected) {
     uint32_t sp=r->esp;
-    r->eax=RG_ADDRESS(text);
+    r->eax=(uint32_t)(uintptr_t)text;
     r->ebx=0x12345678; r->ecx=0xabcdef01; r->edx=0x76543210;
-    rg_call(RG_ADDRESS(rg_atoi),r);
+    rg_call((uint32_t)(uintptr_t)rg_atoi,r);
     assert(r->eax==expected && r->esp==sp);
     assert(r->ebx==0x12345678 && r->ecx==0xabcdef01 && r->edx==0x76543210);
 }
@@ -32,7 +31,7 @@ int main(void) {
 #endif
     GuestRegs r={0};
     char *memory=rg_low_alloc(65536); assert(memory);
-    r.esp=RG_ADDRESS(memory)+65536;
+    r.esp=(uint32_t)(uintptr_t)memory+65536;
     const struct { const char *text; uint32_t value; } cases[]={
         {"0",0},{"  \t-123x",(uint32_t)-123},{"+42",42},
         {"not a number",0},{"",0},{"4294967295",UINT32_MAX},

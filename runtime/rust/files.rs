@@ -1,7 +1,6 @@
 //! Original DOS file handles and DTA searches, with one host-independent policy.
 use crate::guest::GuestFrame;
 use crate::media::rg_cd_service;
-use crate::memory::guest_ptr;
 use crate::storage::{self, STORAGE, Storage};
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::OpenOptions;
@@ -274,7 +273,8 @@ impl Files {
                     parent.remove_file(leaf)
                 }
                 0x56 => {
-                    let target = unsafe { storage::path_from_c(guest_ptr::<_>(frame.edi as u32)) }?;
+                    let target =
+                        unsafe { storage::path_from_c(frame.edi as u32 as usize as *const _) }?;
                     let relative = storage.relative(&target.to_string_lossy())?;
                     let (destination, name, _) = storage.parent(&relative, true, true)?;
                     if !parent
@@ -309,7 +309,7 @@ impl Files {
                 frame.error(4);
                 return true;
             };
-            let request = unsafe { storage::path_from_c(guest_ptr::<_>(frame.edx as u32)) };
+            let request = unsafe { storage::path_from_c(frame.edx as u32 as usize as *const _) };
             let entries =
                 request.and_then(|p| entries(storage, &p.to_string_lossy(), frame.ecx as u32));
             let entries = match entries {
@@ -364,13 +364,13 @@ impl Files {
         let storage = storage.as_ref();
         match op {
             0x1a => {
-                self.dta = guest_ptr::<u8>(frame.edx as u32) as usize;
+                self.dta = frame.edx as u32 as usize;
                 return true;
             }
             0x4e | 0x4f => return self.search(frame, op, storage),
             0x39 | 0x3a | 0x3c | 0x3d | 0x41 | 0x43 | 0x56 => {
                 let request =
-                    match unsafe { storage::path_from_c(guest_ptr::<_>(frame.edx as u32)) } {
+                    match unsafe { storage::path_from_c(frame.edx as u32 as usize as *const _) } {
                         Ok(p) => p,
                         Err(e) => {
                             frame.error(dos_error(e));
@@ -444,7 +444,7 @@ impl Files {
             0x40 if handle == 1 || handle == 2 => {
                 let data = unsafe {
                     std::slice::from_raw_parts(
-                        guest_ptr::<u8>(frame.edx as u32),
+                        frame.edx as u32 as usize as *const u8,
                         frame.ecx as u32 as usize,
                     )
                 };
@@ -491,7 +491,7 @@ impl Files {
             0x3f => {
                 let data = unsafe {
                     std::slice::from_raw_parts_mut(
-                        guest_ptr::<u8>(frame.edx as u32),
+                        frame.edx as u32 as usize as *mut u8,
                         frame.ecx as u32 as usize,
                     )
                 };
@@ -513,7 +513,7 @@ impl Files {
                 } else {
                     let data = unsafe {
                         std::slice::from_raw_parts(
-                            guest_ptr::<u8>(frame.edx as u32),
+                            frame.edx as u32 as usize as *const u8,
                             frame.ecx as u32 as usize,
                         )
                     };
