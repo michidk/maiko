@@ -9,6 +9,52 @@
 #include <initializer_list>
 #include "sdk2_glide.h"
 
+static unsigned fogged_white(float depth) {
+    grBufferClear(0,0,0xffff);
+    GrVertex a={},b={},c={};
+    a.x=40; a.y=40; b.x=400; b.y=40; c.x=40; c.y=400;
+    a.oow=b.oow=c.oow=1.0f/depth;
+    grDrawTriangle(&a,&b,&c);
+    GrLfbInfo_t info={}; info.size=sizeof info;
+    assert(grLfbLock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER,GR_LFBWRITEMODE_565,
+                     GR_ORIGIN_UPPER_LEFT,FXFALSE,&info));
+    auto row=(const uint16_t*)((const char*)info.lfbPtr+100*info.strideInBytes);
+    unsigned red=(row[100]>>11)*255/31;
+    assert(grLfbUnlock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER));
+    return red;
+}
+
+static void check_fog_interpolation() {
+    guColorCombineFunction(GR_COLORCOMBINE_CCRGB);
+    grConstantColorValue(0xffffffff);
+    grFogColorValue(0);
+    grFogMode(GR_FOG_WITH_TABLE);
+    GrFog_t fog[GR_FOG_TABLE_SIZE]={};
+    for (int i=44;i<GR_FOG_TABLE_SIZE;++i)
+        fog[i]=i==44?38:i==45?76:i==46?136:i==47?196:255;
+    grFogTable(fog);
+    // At these distances the old lookup jumps an entire table entry as a
+    // vertex moves. The expected RGB values use reciprocal-depth interpolation.
+    struct Sample { float depth; int red; };
+    for (auto sample:{Sample{0.5f,255}, Sample{2730.65f,119}, Sample{2730.68f,119},
+                      Sample{3000.0f,87}, Sample{3276.79f,59}, Sample{3276.81f,59},
+                      Sample{65535.0f,0}}) {
+        int red=(int)fogged_white(sample.depth);
+        fprintf(stderr,"Fog depth=%.3f red=%d expected=%d\n",sample.depth,red,sample.red);
+        assert(red>=sample.red-8 && red<=sample.red+8);
+    }
+    // Fog tables can fall as well as rise. Halfway in reciprocal depth
+    // between entries 3 and 4, densities 255 and 0 must average to 127.5.
+    fog[3]=255; fog[4]=0;
+    grFogTable(fog);
+    float midpoint=2.0f/(1.0f/guFogTableIndexToW(3)+1.0f/guFogTableIndexToW(4));
+    int red=(int)fogged_white(midpoint);
+    fprintf(stderr,"Fog reciprocal midpoint red=%d expected=128\n",red);
+    assert(red>=120 && red<=136);
+    grFogMode(GR_FOG_DISABLE);
+    puts("PASS fog table interpolation at distance boundaries and reciprocal midpoint");
+}
+
 int main(int argc,char **) {
 #ifdef _WIN32
     if (argc>1) assert(SetCurrentDirectoryA("Z:\\readonly"));
@@ -82,6 +128,7 @@ int main(int argc,char **) {
     fclose(image);
     assert(grLfbUnlock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER));
     grBufferSwap(0);
+    check_fog_interpolation();
     grGlideShutdown();
     puts("PASS native x64 Glide textured triangle, framebuffer readback and swap");
 }
