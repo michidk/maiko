@@ -12,10 +12,10 @@ let worker = null;
 let downloadUrl = null;
 const selectedTarget = () => document.querySelector('input[name="target"]:checked')?.value;
 
-const detected = detectPlatform(navigator.userAgentData?.platform ?? navigator.platform, navigator.userAgent);
+const detected = detectPlatform(navigator.userAgentData?.platform ?? navigator.platform, navigator.userAgent, navigator.maxTouchPoints);
 if (detected) document.querySelector(`input[value="${detected}"]`).checked = true;
 document.querySelector('#detection').textContent = detected
-  ? `${detected === 'windows' ? 'Windows' : 'Linux'} selected automatically.`
+  ? `${{ windows: 'Windows', linux: 'Linux', macos: 'macOS' }[detected]} selected automatically.`
   : 'Select your target system.';
 
 function resetDownload() {
@@ -26,11 +26,15 @@ function resetDownload() {
 }
 function controls() {
   const busy = worker !== null;
-  file.disabled = busy;
+  const macos = selectedTarget() === 'macos';
+  document.querySelector('#browser-build').hidden = macos;
+  document.querySelector('#browser-instructions').hidden = macos;
+  document.querySelector('#macos-guidance').hidden = !macos;
+  file.disabled = busy || macos;
   platforms.disabled = busy;
   cancel.hidden = !busy;
   progress.hidden = !busy;
-  build.disabled = busy || !file.files?.length || !selectedTarget();
+  build.disabled = busy || macos || !file.files?.length || !selectedTarget();
 }
 function stop() { worker?.terminate(); worker = null; controls(); }
 function failure(message) {
@@ -51,7 +55,7 @@ cancel.addEventListener('click', () => { stop(); status.textContent = 'Build can
 build.addEventListener('click', async () => {
   const input = file.files?.[0];
   const target = selectedTarget();
-  if (!input || !target) return;
+  if (!input || !target || target === 'macos') return;
   resetDownload();
   error.hidden = true;
   if (input.size > 32 * 1024 * 1024) { failure('RGFX.EXE must be smaller than 32 MiB. Select the executable rather than an archive or disc image.'); return; }
@@ -83,3 +87,5 @@ build.addEventListener('click', async () => {
   } catch (cause) { failure(cause instanceof Error ? cause.message : String(cause)); }
 });
 window.addEventListener('pagehide', () => { stop(); resetDownload(); });
+
+controls();
