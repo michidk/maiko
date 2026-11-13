@@ -17,14 +17,14 @@ class SourceManifest(unittest.TestCase):
             for name in ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
                          'tools/check_macos_backend.py', 'tools/rust_runtime.py',
                          'tools/sr_heap.py', 'tools/sr_audio.py',
-                         'macos/test.c', 'runtime/test.h',
+                         'platforms/macos/test.c', 'runtime/test.h',
                          *('patches/' + name for name in backend.PATCHES)]:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('original input\n')
             expected = backend.source_manifest(root)
             backend.verify_source_manifest(expected, root)
-            source = root / 'macos/test.c'
+            source = root / 'platforms/macos/test.c'
             source.write_text('changed input\n')
             with self.assertRaisesRegex(RuntimeError, 'Source inputs changed'):
                 backend.verify_source_manifest(expected, root)
@@ -34,7 +34,7 @@ class SourceManifest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Source inputs changed'):
                 backend.verify_source_manifest(expected, root)
             added.unlink()
-            bytecode = root / 'macos/__pycache__/test.pyc'
+            bytecode = root / 'platforms/macos/__pycache__/test.pyc'
             bytecode.parent.mkdir()
             bytecode.write_bytes(b'not a build input')
             backend.verify_source_manifest(expected, root)

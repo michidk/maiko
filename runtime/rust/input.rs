@@ -210,16 +210,7 @@ impl Input {
         }
         self.focused = true;
         let window = self.window.as_ref().unwrap();
-        #[cfg(unix)]
-        return Ok(window.raw().cast());
-        #[cfg(windows)]
-        {
-            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-            match window.window_handle().map_err(|e| e.to_string())?.as_raw() {
-                RawWindowHandle::Win32(handle) => Ok(handle.hwnd.get() as *mut c_void),
-                _ => Err("SDL did not provide a Windows window handle".into()),
-            }
-        }
+        crate::os::renderer_window(window)
     }
 
     fn release_game_input(&mut self) {

@@ -19,10 +19,40 @@ The game installation is read-only. `cap-std` confines save and settings writes 
 
 ## Source layout
 
-- `runtime/`: Rust services, interface headers and startup glue.
+- `runtime/`: shared Rust services, interface headers and CPU backend startup glue.
+- `runtime/rust/os/`: compile-time host OS implementations for Linux, Windows and macOS, with common POSIX operations under `unix/`.
+- `platforms/linux/`, `platforms/windows/` and `platforms/macos/`: platform build scripts, launchers, native headers and development container definitions.
 - `patcher/` and `web/`: local package creation and the static website.
-- `tools/`, `linux/`, `glide/` and `audio/`: build and packaging support.
+- `tools/`, `glide/` and `audio/`: shared build, renderer and packaging support.
 - `tests/`: independent fixtures, interface checks and runtime checks.
 - `patches/`: documented changes to licensed upstream dependencies.
 
 See [building.md](building.md) for source checks and [client-builder.md](client-builder.md) for package creation.
+
+## Host OS boundary
+
+Shared services implement DOS behavior and call the private `os` module for native
+memory queries, locking, disk and clock access, path encoding, atomic rename,
+file metadata, drive enumeration, folder selection, renderer window handles and
+fatal error handling. `os/mod.rs` selects the implementation at compile time.
+Linux and macOS share POSIX helpers in `os/unix/`; Linux mapping queries and
+macOS Mach queries remain in their own directories. Windows uses Win32 APIs.
+The public C service symbols and their argument validation stay in the shared
+runtime. Legacy storage entry points retain their OS-specific ABI signatures.
+
+Storage policy stays in `storage.rs`: it resolves DOS names and confines writes
+to already opened capability directories. OS rename helpers receive those
+opened directories and preserve the no-overwrite contract. Crash reports use a
+shared fixed-size buffer; native handlers and context decoding live under `os/`
+and retain their allocation-free, lock-free fatal path.
+
+CPU translation is independent of host OS. Shared native assembly and ABI files
+stay in `runtime/`; `runtime/host/llasm.rs` and `runtime/rust/llasm.rs` implement
+the CPU-state backend selected by Cargo's `llasm` feature. Linux can exercise that
+backend as well as the native assembly backend. SDL continues to provide
+windowing, input, audio and timing.
+
+Without an explicit game-directory argument, startup checks `game/RGFX.EXE`
+beside the executable, then `RGFX.EXE` directly beside it, before requesting a
+folder. Explicit `--game-dir` and `--choose-game-dir` keep precedence. Image hash
+validation still applies to every selected installation.

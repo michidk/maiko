@@ -11,98 +11,7 @@ unsafe extern "C" {
 }
 static INVENTORY: Mutex<usize> = Mutex::new(0);
 
-fn memory() -> Option<(u64, u64)> {
-    #[cfg(target_os = "macos")]
-    {
-        crate::darwin::memory()
-    }
-    #[cfg(target_os = "linux")]
-    unsafe {
-        let mut info = std::mem::MaybeUninit::<libc::sysinfo>::zeroed();
-        if libc::sysinfo(info.as_mut_ptr()) != 0 {
-            return None;
-        }
-        let info = info.assume_init();
-        Some((
-            info.freeram * u64::from(info.mem_unit),
-            info.totalram * u64::from(info.mem_unit),
-        ))
-    }
-    #[cfg(windows)]
-    unsafe {
-        use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-        let mut info: MEMORYSTATUSEX = std::mem::zeroed();
-        info.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
-        (GlobalMemoryStatusEx(&mut info) != 0).then_some((info.ullAvailPhys, info.ullTotalPhys))
-    }
-}
-
-fn guest_space() -> Option<(u64, u64)> {
-    #[cfg(target_os = "macos")]
-    return crate::darwin::guest_space();
-    #[cfg(not(target_os = "macos"))]
-    {
-        let base = crate::memory::guest_base() as u64;
-        #[cfg(feature = "llasm")]
-        let limit = base.checked_add(0x8000_0000)?;
-        #[cfg(not(feature = "llasm"))]
-        let limit = 0xe000_0000;
-        let (mut cursor, mut total, mut largest) = (base.checked_add(0x2000_0000)?, 0, 0);
-        #[cfg(unix)]
-        {
-            let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
-            for line in maps.lines() {
-                let (start, end) = line.split_whitespace().next()?.split_once('-')?;
-                let (start, end) = (
-                    u64::from_str_radix(start, 16).ok()?,
-                    u64::from_str_radix(end, 16).ok()?,
-                );
-                if end <= cursor {
-                    continue;
-                }
-                let start = start.min(limit);
-                if start > cursor {
-                    let bytes = start - cursor;
-                    total += bytes;
-                    largest = largest.max(bytes);
-                }
-                cursor = cursor.max(end);
-                if cursor >= limit {
-                    break;
-                }
-            }
-        }
-        #[cfg(windows)]
-        {
-            use windows_sys::Win32::System::Memory::*;
-            while cursor < limit {
-                let mut info = std::mem::MaybeUninit::<MEMORY_BASIC_INFORMATION>::zeroed();
-                if unsafe {
-                    VirtualQuery(
-                        cursor as usize as *const _,
-                        info.as_mut_ptr(),
-                        std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-                    )
-                } == 0
-                {
-                    return None;
-                }
-                let info = unsafe { info.assume_init() };
-                let end = (info.BaseAddress as u64 + info.RegionSize as u64).min(limit);
-                if end <= cursor {
-                    return None;
-                }
-                if info.State == MEM_FREE {
-                    let bytes = end - cursor;
-                    total += bytes;
-                    largest = largest.max(bytes);
-                }
-                cursor = end;
-            }
-        }
-        Some((total, largest.min(0x10000000)))
-    }
-}
+use crate::os::{guest_space, memory};
 
 /// # Safety
 /// The frame and the input/output register blocks point to mapped game memory.
@@ -182,20 +91,10 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
     if unsafe { rg_host_cwd(128, info.as_mut_ptr().add(0x40).cast()) } != 0 {
         info[0x3f] = info[0x40];
     }
-    #[cfg(unix)]
-    {
-        info[0x28] = 1;
-        info[0xd0] = 1;
-    }
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::Storage::FileSystem::GetLogicalDrives;
-        let drives = unsafe { GetLogicalDrives() };
-        for drive in 3..26 {
-            if drives & (1 << (drive - 1)) != 0 {
-                info[0x25 + drive] = 1;
-                info[0xd0] += 1;
-            }
+    for drive in 0..26 {
+        if crate::os::logical_drives() & (1 << drive) != 0 {
+            info[0x26 + drive] = 1;
+            info[0xd0] += 1;
         }
     }
     for (offset, text) in [
@@ -207,13 +106,7 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
     ] {
         info[offset..offset + text.len()].copy_from_slice(text);
     }
-    let platform = if cfg!(windows) {
-        "Windows native x64"
-    } else if cfg!(target_os = "macos") {
-        "macOS native"
-    } else {
-        "Linux native x64"
-    };
+    let platform = crate::os::NAME;
     info[0x17c..0x17c + platform.len()].copy_from_slice(platform.as_bytes());
     frame.eax = guest_address(pointer as *const u8).into();
     eprintln!("Native platform inventory: {platform}; DOS/BIOS features absent");

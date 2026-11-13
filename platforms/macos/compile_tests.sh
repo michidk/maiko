@@ -40,7 +40,7 @@ for arch in x86_64 arm64; do
     clang -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
         --ld-path=/usr/lib/llvm-14/bin/ld64.lld \
         -Wl,-platform_version,macos,11.0,11.3 -Wall -Wextra -Werror -O2 \
-        -I runtime -I linux -I macos tests/macos_memory.c "/results/libmaiko-runtime-$arch.a" \
+        -I runtime -I platforms/linux -I platforms/macos tests/macos_memory.c "/results/libmaiko-runtime-$arch.a" \
         -Wl,-dead_strip -F/frameworks -framework SDL2 -framework SDL2_mixer \
         -framework Security -framework CoreFoundation -liconv \
         -o "/results/macos-memory-$arch"

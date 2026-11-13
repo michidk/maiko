@@ -101,7 +101,7 @@ The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages.
 
 ## Known limitations
 
-The experimental Mac test has separate [launch instructions](macos/LAUNCH.md),
+The experimental Mac test has separate [launch instructions](platforms/macos/LAUNCH.md),
 including how to handle macOS's download quarantine warning. It has not yet been
 verified on a Mac and is outside the supported Windows/Linux packages.
 

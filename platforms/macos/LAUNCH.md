@@ -28,8 +28,9 @@ notarized, so macOS can show an "Apple could not verify" warning when opening it
    ```
 
 The launcher chooses `redguard-native-arm64` on Apple Silicon and
-`redguard-native-x86_64` on Intel. It finds `game/` relative to itself, so launch
-through `RUN.command` rather than opening the engine executable directly.
+`redguard-native-x86_64` on Intel. It supplies the adjacent `game/` folder explicitly. Use `RUN.command` with the
+original test ZIP: that engine executable does not discover `game/` when opened
+directly. New builds also discover that folder without launcher arguments.
 
 ## Troubleshooting
 

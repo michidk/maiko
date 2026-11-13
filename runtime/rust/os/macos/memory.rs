@@ -61,7 +61,7 @@ fn region(cursor: u64) -> Result<Option<(u64, u64, i32)>, ()> {
     }
 }
 
-pub fn readable(begin: usize, end: usize) -> bool {
+fn readable_range(begin: usize, end: usize) -> bool {
     let mut cursor = begin as u64;
     loop {
         let Ok(Some((start, stop, protection))) = region(cursor) else {
@@ -161,4 +161,8 @@ pub unsafe extern "C" fn rg_mac_guest_space(available: *mut u64, largest: *mut u
         *largest = l;
     }
     1
+}
+
+pub(crate) fn readable(begin: usize, end: usize) -> std::ffi::c_int {
+    readable_range(begin, end) as std::ffi::c_int
 }

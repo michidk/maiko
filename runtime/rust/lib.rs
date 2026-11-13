@@ -1,8 +1,6 @@
 //! Host services shared by the statically translated Redguard executable.
 pub mod audio;
 pub mod crash;
-#[cfg(target_os = "macos")]
-mod darwin;
 pub mod dialog;
 pub mod files;
 pub mod guest;
@@ -14,6 +12,7 @@ pub mod llasm;
 pub mod media;
 pub mod memory;
 pub mod movies;
+mod os;
 pub mod platform;
 pub mod redbook;
 pub mod storage;

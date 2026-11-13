@@ -1,4 +1,4 @@
-//! Installation selection and exact original-executable validation on both hosts.
+//! Installation selection and exact original-executable validation on native hosts.
 use crate::{media::rg_cd_mount, storage};
 use sha2::{Digest, Sha256};
 use std::ffi::{OsString, c_char, c_int};
@@ -132,6 +132,12 @@ fn validate(path: &Path) -> io::Result<()> {
     eprintln!("Recognized RGFX.EXE variant={variant} sha256={hex}");
     Ok(())
 }
+fn adjacent_game(directory: &Path) -> Option<PathBuf> {
+    [directory.join("game"), directory.to_path_buf()]
+        .into_iter()
+        .find(|candidate| candidate.join("RGFX.EXE").is_file())
+}
+
 fn select(selection: Selection) -> io::Result<()> {
     let game = if let Some(game) = selection.game {
         game
@@ -140,8 +146,8 @@ fn select(selection: Selection) -> io::Result<()> {
     } else {
         let executable = std::env::current_exe()?;
         let directory = executable.parent().ok_or_else(storage::absent)?;
-        if directory.join("RGFX.EXE").exists() {
-            directory.to_path_buf()
+        if let Some(game) = adjacent_game(directory) {
+            game
         } else {
             choose()?
         }
@@ -236,6 +242,21 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bundled_game_is_found_before_adjacent_image_or_picker() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path();
+        assert_eq!(adjacent_game(directory), None);
+        std::fs::write(directory.join("RGFX.EXE"), b"adjacent").unwrap();
+        assert_eq!(adjacent_game(directory), Some(directory.to_path_buf()));
+        std::fs::create_dir(directory.join("game")).unwrap();
+        std::fs::write(directory.join("game/RGFX.EXE"), b"bundled").unwrap();
+        assert_eq!(adjacent_game(directory), Some(directory.join("game")));
+        std::fs::remove_file(directory.join("game/RGFX.EXE")).unwrap();
+        std::fs::create_dir(directory.join("game/RGFX.EXE")).unwrap();
+        assert_eq!(adjacent_game(directory), Some(directory.to_path_buf()));
+    }
+
     #[test]
     fn arguments_reject_duplicates_conflicts_and_missing_values() {
         for args in [

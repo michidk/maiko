@@ -4,7 +4,7 @@ Original: platform selection excludes Apple targets and CPU clock inventory read
 Replacement: use the Unix Glide ABI on Darwin and query hw.cpufrequency in the existing upstream clock function; return zero when unavailable.
 Effect: both Mac architectures compile the renderer while retaining an unknown inventory value on Apple Silicon systems that omit CPU frequency. Linux behavior is unchanged.
 Why: the Mac renderer uses the shared SDL window and upstream OpenGL implementation.
-Evidence: macos/build_renderer.sh cross-links the renderer and triangle fixture for Intel and Apple Silicon. ClockFrequency is used for renderer inventory in GLutil.cpp. No Mac execution is claimed.
+Evidence: platforms/macos/build_renderer.sh cross-links the renderer and triangle fixture for Intel and Apple Silicon. ClockFrequency is used for renderer inventory in GLutil.cpp. No Mac execution is claimed.
 
 --- a/sdk2_3dfx.h
 +++ b/sdk2_3dfx.h

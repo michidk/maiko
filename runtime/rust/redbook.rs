@@ -75,15 +75,7 @@ fn mix_into(output: &mut [u8], source: &[u8], volume: u32) {
     }
 }
 
-#[cfg(unix)]
-fn read_at(file: &File, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
-    std::os::unix::fs::FileExt::read_at(file, buffer, offset)
-}
-
-#[cfg(windows)]
-fn read_at(file: &File, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
-    std::os::windows::fs::FileExt::seek_read(file, buffer, offset)
-}
+use crate::os::read_at;
 
 struct Disc {
     image: File,

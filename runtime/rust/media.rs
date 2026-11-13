@@ -298,47 +298,11 @@ pub unsafe extern "C" fn rg_cd_mount(path: *const c_char) -> c_int {
     if path.is_null() {
         return 0;
     }
-    let path = unsafe { CStr::from_ptr(path) };
-    // Install discovery passes ASCII relative paths. Explicit CLI paths use the
-    // existing native narrow-path contract; Unix retains arbitrary path bytes.
-    #[cfg(unix)]
-    let native_path = {
-        use std::os::unix::ffi::OsStrExt;
-        Path::new(std::ffi::OsStr::from_bytes(path.to_bytes()))
+    let Ok(native_path) = (unsafe { crate::os::path_from_c(path) }) else {
+        return 0;
     };
-    #[cfg(windows)]
-    let native_path_owned = {
-        use std::os::windows::ffi::OsStringExt;
-        use windows_sys::Win32::Globalization::{CP_ACP, MultiByteToWideChar};
-        let count = unsafe {
-            MultiByteToWideChar(CP_ACP, 0, path.as_ptr().cast(), -1, std::ptr::null_mut(), 0)
-        };
-        if count <= 0 {
-            return 0;
-        }
-        let mut wide = vec![0; count as usize];
-        if unsafe {
-            MultiByteToWideChar(
-                CP_ACP,
-                0,
-                path.as_ptr().cast(),
-                -1,
-                wide.as_mut_ptr(),
-                count,
-            )
-        } != count
-        {
-            return 0;
-        }
-        std::ffi::OsString::from_wide(&wide[..wide.len() - 1])
-    };
-    #[cfg(windows)]
-    let native_path = Path::new(&native_path_owned);
-    let Some(opened) = Media::open(native_path) else {
-        eprintln!(
-            "CD image unavailable or invalid: {}",
-            path.to_string_lossy()
-        );
+    let Some(opened) = Media::open(&native_path) else {
+        eprintln!("CD image unavailable or invalid: {}", native_path.display());
         return 0;
     };
     eprintln!(

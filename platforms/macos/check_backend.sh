@@ -15,14 +15,14 @@ sed -i -E 's/^#define OUTPUT_TYPE[[:space:]]+OUT_X86$/#define OUTPUT_TYPE OUT_LL
 grep -q '^#define OUTPUT_TYPE OUT_LLASM$' SR/SR_defs.h
 scons -C SR -j2 > /results/sr-build.log 2>&1
 gdc -O2 -Wall llasm/llasm.d -o /usr/local/bin/llasm
-sh /work/macos/compile_tests.sh
+sh /work/platforms/macos/compile_tests.sh
 mkdir -p /src
 tar -xf /work/openglide.tar -C /src
 cd /src
 patch -p1 < /work/openglide-x64.patch
 patch -p1 < /work/openglide-sdl-window.patch
 patch -p1 < /work/openglide-macos.patch
-sh /work/macos/build_renderer.sh
+sh /work/platforms/macos/build_renderer.sh
 
 if [ -f /game/rgfx.llasm ]; then
     # Real game input is emitted from an owned, hash-checked installation.
@@ -78,8 +78,8 @@ if [ -f /game/rgfx.llasm ]; then
         -output /results/runtime/libredguard-glide.dylib
     cp -a /frameworks/SDL2.framework /frameworks/SDL2_mixer.framework \
         /results/runtime/Frameworks/
-    cp /work/macos/RUN.command /results/runtime/
-    cp /work/macos/LAUNCH.md /results/runtime/README.md
+    cp /work/platforms/macos/RUN.command /results/runtime/
+    cp /work/platforms/macos/LAUNCH.md /results/runtime/README.md
     chmod +x /results/runtime/RUN.command
     rm /results/libmaiko-host-*.a /results/game.bc
 fi

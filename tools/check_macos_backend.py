@@ -93,7 +93,7 @@ def source_manifest(root=ROOT):
     paths += [root / 'patches' / name for name in PATCHES]
     extensions = {'.c', '.cpp', '.h', '.py', '.sh', '.asm', '.inc', '.cmd', '.command',
                   '.rs', '.toml', '.sci', '.json', '.md'}
-    for directory in ['macos', 'tests', 'runtime', 'glide', 'linux', 'audio', 'llasm-metadata']:
+    for directory in ['platforms', 'tests', 'runtime', 'glide', 'audio', 'llasm-metadata']:
         paths.extend(path for path in (root / directory).rglob('*')
                      if path.is_file() and '__pycache__' not in path.parts
                      and (path.suffix in extensions or path.name == 'Dockerfile'))
@@ -164,8 +164,8 @@ def main():
         report['patch_sha256'] = {name: digest(ROOT / 'patches' / name) for name in PATCHES}
         if not args.reuse_toolchain:
             with (output / 'toolchain-build.log').open('w') as log:
-                run('docker', 'build', '-t', IMAGE, '-f', str(ROOT / 'macos/Dockerfile'),
-                    str(ROOT / 'macos'), stdout=log, stderr=subprocess.STDOUT,
+                run('docker', 'build', '-t', IMAGE, '-f', str(ROOT / 'platforms/macos/Dockerfile'),
+                    str(ROOT / 'platforms/macos'), stdout=log, stderr=subprocess.STDOUT,
                     timeout=600)
         report['toolchain_image_reused'] = args.reuse_toolchain
         report['toolchain_image'] = subprocess.check_output(
@@ -197,12 +197,12 @@ def main():
         report['openglide_source_archive_sha256'] = digest(archive)
         for name, path in downloads.items():
             run('docker', 'cp', str(path.resolve()), container + ':/work/' + name)
-        for directory in ['macos', 'tests', 'runtime', 'glide', 'linux', 'llasm-metadata']:
+        for directory in ['platforms', 'tests', 'runtime', 'glide', 'llasm-metadata']:
             run('docker', 'cp', str(ROOT / directory), container + ':/work/' + directory)
         for name in PATCHES:
             run('docker', 'cp', str(ROOT / 'patches' / name), container + ':/work/' + name)
         with (output / 'build-test.log').open('w') as log:
-            run('docker', 'exec', container, 'timeout', '1200' if translation else '600', 'sh', '/work/macos/check_backend.sh',
+            run('docker', 'exec', container, 'timeout', '1200' if translation else '600', 'sh', '/work/platforms/macos/check_backend.sh',
                 stdout=log, stderr=subprocess.STDOUT)
         run('docker', 'cp', container + ':/results/.', str(output))
         exported = True

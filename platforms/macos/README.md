@@ -19,7 +19,7 @@ The command executes a synthetic translated-code test on native x86-64 Linux and
 
 It then cross-links that test, Darwin memory-query tests, the Glide renderer and a triangle smoke test for both Mac architectures. The instruction fixture links the production Rust CPU helpers. Darwin memory tests link the shared Rust runtime, including its Mach memory queries, instead of a separate C implementation. These links provide compile coverage, not runtime acceptance. The memory diagnostic uses the normal runtime feature set and does not initialize the offset arena. Physical-page accounting under Rosetta remains unverified. Reports and tool versions are under `artifacts/`. The default command builds developer diagnostics without translated Redguard code and keeps all game verification fields false.
 
-To also cross-link the complete original engine, first emit a translation using `tools.translate_llasm` as described in [the metadata instructions](../llasm-metadata/README.md), then run:
+To also cross-link the complete original engine, first emit a translation using `tools.translate_llasm` as described in [the metadata instructions](../../llasm-metadata/README.md), then run:
 
 ```sh
 python3 -m tools.check_macos_backend \
