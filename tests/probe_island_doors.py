@@ -183,6 +183,23 @@ with log_path.open('w') as log:
                 time.sleep(3)
                 data = frame()
                 save(name + '-arrival', data)
+                # The game's own lockout flag must clear and the player must then respond to input.
+                def lockout():
+                    with open(f'/proc/{proc.pid}/mem', 'rb', buffering=0) as memory:
+                        memory.seek(symbols['loc_1A391E'])
+                        return int.from_bytes(memory.read(2), 'little')
+                began = time.monotonic()
+                cleared = None
+                while time.monotonic() - began < 20:
+                    if lockout() == 0:
+                        cleared = round(time.monotonic() - began, 1)
+                        break
+                    time.sleep(0.5)
+                _, here = state()
+                key('Up', 1.5)
+                time.sleep(0.5)
+                _, there = state()
+                entry.update(lockout_cleared_after_s=cleared, moved_after_up=here['position'] != there['position'])
                 entry.update(arrival=pl, actors=len(snap['actors']), arrival_mean_luma=mean_luma(data), ok=True)
             except Exception as error:
                 entry.update(ok=False, error=repr(error))
@@ -202,4 +219,4 @@ with log_path.open('w') as log:
         report['exit'] = proc.returncode
         report['all_ok'] = bool(report['doors']) and all(d.get('ok') for d in report['doors'])
         Path(str(root / a.label) + '.json').write_text(json.dumps(report, indent=1))
-print(json.dumps([{k: d.get(k) for k in ('door', 'ok', 'prompt_after_turns', 'arrival_mean_luma', 'error')} for d in report['doors']]))
+print(json.dumps([{k: d.get(k) for k in ('door', 'ok', 'prompt_after_turns', 'lockout_cleared_after_s', 'moved_after_up', 'error')} for d in report['doors']]))

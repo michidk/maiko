@@ -208,6 +208,16 @@ loc_F1EE3,6,CALL host_audio_callbacks_prepare|mov edx,[loc_1AA258]
 # sha256: 736aaffccc35e5ac4a9c0d7b2f64ae9ed7ead848f3eb93c8ad4b50b9b76b5e39
 loc_BCB2D,2,mov eax,[eax]|test eax,eax|jz loc_BCB4F
 
+# == Script step with no script pointer (Vile)
+# Original: the actor script interpreter (loc_1631A5, in the hand-written assembly object) reads the next opcode with MOV AL,[EDX], where EDX is the actor's script counter. Opcodes outside 0..30 go to loc_163386, which resets the counter to the script's start and returns.
+# Replacement: when EDX is null, jump to loc_163386; otherwise the original MOV.
+# Effect: an actor whose script counter is null restarts its script instead of faulting. Every non-null script runs exactly as before.
+# Why: DOS lets the read at address 0 succeed, returning a byte of low memory; a native process faults. Which opcode that byte decodes to, and so what DOS did, has not been measured. Restarting is the interpreter's own response to an unusable opcode.
+# Evidence: reproduces deterministically by loading world 14 (VILE.RGM) and playing for about 25 seconds with tests/probe_world_wander.py; faults at address 0 with EDX = 0.
+# Open: find which actor has the null counter and whether DOS left it null too.
+# sha256: 7891d3d56ef3106aec0998ecabbc1d924863e15a03a4fd3ff312f341f9b58c68
+loc_1631B1,2,test edx,edx|jz loc_163386|mov al,[edx]
+
 # == Unsupported 16-bit transitions (fatal trap)
 # Original: a far jump (66 EA offset:selector) from 32-bit code into 16-bit code.
 # Replacement: UD2.
