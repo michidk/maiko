@@ -1,4 +1,7 @@
 //! SDL window and DOS keyboard/mouse state shared by the Windows/Linux hosts.
+#[path = "controller.rs"]
+mod controller;
+use controller::Controllers;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Scancode;
 use sdl2::mouse::MouseButton;
@@ -24,6 +27,10 @@ struct Input {
     closed: bool,
     queue: VecDeque<u8>,
     held: [bool; 512],
+    keyboard_held: [bool; 512],
+    controller_held: [bool; 512],
+    controllers: Option<Controllers>,
+    controllers_initialized: bool,
 }
 
 impl Default for Input {
@@ -44,6 +51,10 @@ impl Default for Input {
             closed: false,
             queue: VecDeque::with_capacity(256),
             held: [false; 512],
+            keyboard_held: [false; 512],
+            controller_held: [false; 512],
+            controllers: None,
+            controllers_initialized: false,
         }
     }
 }
@@ -206,8 +217,46 @@ impl Input {
         }
     }
 
+    fn controller_keys(&mut self) {
+        self.controller_held = if self.focused {
+            self.controllers
+                .as_ref()
+                .map_or([false; 512], Controllers::keys)
+        } else {
+            [false; 512]
+        };
+        // Release old directions before pressing new ones, including reversals.
+        for down in [false, true] {
+            for code in 1..512 {
+                let held = self.keyboard_held[code] || self.controller_held[code];
+                if held == down && self.held[code] != held {
+                    self.scan(code as u16, !held);
+                }
+            }
+        }
+    }
+
     fn pump(&mut self) -> bool {
+        if !self.controllers_initialized
+            && let Some(sdl) = &self.sdl
+        {
+            // Controller failure must not prevent keyboard-only play or retry each frame.
+            self.controllers_initialized = true;
+            match Controllers::new(sdl) {
+                Ok(controllers) => self.controllers = Some(controllers),
+                Err(error) => eprintln!("Native controllers unavailable: {error}"),
+            }
+            self.controller_keys();
+        }
         while let Some(event) = self.events.as_mut().and_then(|events| events.poll_event()) {
+            if self
+                .controllers
+                .as_mut()
+                .is_some_and(|controllers| controllers.event(&event))
+            {
+                self.controller_keys();
+                continue;
+            }
             match event {
                 Event::Quit { .. }
                 | Event::Window {
@@ -220,6 +269,10 @@ impl Input {
                 } => {
                     self.focused = true;
                     self.known = false;
+                    if let Some(controllers) = &mut self.controllers {
+                        controllers.refresh();
+                    }
+                    self.controller_keys();
                 }
                 Event::Window {
                     win_event: WindowEvent::FocusLost,
@@ -231,6 +284,8 @@ impl Input {
                         }
                     }
                     self.focused = false;
+                    self.keyboard_held.fill(false);
+                    self.controller_held.fill(false);
                     self.buttons = 0;
                     self.dx = 0;
                     self.dy = 0;
@@ -249,7 +304,15 @@ impl Input {
                 } => {
                     let code = dos_scan(key);
                     if self.focused && code != 0 {
-                        self.scan(code, matches!(event, Event::KeyUp { .. }));
+                        let release = matches!(event, Event::KeyUp { .. });
+                        let index = usize::from(code);
+                        self.keyboard_held[index] = !release;
+                        let held = self.keyboard_held[index] || self.controller_held[index];
+                        if self.held[index] != held
+                            || matches!(event, Event::KeyDown { repeat: true, .. })
+                        {
+                            self.scan(code, !held);
+                        }
                     }
                 }
                 Event::MouseMotion { x, y, .. } => {
@@ -432,3 +495,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "input_controller_tests.rs"]
+mod controller_tests;
