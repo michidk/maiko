@@ -101,6 +101,10 @@ The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages.
 
 ## Known limitations
 
+The experimental Mac test has separate [launch instructions](macos/LAUNCH.md),
+including how to handle macOS's download quarantine warning. It has not yet been
+verified on a Mac and is outside the supported Windows/Linux packages.
+
 - **CD music needs the GOG disc image.** The music is read from the audio tracks of `game.gog`, using the `game.ins` cue sheet beside it (the GOG release has both next to the game folder). Without them the game runs without music.
 - **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.
 - **macOS is not supported.**

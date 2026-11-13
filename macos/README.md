@@ -1,5 +1,8 @@
 # macOS backend work
 
+For the personal test ZIP, follow [Launching the Mac test](LAUNCH.md), including
+the package-specific quarantine command if macOS blocks opening it.
+
 M-HT/SR's [Albion build configuration](https://github.com/M-HT/SR/blob/ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3/games/Albion/SR-Main/SConstruct#L259) selects llasm/LLVM for both Intel and ARM64 Macs. Apple Silicon can use native ARM code through that route. Our Redguard macOS game port is incomplete.
 
 From the repository root:

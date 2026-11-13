@@ -79,6 +79,7 @@ if [ -f /game/rgfx.llasm ]; then
     cp -a /frameworks/SDL2.framework /frameworks/SDL2_mixer.framework \
         /results/runtime/Frameworks/
     cp /work/macos/RUN.command /results/runtime/
+    cp /work/macos/LAUNCH.md /results/runtime/README.md
     chmod +x /results/runtime/RUN.command
     rm /results/libmaiko-host-*.a /results/game.bc
 fi

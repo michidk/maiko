@@ -92,7 +92,7 @@ def source_manifest(root=ROOT):
               ('check_macos_backend.py', 'rust_runtime.py', 'sr_heap.py', 'sr_audio.py')]
     paths += [root / 'patches' / name for name in PATCHES]
     extensions = {'.c', '.cpp', '.h', '.py', '.sh', '.asm', '.inc', '.cmd', '.command',
-                  '.rs', '.toml', '.sci', '.json'}
+                  '.rs', '.toml', '.sci', '.json', '.md'}
     for directory in ['macos', 'tests', 'runtime', 'glide', 'linux', 'audio', 'llasm-metadata']:
         paths.extend(path for path in (root / directory).rglob('*')
                      if path.is_file() and '__pycache__' not in path.parts
