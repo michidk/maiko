@@ -268,14 +268,25 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     remainder: read32(&raw const loc_1EEC68) as i32,
                     scale: read32(&raw const loc_1EEC50) as i32,
                 };
-                let ticks = maiko_runtime::timing::rg_bios_ticks.load(std::sync::atomic::Ordering::Relaxed);
+                let ticks =
+                    maiko_runtime::timing::rg_bios_ticks.load(std::sync::atomic::Ordering::Relaxed);
                 let fixed = maiko_runtime::timing::FRAME_GUARD.with(|guard| {
-                    guard.borrow_mut().step(remaining != 0, rg_clock_milliseconds(), ticks, measured)
+                    guard.borrow_mut().step(
+                        remaining != 0,
+                        rg_clock_milliseconds(),
+                        ticks,
+                        measured,
+                    )
                 });
                 if let Some(t) = fixed {
                     maiko_runtime::rg_log!(
                         "event=timing-reset measured_fps={} smoothed_fps={} scale={} (was measured {} smoothed {} scale {})",
-                        t.measured, t.smoothed, t.scale, measured.measured, measured.smoothed, measured.scale
+                        t.measured,
+                        t.smoothed,
+                        t.scale,
+                        measured.measured,
+                        measured.smoothed,
+                        measured.scale
                     );
                     let put = |p: *mut u8, v: u32| (p).cast::<u32>().write_unaligned(v);
                     put(&raw mut loc_1EEC58, t.smoothed as u32);
