@@ -62,16 +62,27 @@ loc_B9D2F,9,CALL host_prepare_graphics
 # sha256: f07aeb88b7e724ef0713d76dbd681acc2c11e4b1fe9d7500770ded65b29bd9a5
 loc_EB55D,2,test eax,eax|jz loc_EB5C3|mov dl,[eax]
 
-# == Image variants: two RGFX.EXE builds
-# Original: the executable at the GOG install (variant 0) has JZ 0x5544F at 0x55441 and MOV ECX,2 at 0xAD96B. The owner's RGFX.EXE (variant 1) differs by exactly three bytes: JZ becomes an unconditional JMP to 0x5544F, and the first two bytes of MOV ECX,2 become a JMP to 0xAD9E0.
-# Replacement: RG_VARIANT_JUMP takes the variant-1 jump only when the executable hash selected variant 1 at startup; otherwise the original instruction runs.
-# Effect: both known executables behave as they do natively in their own builds.
-# Why: both must run. Which one is the unmodified release is not established.
-# Evidence: metadata/image_variants.json; tests/image_variant.c.
+# == Image variants: two RGFX.EXE builds; outro skip (--skip-outro)
+# Original: the executable at the GOG install (variant 0) has JZ 0x5544F at 0x55441 and MOV ECX,2 at 0xAD96B. The JZ passes over command 0x138A, which reopens the book when a script has set 0x1A38BD. MOV ECX,2 begins the book-close animation played when quitting from the book. The owner's RGFX.EXE (variant 1) differs by exactly three bytes: JZ becomes an unconditional JMP to 0x5544F, and the first two bytes of MOV ECX,2 become a JMP to 0xAD9E0.
+# Replacement: RG_SKIP_JUMP takes the variant-1 jump at 0x55441 when the executable hash selected variant 1 (rg_exe_variant), and at 0xAD96B when the host sets rg_skip_outro (runtime/rust/install.rs: variant 1, or the --skip-outro option); otherwise the original instruction runs.
+# Effect: both known executables behave as they do natively in their own builds; --skip-outro quits from the book without the book-close animation on either build.
+# Why: both executables must run, and players asked to skip the outro without patching their files. Which executable is the unmodified release is not established.
+# Evidence: metadata/image_variants.json; tests/image_variant.c; the three bytes are the patches github.com/michidk/redguard-trainer applies for its --skip-intro option (patterns 83 3D ?? ?? ?? ?? 00 74 0C and 75 7C C6 05 ?? ?? ?? ?? 02 B9 02).
 # sha256: 57a97cadea0452df11971965cf92e9e279b06b4b5b2806b94dc1174a4fa06871
-loc_55441,2,RG_VARIANT_JUMP loc_5544F|jz loc_5544F
+loc_55441,2,RG_SKIP_JUMP rg_exe_variant,loc_5544F|jz loc_5544F
 # sha256: 86c50ee89b1749fd3d78aafa56fe1abe55d39899809d5f2cf0908a56fc213149
-loc_AD96B,5,RG_VARIANT_JUMP loc_AD9E0|mov ecx,2
+loc_AD96B,5,RG_SKIP_JUMP rg_skip_outro,loc_AD9E0|mov ecx,2
+
+# == Intro movie skip (--skip-intro)
+# Original: CALL 0xB1464 with EAX=0, EDX=0, EBX=1 plays movie 0 (MENU.INI movie_name[0] = INTRO.SMK). 0x2078D is in main()'s New Game command (0x1771); 0x20651 is the MENU.INI ignore_autosave=1 direct start. The result is not used: both are followed by MOV EDX,0xFFFFFF00; XOR EAX,EAX.
+# Replacement: RG_SKIP_CALL makes the call unless the host sets rg_skip_intro (runtime/rust/install.rs, the --skip-intro option).
+# Effect: with --skip-intro, New Game goes straight to the ship. Without it the original call runs. Movies the scripts queue later (main() at 0x2095A) still play.
+# Why: players asked to skip the intro without patching their files.
+# Evidence: the Linux New Game probe logs 'MOVIE missing d:\INTRO.SMK' after the New Game command without the option and no INTRO.SMK request with it; the call targets were read from the original bytes (E8 rel32 to 0xB1464).
+# sha256: 2214e5ba23177230f3b4f80e5c61a524049f469b26a37cc83649321d88b4ffb3
+loc_20651,5,RG_SKIP_CALL rg_skip_intro,loc_B1464
+# sha256: 650bd1075bb2ea5b5d060052e70f5349f163574a5888207d259b81ad9141bc51
+loc_2078D,5,RG_SKIP_CALL rg_skip_intro,loc_B1464
 
 # == Null pointer in directory-scan cleanup
 # Original: CMP ECX,[EDX+4] with EDX = ECX = 0 after a directory scan that found nothing.

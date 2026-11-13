@@ -52,6 +52,26 @@ The stick acts as digital directions, with a 50% activation threshold and a 37.5
 
 The right stick, triggers, vibration and controller-specific remapping are not implemented. Inventory and other screens that require a mouse still need one.
 
+### Startup options
+
+Set `OPTIONS` in `RUN.cmd`, or pass the options after `--game-dir` when you start `redguard-native.exe` yourself:
+
+```bat
+set "OPTIONS=--skip-intro --skip-outro --load-save 1"
+```
+
+| Option | Effect |
+|---|---|
+| `--skip-intro` | New Game starts on the ship without the intro movie. |
+| `--skip-outro` | Quitting from the book skips the book-closing animation. |
+| `--load-save N` | Loads save slot `N` (the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message in the log if that save does not exist. |
+
+Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.
+
+### Overlay
+
+Press the backtick key (`` ` ``, left of `1` on a US keyboard) to open or close a small overlay with the current world number, Cyrus's position and which skip options are active. While it is open the game receives no keyboard, mouse or controller input.
+
 ### Movies
 
 On a GOG installation the intro and other movies play automatically from the game's `game.gog` file, which Maiko finds inside the game folder or the folder above it. If your copy keeps movies as loose `.SMK` files, put them in the game folder or in a `MOVIES`, `ANIMS` or `VIDEO` folder inside it. A damaged or ambiguous `game.gog` stops startup with a message in the log.

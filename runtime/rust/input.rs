@@ -1,7 +1,10 @@
 //! SDL window and DOS keyboard/mouse state shared by the Windows/Linux hosts.
 #[path = "controller.rs"]
 mod controller;
+#[path = "overlay.rs"]
+pub mod overlay;
 use controller::Controllers;
+use overlay::Routed;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Scancode;
 use sdl2::mouse::MouseButton;
@@ -22,6 +25,7 @@ struct Input {
     dx: i32,
     dy: i32,
     buttons: u32,
+    cursor: bool,
     known: bool,
     focused: bool,
     closed: bool,
@@ -46,6 +50,7 @@ impl Default for Input {
             dx: 0,
             dy: 0,
             buttons: 0,
+            cursor: true,
             known: false,
             focused: false,
             closed: false,
@@ -217,8 +222,36 @@ impl Input {
         }
     }
 
+    fn release_game_input(&mut self) {
+        for code in 1..512 {
+            if self.held[code] {
+                self.scan(code as u16, true);
+            }
+        }
+        self.keyboard_held.fill(false);
+        self.controller_held.fill(false);
+        self.buttons = 0;
+        self.dx = 0;
+        self.dy = 0;
+        self.known = false;
+        if let Some(sdl) = &self.sdl {
+            sdl.mouse().capture(false);
+        }
+    }
+
+    fn overlay_toggled(&mut self, open: bool) {
+        if open {
+            self.release_game_input();
+        } else {
+            self.controller_keys();
+        }
+        if let Some(sdl) = &self.sdl {
+            sdl.mouse().show_cursor(open || self.cursor);
+        }
+    }
+
     fn controller_keys(&mut self) {
-        self.controller_held = if self.focused {
+        self.controller_held = if self.focused && !overlay::is_open() {
             self.controllers
                 .as_ref()
                 .map_or([false; 512], Controllers::keys)
@@ -257,6 +290,14 @@ impl Input {
                 self.controller_keys();
                 continue;
             }
+            match overlay::route(&event) {
+                Routed::Game => {}
+                Routed::Consumed => continue,
+                Routed::Toggled(open) => {
+                    self.overlay_toggled(open);
+                    continue;
+                }
+            }
             match event {
                 Event::Quit { .. }
                 | Event::Window {
@@ -278,21 +319,8 @@ impl Input {
                     win_event: WindowEvent::FocusLost,
                     ..
                 } => {
-                    for code in 1..512 {
-                        if self.held[code] {
-                            self.scan(code as u16, true);
-                        }
-                    }
                     self.focused = false;
-                    self.keyboard_held.fill(false);
-                    self.controller_held.fill(false);
-                    self.buttons = 0;
-                    self.dx = 0;
-                    self.dy = 0;
-                    self.known = false;
-                    if let Some(sdl) = &self.sdl {
-                        sdl.mouse().capture(false);
-                    }
+                    self.release_game_input();
                 }
                 Event::KeyDown {
                     scancode: Some(key),
@@ -374,6 +402,19 @@ pub extern "C" fn rg_input_pump() -> c_int {
     INPUT.with(|input| input.borrow_mut().pump()) as c_int
 }
 
+/// Paints the overlay over the frame about to be swapped, when it is open.
+/// Call on the game thread after the renderer has flushed its own drawing.
+pub fn draw_overlay() {
+    INPUT.with(|input| {
+        let input = input.borrow();
+        if let (Some(sdl), Some(window)) = (&input.sdl, &input.window)
+            && let Ok(video) = sdl.video()
+        {
+            overlay::draw(&video, window.size(), window.drawable_size());
+        }
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_input_take_scan() -> c_int {
     INPUT.with(|input| input.borrow_mut().queue.pop_front().map_or(-1, c_int::from))
@@ -406,8 +447,11 @@ pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
                 regs[1] = 2;
             }
             1 | 2 => {
-                if let Some(sdl) = &input.sdl {
-                    sdl.mouse().show_cursor(regs[0] & 65535 == 1);
+                input.cursor = regs[0] & 65535 == 1;
+                if let Some(sdl) = &input.sdl
+                    && !overlay::is_open()
+                {
+                    sdl.mouse().show_cursor(input.cursor);
                 }
             }
             3 => {
@@ -423,6 +467,7 @@ pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
                 input.y = i32::from(regs[3] as u16);
                 let (width, height) = input.window.as_ref().unwrap().size();
                 if input.focused
+                    && !overlay::is_open()
                     && let Some(sdl) = &input.sdl
                 {
                     sdl.mouse().warp_mouse_in_window(

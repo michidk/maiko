@@ -13,9 +13,9 @@ for name in clip numeric heap directory input rob_vertex file_read animation_fla
         env SDL_AUDIODRIVER=dummy ./original-$name
     fi
 done
-$cc $(pkg-config --cflags sdl2) /tests/native_timing.c /work/libmaiko_runtime.a -Wl,--gc-sections $(pkg-config --libs sdl2) -pthread -o linux-timing
+$cc $(pkg-config --cflags sdl2) /tests/native_timing.c /work/libmaiko_runtime.a -Wl,--gc-sections $(pkg-config --libs sdl2) -pthread -lm -o linux-timing
 ./linux-timing
-$cc /tests/linux_fault.c $objects -Wl,--gc-sections -no-pie -L/work -Wl,-rpath,'$ORIGIN' -lredguard-glide $(pkg-config --libs SDL2_mixer) -lstdc++ -pthread -o linux-fault
+$cc /tests/linux_fault.c $objects -Wl,--gc-sections -no-pie -L/work -Wl,-rpath,'$ORIGIN' -lredguard-glide $(pkg-config --libs SDL2_mixer) -lstdc++ -pthread -lm -o linux-fault
 python3 - <<'PY'
 import subprocess
 for args in [[],['--worker']]:

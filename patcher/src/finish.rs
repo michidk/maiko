@@ -203,7 +203,8 @@ pub fn finish(bytes: &[u8], mut files: Files) -> Result<Files> {
     for index in 0..124 {
         declarations.push_str(&format!("extern host_glide_{index}\n"));
     }
-    declarations.push_str("extern rg_bios_ticks\nextern host_startup_clock_pace\n");
+    declarations
+        .push_str("extern rg_bios_ticks\nextern host_startup_clock_pace\nextern rg_load_save\n");
     let mut traces = String::new();
     for address in [
         0x1115c2, 0x113c04, 0x113c63, 0x113cad, 0xf1cde, 0x129dc4, 0x119b86, 0x133707, 0x11fd96,

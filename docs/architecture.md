@@ -6,7 +6,7 @@ Maiko provides native Windows and Linux services for an owned Redguard installat
 
 | Crate | Path | Responsibility |
 |---|---|---|
-| `maiko-runtime` | `runtime/rust/` | Installation checks, files, storage, timing, input, audio, movies, memory and crash reports |
+| `maiko-runtime` | `runtime/rust/` | Installation checks, files, storage, timing, input, audio, movies, memory, crash reports and the in-game overlay (egui, drawn before each buffer swap) |
 | `maiko-glide` | `runtime/glide/` | Interface to the separately linked graphics renderer |
 | `maiko-host` | `runtime/host/` | Startup and runtime service dispatch |
 | `maiko-patcher` | `patcher/` | Local package builder shared by the CLI and browser |
