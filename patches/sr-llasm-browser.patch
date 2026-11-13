@@ -1,0 +1,126 @@
+Upstream: M-HT/SR ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3, after sr-llasm.patch.
+Original: LLasm opens local paths through Phobos POSIX filesystem APIs.
+Replacement: a bounded stdin virtual-file adapter and explicit exit status.
+Effect: the unchanged LLasm parser and IR generator run in browser-d WebAssembly.
+Why: the browser has no host filesystem or POSIX environment symbols.
+Evidence: native GDC and browser DMD emit byte-identical synthetic and full-game
+IR with -m64 -inline-idiv -pic -ptrofs -O. The adapter accepts only flat inputs,
+limits file counts/sizes, rejects duplicates/truncation and forwards failures.
+This patch retains upstream's MIT notice. The adapter is distributed under MIT.
+
+--- a/llasm/llasm.d
++++ b/llasm/llasm.d
+@@ -26,15 +26,15 @@
+ import std.string;
+ import std.array;
+ import std.conv;
+-import std.file;
+-import std.path;
++
++
+ import std.algorithm : sort;
+ 
+ struct file_input_struct {
+     bool ismacro;
+     string name, fullpath;
+     int linenum;
+-    File fd;
++    BrowserFile fd;
+     string[] params;
+ }
+ 
+@@ -3711,7 +3711,7 @@
+     }
+     else
+     {
+-        scope File fd;
++        scope BrowserFile fd;
+         fd.open(output_filename, "wt");
+ 
+         foreach (line; output_lines)
+@@ -3742,7 +3742,7 @@
+     stderr.writeln("  -func-name A=B  rename function name A to B");
+ }
+ 
+-public int main(string[] args)
++public int llasm_main(string[] args)
+ {
+     input_filename = "";
+     output_filename = "";
+@@ -4722,7 +4722,7 @@
+ 
+             ubyte[] values;
+ 
+-            File fd;
++            BrowserFile fd;
+             fd.open(fullpath);
+             values.length = cast(uint)(fd.size);
+             if (values.length > 0)
+@@ -5415,3 +5415,67 @@
+     return 0;
+ }
+ 
++
++ubyte[][string] browser_files;
++string absolutePath(string name) { return name.startsWith("/") ? name : "/" ~ name; }
++bool exists(string name) { return (absolutePath(name) in browser_files) !is null; }
++bool isAbsolute(string name) { return name.startsWith("/"); }
++string buildPath(string[] parts...) {
++    string path;
++    foreach (part; parts) {
++        if (path.length && !path.endsWith("/")) path ~= "/";
++        path ~= part;
++    }
++    return path;
++}
++string dirName(string path) {
++    auto index = path.lastIndexOf('/');
++    return index < 0 ? "." : path[0..cast(size_t)index];
++}
++struct BrowserFile {
++    ubyte[] data;
++    size_t position;
++    void open(string name, string mode = "r") {
++        auto found = absolutePath(name) in browser_files;
++        assert(found !is null, "Missing virtual input: " ~ name);
++        data = *found;
++        position = 0;
++    }
++    size_t readln(ref char[] line) {
++        auto start = position;
++        while (position < data.length && data[position++] != '\n') {}
++        line = cast(char[])data[start..position];
++        return line.length;
++    }
++    @property size_t size() { return data.length; }
++    void rawRead(ubyte[] output) {
++        assert(output.length <= data.length - position, "Truncated virtual file");
++        output[] = data[position..position+output.length];
++        position += output.length;
++    }
++    void writeln(string line) { stdout.writeln(line); }
++    void close() {}
++}
++int main() {
++    auto count = to!uint(stdin.readln().strip());
++    assert(count <= 4096, "Too many virtual files");
++    size_t total;
++    for (uint i = 0; i < count; i++) {
++        auto name = stdin.readln().strip().idup;
++        assert(name.length && name.length <= 240 && name.indexOf("..") < 0 && name.indexOf("/") < 0 && name.indexOf("\\") < 0, "Invalid virtual filename");
++        assert((absolutePath(name) in browser_files) is null, "Duplicate virtual filename");
++        auto size = to!uint(stdin.readln().strip());
++        total += size;
++        assert(size <= 64 * 1024 * 1024 && total <= 128 * 1024 * 1024, "Virtual input exceeds limit");
++        ubyte[] bytes = new ubyte[size];
++        size_t offset;
++        while (offset < size) {
++            auto received = stdin.rawRead(bytes[offset..$]).length;
++            assert(received, "Truncated virtual input");
++            offset += received;
++        }
++        browser_files[absolutePath(name)] = bytes;
++    }
++    auto code = llasm_main(["llasm", "-m64", "-inline-idiv", "-pic", "-ptrofs", "-O", "test.llasm"]);
++    return code;
++}

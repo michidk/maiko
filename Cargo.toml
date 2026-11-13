@@ -15,6 +15,9 @@ publish = false
 path = "runtime/rust/lib.rs"
 crate-type = ["staticlib", "rlib"]
 
+[features]
+llasm = []
+
 [dependencies]
 directories = "6"
 serde_json = "1"

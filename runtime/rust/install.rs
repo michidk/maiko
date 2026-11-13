@@ -1,4 +1,5 @@
-//! Installation selection and exact original-executable validation on both hosts.
+//! Installation selection and exact original-executable validation on native hosts.
+use crate::rg_log;
 use crate::{media::rg_cd_mount, storage};
 use sha2::{Digest, Sha256};
 use std::ffi::{OsString, c_char, c_int};
@@ -143,20 +144,26 @@ fn validate(path: &Path) -> io::Result<()> {
         PRIMARY => 0,
         ALTERNATE => 1,
         _ => {
-            eprintln!("Unsupported RGFX.EXE build: {hex}; supported {PRIMARY} or {ALTERNATE}");
+            rg_log!("Unsupported RGFX.EXE build: {hex}; supported {PRIMARY} or {ALTERNATE}");
             return Err(storage::denied());
         }
     };
     unsafe {
         rg_exe_variant = variant;
     }
-    eprintln!("Recognized RGFX.EXE variant={variant} sha256={hex}");
+    rg_log!("Recognized RGFX.EXE variant={variant} sha256={hex}");
     Ok(())
 }
+fn adjacent_game(directory: &Path) -> Option<PathBuf> {
+    [directory.join("game"), directory.to_path_buf()]
+        .into_iter()
+        .find(|candidate| candidate.join("RGFX.EXE").is_file())
+}
+
 fn select(selection: Selection) -> io::Result<()> {
     // Without --game-dir the game is started by double-click, so nothing is asked unless it has to
-    // be: remembered folder, REDGUARD_DIR, the program's own and neighbouring folders, the standard
-    // install folders, and only then a question (see locate.rs). The answer is stored at the end.
+    // be: adjacent installation, remembered folder, REDGUARD_DIR, neighbouring folders, standard
+    // install folders, then a question (see locate.rs). The answer is stored at the end.
     let interactive = selection.game.is_none();
     let game = if let Some(game) = selection.game {
         game
@@ -165,15 +172,19 @@ fn select(selection: Selection) -> io::Result<()> {
     } else {
         let executable = std::env::current_exe()?;
         let program = executable.parent().ok_or_else(storage::absent)?;
-        let found = crate::locate::find(
-            &crate::locate::preference_files(),
-            std::env::var_os(crate::locate::ENV_VAR).map(PathBuf::from),
-            program,
-            &crate::locate::Machine::current(),
-        );
+        let found = adjacent_game(program)
+            .or_else(crate::os::default_game)
+            .or_else(|| {
+                crate::locate::find(
+                    &crate::locate::preference_files(),
+                    std::env::var_os(crate::locate::ENV_VAR).map(PathBuf::from),
+                    program,
+                    &crate::locate::Machine::current(),
+                )
+            });
         match found {
             Some(folder) => {
-                eprintln!("Game folder found without asking: {}", folder.display());
+                rg_log!("Game folder found without asking: {}", folder.display());
                 folder
             }
             None => choose()?,
@@ -181,8 +192,10 @@ fn select(selection: Selection) -> io::Result<()> {
     };
     let user = match (&selection.user, interactive) {
         (Some(user), _) => Some(user.clone()),
-        (None, true) => default_user_dir(&game).ok(),
-        (None, false) => None,
+        (None, true) => {
+            crate::os::default_user_directory().or_else(|| default_user_dir(&game).ok())
+        }
+        (None, false) => crate::os::default_user_directory(),
     };
     // Resolve the game root and its case-insensitive asset names before making
     // it current. Writes remain confined to the independently opened user root.
@@ -202,7 +215,10 @@ fn select(selection: Selection) -> io::Result<()> {
             .initialize_user(user)?;
     }
     if interactive && let Err(error) = crate::locate::remember(&game) {
-        eprintln!("Could not remember the game folder: {error}");
+        rg_log!("Could not remember the game folder: {error}");
+    }
+    if let Err(error) = crate::os::remember_game(&game) {
+        rg_log!("event=installation-cache-write-failed error={error}");
     }
     if let Some(slot) = selection.load_save {
         let save = storage::STORAGE
@@ -212,7 +228,7 @@ fn select(selection: Selection) -> io::Result<()> {
             .ok_or_else(storage::absent)?
             .resolved(&format!("C:\\SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV"));
         if !save.is_ok_and(|save| save.is_file()) {
-            eprintln!("Save slot {slot} not found: SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV");
+            rg_log!("Save slot {slot} not found: SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV");
             return Err(storage::absent());
         }
     }
@@ -237,7 +253,7 @@ fn select(selection: Selection) -> io::Result<()> {
     {
         return Err(storage::denied());
     }
-    eprintln!("Verified original game directory: {}", game.display());
+    rg_log!("Verified original game directory: {}", game.display());
     Ok(())
 }
 /// # Safety
@@ -264,11 +280,11 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
                 unsafe { storage::path_from_c(arg) }.map(PathBuf::into_os_string)
             })
             .collect::<io::Result<Vec<_>>>()?;
-        let selection=Selection::parse(args).inspect_err(|_| eprintln!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
+        let selection=Selection::parse(args).inspect_err(|_| rg_log!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
         select(selection)
     })();
     if let Err(e) = &result {
-        eprintln!(
+        rg_log!(
             "Game image validation or installation selection failed before original code execution: {e}"
         );
         let explicit = args[1..].iter().any(|&a| {
@@ -276,7 +292,7 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
         });
         if !explicit {
             crate::dialog::show_error(
-                "The game folder could not be used, so Redguard did not start.\n\nChoose the inner Redguard folder that contains RGFX.EXE (the GOG release or the original CD). Only the two RGFX.EXE builds Maiko knows are supported.\n\nStart redguard-native.exe from a Command Prompt to see the detailed messages.",
+                "The game folder could not be used, so Redguard did not start.\n\nChoose the inner Redguard folder that contains RGFX.EXE (the GOG release or the original CD). Only the two RGFX.EXE builds Maiko knows are supported.\n\nSee the session log for the detailed messages.",
             );
         }
     }
@@ -285,6 +301,21 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bundled_game_is_found_before_adjacent_image_or_picker() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path();
+        assert_eq!(adjacent_game(directory), None);
+        std::fs::write(directory.join("RGFX.EXE"), b"adjacent").unwrap();
+        assert_eq!(adjacent_game(directory), Some(directory.to_path_buf()));
+        std::fs::create_dir(directory.join("game")).unwrap();
+        std::fs::write(directory.join("game/RGFX.EXE"), b"bundled").unwrap();
+        assert_eq!(adjacent_game(directory), Some(directory.join("game")));
+        std::fs::remove_file(directory.join("game/RGFX.EXE")).unwrap();
+        std::fs::create_dir(directory.join("game/RGFX.EXE")).unwrap();
+        assert_eq!(adjacent_game(directory), Some(directory.to_path_buf()));
+    }
+
     #[test]
     fn arguments_reject_duplicates_conflicts_and_missing_values() {
         for args in [

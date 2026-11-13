@@ -2,6 +2,9 @@
 use crate::kit::Target;
 
 pub fn assembly(target: Target) -> Vec<(Vec<String>, String)> {
+    if target == Target::Macos {
+        return Vec::new();
+    }
     [("rgfx", "rgfx")]
         .into_iter()
         .map(|(source, destination)| {

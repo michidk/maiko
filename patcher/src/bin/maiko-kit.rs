@@ -13,6 +13,10 @@ use std::{
     process::{Command, Stdio},
 };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+#[path = "maiko-kit/macos_export.rs"]
+mod macos_export;
+#[path = "maiko-kit/macos_tools.rs"]
+mod macos_tools;
 #[path = "maiko-kit/tools.rs"]
 mod tools;
 const SR: &str = "ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3";
@@ -156,6 +160,7 @@ fn export(
         executable_sha256: hash(&executable),
         files: files.iter().map(|(n, b)| (n.clone(), hash(b))).collect(),
         package_files,
+        package_links: Default::default(),
     };
     files.insert(
         "manifest.json".into(),
@@ -173,11 +178,29 @@ fn export(
     println!("{}  {}", hash(&bytes), output.display());
     Ok(())
 }
+fn web_tools(kit: &Path, output: &Path) -> Result<()> {
+    let kit = maiko_patcher::kit::Kit::load(&read_limited(kit, 768 * 1024 * 1024)?, Target::Macos)?;
+    fs::create_dir_all(output)?;
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output.join("dlang.js"))?
+        .write_all(
+            kit.files
+                .get("tools/dlang.js")
+                .ok_or("Missing D compiler driver")?,
+        )?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("tools") if args.len() == 2 => tools::build(),
+        Some("tools-macos") if args.len() == 2 => macos_tools::build(),
+        Some("web-tools") if args.len() == 4 => web_tools(Path::new(&args[2]), Path::new(&args[3])),
+        Some("export-macos") if args.len() == 7 => macos_export::export(Path::new(&args[2]), Path::new(&args[3]), Path::new(&args[4]), &args[5], Path::new(&args[6])),
         Some("export") if args.len() == 8 => export(Target::parse(&args[2])?, Path::new(&args[3]), Path::new(&args[4]), Path::new(&args[5]), &args[6], Path::new(&args[7])),
-        _ => Err("Usage: maiko-kit tools | export TARGET ACCEPTED_EXECUTABLE ENGINE_OBJECT CURATED_RUNTIME REVISION OUTPUT.zip".into()),
+        _ => Err("Usage: maiko-kit tools | tools-macos | web-tools MACOS_KIT DIST_DIRECTORY | export TARGET ACCEPTED_EXECUTABLE ENGINE_OBJECT CURATED_RUNTIME REVISION OUTPUT.zip | export-macos CHECKED_BUILD CURATED_RUNTIME ACCEPTED_UNIVERSAL REVISION OUTPUT.zip".into()),
     }
 }

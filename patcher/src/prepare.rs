@@ -18,7 +18,7 @@ fn append(files: &mut Files, name: &str, value: &str) {
         .extend_from_slice(value.as_bytes());
 }
 
-fn replacements(bytes: &[u8], image: &Image) -> Result<String> {
+pub(crate) fn replacements(bytes: &[u8], image: &Image) -> Result<String> {
     let source = std::str::from_utf8(bytes).map_err(|_| "Invalid replacement table encoding")?;
     let mut documentation = String::new();
     let mut digest = None;

@@ -14,18 +14,20 @@ const MAX_ENTRY: u64 = 256 * 1024 * 1024;
 pub enum Target {
     Linux,
     Windows,
+    Macos,
 }
 impl Target {
     pub fn parse(value: &str) -> Result<Self> {
         match value {
             "linux" => Ok(Self::Linux),
             "windows" => Ok(Self::Windows),
-            _ => Err("Target must be linux or windows".into()),
+            "macos" => Ok(Self::Macos),
+            _ => Err("Target must be linux, windows or macos".into()),
         }
     }
     pub fn executable(self) -> &'static str {
         match self {
-            Self::Linux => "redguard-native",
+            Self::Linux | Self::Macos => "redguard-native",
             Self::Windows => "redguard-native.exe",
         }
     }
@@ -33,6 +35,13 @@ impl Target {
         match self {
             Self::Linux => "elf64",
             Self::Windows => "win64",
+            Self::Macos => "macho64",
+        }
+    }
+    pub fn tools(self) -> &'static [&'static str] {
+        match self {
+            Self::Linux | Self::Windows => &["sr", "nasm"],
+            Self::Macos => &["sr-llasm", "dmd", "opt", "llc", "ld64"],
         }
     }
 }
@@ -46,6 +55,8 @@ pub struct Manifest {
     pub executable_sha256: String,
     pub files: std::collections::BTreeMap<String, String>,
     pub package_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub package_links: std::collections::BTreeMap<String, String>,
 }
 
 pub struct Kit {
@@ -107,12 +118,24 @@ pub fn unzip(bytes: &[u8]) -> Result<Files> {
 }
 
 pub fn zip(files: &Files, executable: Option<&str>) -> Result<Vec<u8>> {
+    zip_with_links(files, executable, &Default::default())
+}
+
+fn zip_with_links(
+    files: &Files,
+    executable: Option<&str>,
+    links: &std::collections::BTreeMap<String, String>,
+) -> Result<Vec<u8>> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     for (name, bytes) in files {
         if !safe_path(name) {
             return Err(format!("Unsafe package path: {name}"));
         }
-        let mode = if Some(name.as_str()) == executable {
+        let mode = if Some(name.as_str()) == executable
+            || name.ends_with(".dylib")
+            || name.ends_with("/SDL2")
+            || name.ends_with("/SDL2_mixer")
+        {
             0o755
         } else {
             0o644
@@ -123,6 +146,17 @@ pub fn zip(files: &Files, executable: Option<&str>) -> Result<Vec<u8>> {
         zip.start_file(name, options)
             .map_err(|error| error.to_string())?;
         zip.write_all(bytes).map_err(|error| error.to_string())?;
+    }
+    for (name, target) in links {
+        if !safe_path(name) || !safe_path(target) || files.contains_key(name) {
+            return Err("Unsafe or duplicate framework link".into());
+        }
+        zip.add_symlink(
+            name,
+            target,
+            zip::write::SimpleFileOptions::default().unix_permissions(0o777),
+        )
+        .map_err(|error| error.to_string())?;
     }
     Ok(zip
         .finish()
@@ -164,9 +198,10 @@ impl Kit {
                 return Err(format!("Runtime kit checksum mismatch: {name}"));
             }
         }
-        for name in ["tools/sr.wasm", "tools/nasm.wasm"] {
+        for tool in target.tools() {
+            let name = format!("tools/{tool}.wasm");
             if !files
-                .get(name)
+                .get(&name)
                 .is_some_and(|data| data.starts_with(b"\0asm\x01\0\0\0"))
             {
                 return Err(format!("Invalid WebAssembly tool: {name}"));
@@ -184,14 +219,56 @@ impl Kit {
                 return Err(format!("Missing runtime package file {name}"));
             }
         }
+        for (name, link) in &manifest.package_links {
+            if target != Target::Macos
+                || !(name.starts_with("Frameworks/SDL2.framework/")
+                    || name.starts_with("Frameworks/SDL2_mixer.framework/"))
+                || !safe_path(name)
+                || !safe_path(link)
+                || manifest.package_files.contains(name)
+            {
+                return Err("Unsafe or duplicate framework link".into());
+            }
+        }
+        if target == Target::Macos {
+            for name in ["tools/llasm.d", "tools/dlang.js"] {
+                if files
+                    .get(name)
+                    .and_then(|bytes| std::str::from_utf8(bytes).ok())
+                    .is_none_or(str::is_empty)
+                {
+                    return Err(format!("Missing or invalid Mac compiler asset {name}"));
+                }
+            }
+            for arch in crate::macos::ARCHITECTURES {
+                for name in crate::macos::linker_inputs(arch)? {
+                    if !files.contains_key(&name) {
+                        return Err(format!("Missing Mac linker input {name}"));
+                    }
+                }
+            }
+        }
         Ok(Self { manifest, files })
     }
 
     pub fn compiler_files(&self) -> Files {
         self.files
             .iter()
-            .filter(|(name, _)| name.starts_with("support/"))
-            .map(|(name, bytes)| (name.clone(), bytes.clone()))
+            .filter(|(name, _)| {
+                name.starts_with(if self.manifest.target == Target::Macos {
+                    "support/llasm/"
+                } else {
+                    "support/"
+                })
+            })
+            .map(|(name, bytes)| {
+                (
+                    name.strip_prefix("support/llasm/")
+                        .unwrap_or(name)
+                        .to_owned(),
+                    bytes.clone(),
+                )
+            })
             .collect()
     }
 
@@ -228,13 +305,116 @@ impl Kit {
         }
         files.insert(target.executable().into(), executable.to_vec());
         files.insert("build.json".into(), serde_json::to_vec_pretty(&serde_json::json!({"revision": self.manifest.revision, "target": target, "executable_sha256": self.manifest.executable_sha256})).map_err(|error| error.to_string())?);
-        zip(&files, Some(target.executable()))
+        zip_with_links(
+            &files,
+            Some(target.executable()),
+            &self.manifest.package_links,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn macos_kit(link: &str) -> (Vec<u8>, Vec<u8>) {
+        let thin = |cpu, subtype| {
+            [0xfeedfacfu32, cpu, subtype, 2, 0, 0, 0, 0]
+                .into_iter()
+                .flat_map(u32::to_le_bytes)
+                .collect::<Vec<_>>()
+        };
+        let executable =
+            crate::macho::universal(&thin(0x01000007, 3), &thin(0x0100000c, 0)).unwrap();
+        let mut files = Files::new();
+        for tool in Target::Macos.tools() {
+            files.insert(format!("tools/{tool}.wasm"), b"\0asm\x01\0\0\0".to_vec());
+        }
+        for name in ["llasm.d", "dlang.js"] {
+            files.insert(format!("tools/{name}"), b"compiler source".to_vec());
+        }
+        for arch in crate::macos::ARCHITECTURES {
+            for name in crate::macos::linker_inputs(arch).unwrap() {
+                files.insert(name, b"runtime support".to_vec());
+            }
+        }
+        files.insert("runtime/LICENSES.txt".into(), b"Licence notices".to_vec());
+        files.insert("runtime/README.md".into(), b"Launch instructions".to_vec());
+        let package_files = files
+            .keys()
+            .filter_map(|name| name.strip_prefix("runtime/").map(str::to_owned))
+            .collect();
+        let manifest = Manifest {
+            format: 1,
+            target: Target::Macos,
+            revision: "test".into(),
+            executable_sha256: hash(&executable),
+            files: files
+                .iter()
+                .map(|(name, bytes)| (name.clone(), hash(bytes)))
+                .collect(),
+            package_files,
+            package_links: std::collections::BTreeMap::from([
+                ("Frameworks/SDL2.framework/SDL2".into(), link.into()),
+                (
+                    "Frameworks/SDL2.framework/Versions/Current".into(),
+                    "A".into(),
+                ),
+            ]),
+        };
+        files.insert(
+            "manifest.json".into(),
+            serde_json::to_vec(&manifest).unwrap(),
+        );
+        (zip(&files, None).unwrap(), executable)
+    }
+
+    #[test]
+    fn macos_package_contains_both_architectures_framework_links_and_no_compiler() {
+        let (bytes, executable) = macos_kit("Versions/Current/SDL2");
+        let kit = Kit::load(&bytes, Target::Macos).unwrap();
+        assert!(kit.package(b"wrong executable").is_err());
+        let package = kit.package(&executable).unwrap();
+        let mut archive = zip::ZipArchive::new(Cursor::new(package)).unwrap();
+        let names: Vec<_> = archive.file_names().map(str::to_owned).collect();
+        assert!(names.iter().all(|name| !name.starts_with("tools/")
+            && !name.starts_with("support/")
+            && !name.ends_with(".command")
+            && name != "RGFX.EXE"));
+        let mut binary = Vec::new();
+        archive
+            .by_name("redguard-native")
+            .unwrap()
+            .read_to_end(&mut binary)
+            .unwrap();
+        crate::macho::check_universal(&binary).unwrap();
+        assert_eq!(binary, executable);
+        assert_eq!(
+            archive
+                .by_name("redguard-native")
+                .unwrap()
+                .unix_mode()
+                .unwrap()
+                & 0o777,
+            0o755
+        );
+        let mut link = archive.by_name("Frameworks/SDL2.framework/SDL2").unwrap();
+        assert_eq!(link.unix_mode().unwrap() & 0o170000, 0o120000);
+        let mut target = String::new();
+        link.read_to_string(&mut target).unwrap();
+        assert_eq!(target, "Versions/Current/SDL2");
+    }
+
+    #[test]
+    fn macos_kit_refuses_framework_links_outside_the_archive() {
+        let (bytes, _) = macos_kit("../../outside");
+        assert!(
+            Kit::load(&bytes, Target::Macos)
+                .err()
+                .unwrap()
+                .contains("framework link")
+        );
+    }
+
     #[test]
     fn refuses_escaping_and_windows_paths() {
         for name in ["../x", "/x", "x/../y", "C:/x", "x\\y", "", "x//y", "x\0y"] {

@@ -2,6 +2,8 @@
 use crate::guest::GuestFrame;
 use crate::input::rg_mouse_service;
 use crate::memory::rg_low_alloc;
+use crate::memory::{guest_address, guest_ptr};
+use crate::rg_log;
 use std::ffi::{c_char, c_int};
 use std::sync::Mutex;
 
@@ -10,84 +12,7 @@ unsafe extern "C" {
 }
 static INVENTORY: Mutex<usize> = Mutex::new(0);
 
-fn memory() -> Option<(u64, u64)> {
-    #[cfg(unix)]
-    unsafe {
-        let mut info = std::mem::MaybeUninit::<libc::sysinfo>::zeroed();
-        if libc::sysinfo(info.as_mut_ptr()) != 0 {
-            return None;
-        }
-        let info = info.assume_init();
-        Some((
-            info.freeram * u64::from(info.mem_unit),
-            info.totalram * u64::from(info.mem_unit),
-        ))
-    }
-    #[cfg(windows)]
-    unsafe {
-        use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-        let mut info: MEMORYSTATUSEX = std::mem::zeroed();
-        info.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
-        (GlobalMemoryStatusEx(&mut info) != 0).then_some((info.ullAvailPhys, info.ullTotalPhys))
-    }
-}
-
-fn guest_space() -> Option<(u64, u64)> {
-    let (mut cursor, mut total, mut largest) = (0x20000000u64, 0, 0);
-    #[cfg(unix)]
-    {
-        let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
-        for line in maps.lines() {
-            let (start, end) = line.split_whitespace().next()?.split_once('-')?;
-            let (start, end) = (
-                u64::from_str_radix(start, 16).ok()?,
-                u64::from_str_radix(end, 16).ok()?,
-            );
-            if end <= cursor {
-                continue;
-            }
-            let start = start.min(0xe0000000);
-            if start > cursor {
-                let bytes = start - cursor;
-                total += bytes;
-                largest = largest.max(bytes);
-            }
-            cursor = cursor.max(end);
-            if cursor >= 0xe0000000 {
-                break;
-            }
-        }
-    }
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::System::Memory::*;
-        while cursor < 0xe0000000 {
-            let mut info = std::mem::MaybeUninit::<MEMORY_BASIC_INFORMATION>::zeroed();
-            if unsafe {
-                VirtualQuery(
-                    cursor as usize as *const _,
-                    info.as_mut_ptr(),
-                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-                )
-            } == 0
-            {
-                return None;
-            }
-            let info = unsafe { info.assume_init() };
-            let end = (info.BaseAddress as u64 + info.RegionSize as u64).min(0xe0000000);
-            if end <= cursor {
-                return None;
-            }
-            if info.State == MEM_FREE {
-                let bytes = end - cursor;
-                total += bytes;
-                largest = largest.max(bytes);
-            }
-            cursor = end;
-        }
-    }
-    Some((total, largest.min(0x10000000)))
-}
+use crate::os::{guest_space, memory};
 
 /// # Safety
 /// The frame and the input/output register blocks point to mapped game memory.
@@ -96,7 +21,7 @@ pub unsafe extern "C" fn rg_int386(frame: *mut GuestFrame) -> c_int {
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return 0;
     };
-    let mut registers = unsafe { (frame.edx as u32 as usize as *const [u32; 7]).read_unaligned() };
+    let mut registers = unsafe { (guest_ptr::<[u32; 7]>(frame.edx as u32)).read_unaligned() };
     match frame.eax & 255 {
         0x33 => {
             if unsafe { rg_mouse_service(registers.as_mut_ptr()) } == 0 {
@@ -124,15 +49,15 @@ pub unsafe extern "C" fn rg_int386(frame: *mut GuestFrame) -> c_int {
             info[6] = (total / 4096).min(u64::from(info[2])) as u32;
             info[7] = pages;
             unsafe {
-                (registers[5] as usize as *mut [u32; 12]).write_unaligned(info);
+                (guest_ptr::<[u32; 12]>(registers[5])).write_unaligned(info);
             }
-            eprintln!("Native guest memory largest={largest} available_pages={pages}");
+            rg_log!("Native guest memory largest={largest} available_pages={pages}");
         }
         _ => return 0,
     }
     registers[6] = 0;
     unsafe {
-        (frame.ebx as u32 as usize as *mut [u32; 7]).write_unaligned(registers);
+        (guest_ptr::<[u32; 7]>(frame.ebx as u32)).write_unaligned(registers);
     }
     frame.eax = registers[0].into();
     1
@@ -152,7 +77,7 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
         }
         *cached
     } else {
-        frame.eax as u32 as usize
+        guest_ptr::<u8>(frame.eax as u32) as usize
     };
     if pointer == 0 {
         frame.eax = 0;
@@ -167,20 +92,10 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
     if unsafe { rg_host_cwd(128, info.as_mut_ptr().add(0x40).cast()) } != 0 {
         info[0x3f] = info[0x40];
     }
-    #[cfg(unix)]
-    {
-        info[0x28] = 1;
-        info[0xd0] = 1;
-    }
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::Storage::FileSystem::GetLogicalDrives;
-        let drives = unsafe { GetLogicalDrives() };
-        for drive in 3..26 {
-            if drives & (1 << (drive - 1)) != 0 {
-                info[0x25 + drive] = 1;
-                info[0xd0] += 1;
-            }
+    for drive in 0..26 {
+        if crate::os::logical_drives() & (1 << drive) != 0 {
+            info[0x26 + drive] = 1;
+            info[0xd0] += 1;
         }
     }
     for (offset, text) in [
@@ -192,14 +107,10 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
     ] {
         info[offset..offset + text.len()].copy_from_slice(text);
     }
-    let platform = if cfg!(windows) {
-        "Windows native x64"
-    } else {
-        "Linux native x64"
-    };
+    let platform = crate::os::NAME;
     info[0x17c..0x17c + platform.len()].copy_from_slice(platform.as_bytes());
-    frame.eax = pointer as u64;
-    eprintln!("Native platform inventory: {platform}; DOS/BIOS features absent");
+    frame.eax = guest_address(pointer as *const u8).into();
+    rg_log!("Native platform inventory: {platform}; DOS/BIOS features absent");
 }
 
 /// # Safety
@@ -209,7 +120,7 @@ pub unsafe extern "C" fn rg_video_service(frame: *const GuestFrame) -> c_int {
     if unsafe { frame.as_ref() }.is_none_or(|f| f.eax & 65535 != 3) {
         return 0;
     }
-    eprintln!("Original text-mode3 restore uses existing native console");
+    rg_log!("Original text-mode3 restore uses existing native console");
     1
 }
 

@@ -20,10 +20,81 @@ pub(super) fn build() -> Result<()> {
             .arg(cache))?;
     }
     let sdk = fs::canonicalize(sdk)?.join("bin");
+    build_sr(cache, &sdk, false)?;
+    let temporary = tempfile::tempdir_in(".cache")?;
+    let nasm_archive = cache.join("nasm-2.16.01.tar.xz");
+    download(
+        "https://www.nasm.us/pub/nasm/releasebuilds/2.16.01/nasm-2.16.01.tar.xz",
+        &nasm_archive,
+        "c77745f4802375efeee2ec5c0ad6b7f037ea9c87c92b149a9637ff099f162558",
+    )?;
+    let nasm_source = temporary.path().join("nasm");
+    fs::create_dir(&nasm_source)?;
+    run(Command::new("tar")
+        .arg("-xf")
+        .arg(&nasm_archive)
+        .arg("--strip-components=1")
+        .arg("-C")
+        .arg(&nasm_source))?;
+    run(Command::new("./configure")
+        .current_dir(&nasm_source)
+        .args([
+            "--host=wasm32-wasi",
+            "--build=x86_64-linux-gnu",
+            "--without-debug",
+            "--disable-pedantic",
+            "--disable-werror",
+        ])
+        .env("CC", sdk.join("clang"))
+        .env("AR", sdk.join("llvm-ar"))
+        .env("RANLIB", sdk.join("llvm-ranlib"))
+        .env(
+            "CFLAGS",
+            format!(
+                "-O2 -ffile-prefix-map={}=/src",
+                fs::canonicalize(temporary.path())?.display()
+            ),
+        )
+        .env(
+            "LDFLAGS",
+            "-Wl,--strip-all,-z,stack-size=8388608,--max-memory=2147483648",
+        ))?;
+    run(Command::new("make")
+        .current_dir(&nasm_source)
+        .args(["-j2", "nasm"]))?;
+    fs::copy(nasm_source.join("nasm"), cache.join("nasm.wasm"))?;
+    let mut notice = fs::read_to_string(nasm_source.join("LICENSE"))?;
+    let sr_notice = String::from_utf8(run(Command::new("git").args([
+        "-C",
+        ".cache/sr",
+        "show",
+        &format!("{SR}:SR/SR_main.c"),
+    ]))?)?;
+    notice.push_str(
+        sr_notice
+            .split("#include")
+            .next()
+            .ok_or("Missing SR licence")?,
+    );
+    notice.push_str(&String::from_utf8(run(Command::new("git").args([
+        "-C",
+        ".cache/sr",
+        "show",
+        &format!("{SR}:SR/udis86-1.6/LICENSE"),
+    ]))?)?);
+    notice.push_str("\nSR is MIT licensed. Upstream: https://github.com/M-HT/SR\n");
+    fs::write(cache.join("LICENSES.txt"), notice)?;
+    Ok(())
+}
+
+pub(super) fn build_sr(cache: &Path, sdk: &Path, llasm: bool) -> Result<()> {
     let temporary = tempfile::tempdir_in(".cache")?;
     let source = temporary.path().join("sr");
     archive(Path::new(".cache/sr"), SR, &source)?;
     patch(&source, "patches/sr-x64.patch")?;
+    if llasm {
+        patch(&source, "patches/sr-llasm.patch")?;
+    }
     patch(&source, "patches/sr-wasi.patch")?;
     let definitions = source.join("SR/SR_defs.h");
     let text = fs::read_to_string(&definitions)?;
@@ -33,7 +104,14 @@ pub(super) fn build() -> Result<()> {
     }
     fs::write(
         definitions,
-        text.replace(original, "#define OUTPUT_TYPE  OUT_X64"),
+        text.replace(
+            original,
+            if llasm {
+                "#define OUTPUT_TYPE  OUT_LLASM"
+            } else {
+                "#define OUTPUT_TYPE  OUT_X64"
+            },
+        ),
     )?;
     let sr = fs::canonicalize(source.join("SR"))?;
     let mut sources = Vec::new();
@@ -82,58 +160,21 @@ pub(super) fn build() -> Result<()> {
             "-Wl,--strip-all,-z,stack-size=8388608,--max-memory=2147483648",
             "-o",
         ])
-        .arg(cache.join("sr.wasm")))?;
-    let nasm_archive = cache.join("nasm-2.16.01.tar.xz");
-    download(
-        "https://www.nasm.us/pub/nasm/releasebuilds/2.16.01/nasm-2.16.01.tar.xz",
-        &nasm_archive,
-        "c77745f4802375efeee2ec5c0ad6b7f037ea9c87c92b149a9637ff099f162558",
-    )?;
-    let nasm_source = temporary.path().join("nasm");
-    fs::create_dir(&nasm_source)?;
-    run(Command::new("tar")
-        .arg("-xf")
-        .arg(&nasm_archive)
-        .arg("--strip-components=1")
-        .arg("-C")
-        .arg(&nasm_source))?;
-    run(Command::new("./configure")
-        .current_dir(&nasm_source)
-        .args([
-            "--host=wasm32-wasi",
-            "--build=x86_64-linux-gnu",
-            "--without-debug",
-            "--disable-pedantic",
-            "--disable-werror",
-        ])
-        .env("CC", sdk.join("clang"))
-        .env("AR", sdk.join("llvm-ar"))
-        .env("RANLIB", sdk.join("llvm-ranlib"))
-        .env(
-            "CFLAGS",
-            format!(
-                "-O2 -ffile-prefix-map={}=/src",
-                fs::canonicalize(temporary.path())?.display()
-            ),
-        )
-        .env(
-            "LDFLAGS",
-            "-Wl,--strip-all,-z,stack-size=8388608,--max-memory=2147483648",
-        ))?;
-    run(Command::new("make")
-        .current_dir(&nasm_source)
-        .args(["-j2", "nasm"]))?;
-    fs::copy(nasm_source.join("nasm"), cache.join("nasm.wasm"))?;
-    let mut notice = fs::read_to_string(nasm_source.join("LICENSE"))?;
-    let sr_notice = fs::read_to_string(sr.join("SR_main.c"))?;
-    notice.push_str(
-        sr_notice
-            .split("#include")
-            .next()
-            .ok_or("Missing SR licence")?,
-    );
-    notice.push_str(&fs::read_to_string(sr.join("udis86-1.6/LICENSE"))?);
-    notice.push_str("\nSR is MIT licensed. Upstream: https://github.com/M-HT/SR\n");
-    fs::write(cache.join("LICENSES.txt"), notice)?;
+        .arg(cache.join(if llasm { "sr-llasm.wasm" } else { "sr.wasm" })))?;
+    if llasm {
+        patch(&source, "patches/sr-llasm-browser.patch")?;
+        fs::copy(source.join("llasm/llasm.d"), cache.join("llasm.d"))?;
+        let support = cache.join("llasm-support");
+        fs::create_dir_all(&support)?;
+        for entry in fs::read_dir(source.join("SR/llasm-support"))? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|e| e == "llinc") {
+                fs::copy(
+                    &path,
+                    support.join(path.file_name().ok_or("Invalid support filename")?),
+                )?;
+            }
+        }
+    }
     Ok(())
 }

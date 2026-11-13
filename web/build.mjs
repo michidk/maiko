@@ -18,7 +18,7 @@ for (const name of ['index.html', 'style.css', 'kits.json']) await cp(`web/${nam
 await cp('web/pkg', 'web/dist/pkg', { recursive: true });
 await cp('web/fonts', 'web/dist/fonts', { recursive: true });
 const kits = JSON.parse(await readFile('web/kits.json', 'utf8'));
-for (const target of ['linux', 'windows']) {
+for (const target of ['linux', 'windows', 'macos']) {
   const kit = kits[target];
   if (!kit || !/^[a-f0-9]{64}$/.test(kit.sha256)) throw new Error(`No verified ${target} kit configured`);
   let bytes;
@@ -33,8 +33,9 @@ for (const target of ['linux', 'windows']) {
   if (new Bun.CryptoHasher('sha256').update(bytes).digest('hex') !== kit.sha256) throw new Error(`${target} runtime kit checksum mismatch`);
   await Bun.write(`web/dist/kits/${target}.zip`, bytes);
 }
+command(['cargo', 'run', '--locked', '--release', '-p', 'maiko-patcher', '--bin', 'maiko-kit', '--', 'web-tools', 'web/dist/kits/macos.zip', 'web/dist']);
 const fonts = (await readdir('web/dist/fonts')).sort();
-const assets = ['index.html', 'style.css', 'main.js', 'worker.js', 'kits.json', 'pkg/maiko_patcher_bg.wasm', ...fonts.map(name => `fonts/${name}`)];
+const assets = ['index.html', 'style.css', 'main.js', 'worker.js', 'dlang.js', 'kits.json', 'pkg/maiko_patcher_bg.wasm', ...fonts.map(name => `fonts/${name}`)];
 const hasher = new Bun.CryptoHasher('sha256');
 for (const name of assets) hasher.update(name).update('\0').update(await readFile(`web/dist/${name}`));
 const version = hasher.digest('hex').slice(0, 20);

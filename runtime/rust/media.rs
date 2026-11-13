@@ -1,5 +1,7 @@
 //! Read-only ISO root files exposed to the original DOS movie player.
 use crate::guest::GuestFrame;
+use crate::memory::guest_ptr;
+use crate::rg_log;
 use std::ffi::{CStr, c_char, c_int};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -194,7 +196,7 @@ impl Media {
             } else if let Some(slot) = self.handles.iter().position(Option::is_none) {
                 self.handles[slot] = Some(Handle { entry, position: 0 });
                 frame.success(FIRST_HANDLE + slot as u32);
-                eprintln!(
+                rg_log!(
                     "OPEN D:\\{} -> {} (CD image)",
                     String::from_utf8_lossy(&self.entries[entry].name),
                     FIRST_HANDLE + slot as u32
@@ -259,7 +261,7 @@ impl Media {
                         + u64::from(handle.position % 2048);
                     let out = unsafe {
                         std::slice::from_raw_parts_mut(
-                            (frame.edx as u32 as usize + done as usize) as *mut u8,
+                            guest_ptr::<u8>(frame.edx as u32).add(done as usize),
                             part as usize,
                         )
                     };
@@ -283,7 +285,7 @@ unsafe fn cd_path<'a>(pointer: u32) -> Option<&'a [u8]> {
     if pointer == 0 {
         return None;
     }
-    let bytes = unsafe { CStr::from_ptr(pointer as usize as *const c_char) }.to_bytes();
+    let bytes = unsafe { CStr::from_ptr(guest_ptr::<c_char>(pointer)) }.to_bytes();
     (bytes.len() >= 2 && bytes[0].eq_ignore_ascii_case(&b'd') && bytes[1] == b':')
         .then(|| &bytes[2..])
 }
@@ -297,50 +299,14 @@ pub unsafe extern "C" fn rg_cd_mount(path: *const c_char) -> c_int {
     if path.is_null() {
         return 0;
     }
-    let path = unsafe { CStr::from_ptr(path) };
-    // Install discovery passes ASCII relative paths. Explicit CLI paths use the
-    // existing native narrow-path contract; Unix retains arbitrary path bytes.
-    #[cfg(unix)]
-    let native_path = {
-        use std::os::unix::ffi::OsStrExt;
-        Path::new(std::ffi::OsStr::from_bytes(path.to_bytes()))
-    };
-    #[cfg(windows)]
-    let native_path_owned = {
-        use std::os::windows::ffi::OsStringExt;
-        use windows_sys::Win32::Globalization::{CP_ACP, MultiByteToWideChar};
-        let count = unsafe {
-            MultiByteToWideChar(CP_ACP, 0, path.as_ptr().cast(), -1, std::ptr::null_mut(), 0)
-        };
-        if count <= 0 {
-            return 0;
-        }
-        let mut wide = vec![0; count as usize];
-        if unsafe {
-            MultiByteToWideChar(
-                CP_ACP,
-                0,
-                path.as_ptr().cast(),
-                -1,
-                wide.as_mut_ptr(),
-                count,
-            )
-        } != count
-        {
-            return 0;
-        }
-        std::ffi::OsString::from_wide(&wide[..wide.len() - 1])
-    };
-    #[cfg(windows)]
-    let native_path = Path::new(&native_path_owned);
-    let Some(opened) = Media::open(native_path) else {
-        eprintln!(
-            "CD image unavailable or invalid: {}",
-            path.to_string_lossy()
-        );
+    let Ok(native_path) = (unsafe { crate::os::path_from_c(path) }) else {
         return 0;
     };
-    eprintln!(
+    let Some(opened) = Media::open(&native_path) else {
+        rg_log!("CD image unavailable or invalid: {}", native_path.display());
+        return 0;
+    };
+    rg_log!(
         "Native CD image mounted read-only as D: layout={}/{} root_files={}",
         opened.sector,
         opened.header,

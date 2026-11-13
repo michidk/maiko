@@ -68,3 +68,30 @@ export async function runWasi(module, args, files, outputs, log = () => {}) {
   collect(contents);
   return result;
 }
+
+export async function runLlasm(builder, files) {
+  const encoder = new TextEncoder();
+  const inputs = Object.entries(files).filter(([name]) => /\.(?:llasm|llinc|bin)$/.test(name));
+  const chunks = [encoder.encode(`${inputs.length}\n`)];
+  let size = chunks[0].length;
+  for (const [path, bytes] of inputs) {
+    const name = path === 'rgfx.llasm' ? 'test.llasm' : path;
+    if (!/^[a-zA-Z0-9_.+-]+$/.test(name)) throw new Error('Invalid LLasm input path.');
+    const header = encoder.encode(`${name}\n${bytes.length}\n`);
+    chunks.push(header, bytes);
+    size += header.length + bytes.length;
+  }
+  if (size > 128 * 1024 * 1024) throw new Error('The LLasm input exceeds its memory limit.');
+  const input = new Uint8Array(size);
+  let offset = 0;
+  for (const bytes of chunks) { input.set(bytes, offset); offset += bytes.length; }
+  const moduleUrl = new URL('./dlang.js', import.meta.url);
+  moduleUrl.search = new URL(import.meta.url).search;
+  const { compile } = await import(moduleUrl.href);
+  const result = await compile(new TextDecoder().decode(builder.asset('llasm.d')), input, builder.tool('dmd'));
+  if (result.exitCode !== 0 || result.errors.length || result.stderr) {
+    throw new Error(`LLasm failed: ${[...result.errors, result.stderr].filter(Boolean).join('\n') || `exit code ${result.exitCode}`}`);
+  }
+  if (!result.stdout.trimStart().startsWith('target datalayout = ') || result.stdout.length > 256 * 1024 * 1024) throw new Error('LLasm did not produce valid LLVM input.');
+  return encoder.encode(result.stdout);
+}

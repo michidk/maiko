@@ -64,6 +64,9 @@ pub struct BuildOptions<'a> {
 }
 
 pub fn build(options: BuildOptions<'_>) -> Result<()> {
+    if options.target == Target::Macos {
+        return Err("Use the browser builder for Mac packages, or follow platforms/macos/README.md for a local source build".into());
+    }
     if options.output.exists() {
         return Err("Output already exists; choose a new ZIP path".into());
     }

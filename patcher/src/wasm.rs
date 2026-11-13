@@ -57,14 +57,29 @@ impl Builder {
     }
     pub fn prepare(&self) -> Result<JsValue, JsValue> {
         let mut files = self.kit.compiler_files();
-        files.extend(prepare(&self.input).map_err(error)?);
+        files.extend(
+            if self.kit.manifest.target == Target::Macos {
+                crate::llasm::prepare_input(&self.input)
+            } else {
+                prepare(&self.input)
+            }
+            .map_err(error)?,
+        );
         to_js(files)
     }
     pub fn finish(&self, files: JsValue) -> Result<JsValue, JsValue> {
-        to_js(finish(&self.input, from_js(files)?).map_err(error)?)
+        let files = from_js(files)?;
+        to_js(
+            if self.kit.manifest.target == Target::Macos {
+                crate::llasm::finish(files)
+            } else {
+                finish(&self.input, files)
+            }
+            .map_err(error)?,
+        )
     }
     pub fn tool(&self, name: &str) -> Result<Vec<u8>, JsValue> {
-        if !["sr", "nasm"].contains(&name) {
+        if !self.kit.manifest.target.tools().contains(&name) {
             return Err(error("Unknown compiler tool".into()));
         }
         self.kit
@@ -72,6 +87,50 @@ impl Builder {
             .get(&format!("tools/{name}.wasm"))
             .cloned()
             .ok_or_else(|| error("Missing compiler tool".into()))
+    }
+    pub fn asset(&self, name: &str) -> Result<Vec<u8>, JsValue> {
+        if self.kit.manifest.target != Target::Macos || name != "llasm.d" {
+            return Err(error("Unknown compiler asset".into()));
+        }
+        self.kit
+            .files
+            .get(&format!("tools/{name}"))
+            .cloned()
+            .ok_or_else(|| error("Missing compiler asset".into()))
+    }
+    pub fn optimization(&self) -> Result<Array, JsValue> {
+        if self.kit.manifest.target != Target::Macos {
+            return Err(error("Expected a Mac kit".into()));
+        }
+        Ok(crate::macos::optimization()
+            .into_iter()
+            .map(JsValue::from)
+            .collect())
+    }
+    pub fn compilation(&self, arch: &str) -> Result<Array, JsValue> {
+        if self.kit.manifest.target != Target::Macos {
+            return Err(error("Expected a Mac kit".into()));
+        }
+        Ok(crate::macos::compilation(arch)
+            .map_err(error)?
+            .into_iter()
+            .map(|(tool, args, output)| {
+                let command = Array::new();
+                command.push(&tool.into());
+                command.push(&args.into_iter().map(JsValue::from).collect::<Array>());
+                command.push(&output.into());
+                JsValue::from(command)
+            })
+            .collect())
+    }
+    pub fn linker_files(&self, arch: &str) -> Result<JsValue, JsValue> {
+        to_js(crate::macos::linker_files(&self.kit, arch).map_err(error)?)
+    }
+    pub fn universal(&self, intel: &[u8], arm64: &[u8]) -> Result<Vec<u8>, JsValue> {
+        if self.kit.manifest.target != Target::Macos {
+            return Err(error("Expected a Mac kit".into()));
+        }
+        crate::macho::universal(intel, arm64).map_err(error)
     }
     pub fn assembly(&self) -> Array {
         assembly(self.kit.manifest.target)

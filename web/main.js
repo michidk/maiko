@@ -14,10 +14,10 @@ let worker = null;
 let downloadUrl = null;
 const selectedTarget = () => document.querySelector('input[name="target"]:checked')?.value;
 
-const detected = detectPlatform(navigator.userAgentData?.platform ?? navigator.platform, navigator.userAgent);
+const detected = detectPlatform(navigator.userAgentData?.platform ?? navigator.platform, navigator.userAgent, navigator.maxTouchPoints);
 if (detected) document.querySelector(`input[value="${detected}"]`).checked = true;
 document.querySelector('#detection').textContent = detected
-  ? `${detected === 'windows' ? 'Windows' : 'Linux'} selected automatically.`
+  ? `${{ windows: 'Windows', linux: 'Linux', macos: 'macOS' }[detected]} selected automatically.`
   : 'Select your target system.';
 
 function resetDownload() {
@@ -28,6 +28,10 @@ function resetDownload() {
 }
 function controls() {
   const busy = worker !== null;
+  const macos = selectedTarget() === 'macos';
+  document.querySelector('#browser-instructions').hidden = macos;
+  document.querySelector('#macos-guidance').hidden = !macos;
+  document.querySelector('#macos-instructions').hidden = !macos;
   file.disabled = busy;
   platforms.disabled = busy;
   cancel.hidden = !busy;
@@ -108,7 +112,7 @@ build.addEventListener('click', async () => {
       else if (data.kind === 'complete') {
         downloadUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'application/zip' }));
         download.href = downloadUrl;
-        download.download = `maiko-${target}-x64.zip`;
+        download.download = target === 'macos' ? 'maiko-macos-universal.zip' : `maiko-${target}-x64.zip`;
         download.hidden = false;
         stop();
         progressLine('Your package is ready.');
@@ -120,3 +124,5 @@ build.addEventListener('click', async () => {
   } catch (cause) { failure(cause instanceof Error ? cause.message : String(cause)); }
 });
 window.addEventListener('pagehide', () => { stop(); resetDownload(); });
+
+controls();

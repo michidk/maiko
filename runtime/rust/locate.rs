@@ -24,7 +24,22 @@ const LAYOUTS: [&str; 5] = [
 pub const ENV_VAR: &str = "REDGUARD_DIR";
 
 pub fn is_game_folder(folder: &Path) -> bool {
-    REQUIRED.iter().all(|name| folder.join(name).exists())
+    if REQUIRED.iter().all(|name| folder.join(name).exists()) {
+        return true;
+    }
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return false;
+    };
+    let names: Vec<_> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name())
+        .collect();
+    REQUIRED.iter().all(|required| {
+        names.iter().any(|name| {
+            name.to_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case(required))
+        })
+    })
 }
 
 /// The game's data folder for something the user picked: the folder itself, a folder above it or a
@@ -170,6 +185,16 @@ mod tests {
         }
         fs::write(at.join("RGFX.EXE"), b"x").unwrap();
         at.to_path_buf()
+    }
+
+    #[test]
+    fn original_cd_asset_names_are_found_on_case_sensitive_filesystems() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("FXART")).unwrap();
+        std::fs::create_dir(root.path().join("MAPS")).unwrap();
+        std::fs::write(root.path().join("rgfx.exe"), b"x").unwrap();
+        assert!(is_game_folder(root.path()));
+        assert_eq!(resolve(root.path()), Some(root.path().to_path_buf()));
     }
 
     #[test]

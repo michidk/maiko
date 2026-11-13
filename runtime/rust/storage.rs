@@ -1,10 +1,15 @@
-//! DOS paths and isolated writable storage shared by the Windows/Linux hosts.
+//! DOS paths and isolated writable storage shared by native hosts.
 //! User operations stay relative to opened capability directories. Each parent
 //! is opened without following links; installation data is never writable.
+use crate::os::{canonical, inside, path_cstring, sync_directory};
+pub(crate) use crate::os::{path_from_c, rename_noreplace};
+use crate::rg_log;
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, OpenOptions};
-use std::ffi::{CStr, CString, OsStr, OsString, c_char, c_int};
+#[cfg(unix)]
+use std::ffi::CString;
+use std::ffi::{OsStr, OsString, c_char, c_int};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -30,128 +35,6 @@ pub(crate) fn denied() -> io::Error {
 }
 pub(crate) fn absent() -> io::Error {
     io::Error::from(io::ErrorKind::NotFound)
-}
-
-pub(crate) unsafe fn path_from_c(pointer: *const c_char) -> io::Result<PathBuf> {
-    if pointer.is_null() {
-        return Err(io::Error::from(io::ErrorKind::InvalidInput));
-    }
-    let path = unsafe { CStr::from_ptr(pointer) };
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        Ok(PathBuf::from(OsStr::from_bytes(path.to_bytes())))
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::ffi::OsStringExt;
-        use windows_sys::Win32::Globalization::{CP_ACP, MultiByteToWideChar};
-        let count = unsafe {
-            MultiByteToWideChar(CP_ACP, 0, path.as_ptr().cast(), -1, std::ptr::null_mut(), 0)
-        };
-        if count <= 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let mut wide = vec![0; count as usize];
-        if unsafe {
-            MultiByteToWideChar(
-                CP_ACP,
-                0,
-                path.as_ptr().cast(),
-                -1,
-                wide.as_mut_ptr(),
-                count,
-            )
-        } != count
-        {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(PathBuf::from(OsString::from_wide(&wide[..wide.len() - 1])))
-    }
-}
-
-fn path_cstring(path: &Path) -> io::Result<CString> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        CString::new(path.as_os_str().as_bytes()).map_err(|_| denied())
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::Globalization::{CP_ACP, WideCharToMultiByte};
-        let wide: Vec<_> = path.as_os_str().encode_wide().collect();
-        let count = unsafe {
-            WideCharToMultiByte(
-                CP_ACP,
-                0,
-                wide.as_ptr(),
-                wide.len() as i32,
-                std::ptr::null_mut(),
-                0,
-                std::ptr::null(),
-                std::ptr::null_mut(),
-            )
-        };
-        if count <= 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let mut bytes = vec![0; count as usize];
-        if unsafe {
-            WideCharToMultiByte(
-                CP_ACP,
-                0,
-                wide.as_ptr(),
-                wide.len() as i32,
-                bytes.as_mut_ptr(),
-                count,
-                std::ptr::null(),
-                std::ptr::null_mut(),
-            )
-        } != count
-        {
-            return Err(io::Error::last_os_error());
-        }
-        CString::new(bytes).map_err(|_| denied())
-    }
-}
-
-pub(crate) fn canonical(path: &Path) -> io::Result<PathBuf> {
-    let path = std::fs::canonicalize(path)?;
-    #[cfg(windows)]
-    {
-        let text = path.to_string_lossy();
-        if let Some(tail) = text.strip_prefix(r"\\?\UNC\") {
-            return Ok(PathBuf::from(format!(r"\\{tail}")));
-        }
-        if let Some(tail) = text.strip_prefix(r"\\?\") {
-            return Ok(PathBuf::from(tail));
-        }
-    }
-    Ok(path)
-}
-
-fn inside(path: &Path, base: &Path) -> Option<PathBuf> {
-    #[cfg(unix)]
-    {
-        path.strip_prefix(base).ok().map(Path::to_path_buf)
-    }
-    #[cfg(windows)]
-    {
-        let path = path.to_string_lossy().replace('\\', "/");
-        let base = base.to_string_lossy().replace('\\', "/");
-        let base = base.trim_end_matches('/');
-        if path.len() >= base.len()
-            && path
-                .get(..base.len())
-                .is_some_and(|p| p.eq_ignore_ascii_case(base))
-            && (path.len() == base.len() || path.as_bytes()[base.len()] == b'/')
-        {
-            Some(PathBuf::from(path[base.len()..].trim_start_matches('/')))
-        } else {
-            None
-        }
-    }
 }
 
 pub(crate) fn user_namespace(relative: &str) -> bool {
@@ -318,11 +201,11 @@ impl Storage {
                 if let Ok((_, _, path)) = self.parent(&format!("{folder}{leaf}"), false, false)
                     && std::fs::metadata(&path).is_ok_and(|m| m.is_file())
                 {
-                    eprintln!("MOVIE loose {request} -> {}", path.display());
+                    rg_log!("MOVIE loose {request} -> {}", path.display());
                     return Ok(path);
                 }
             }
-            eprintln!(
+            rg_log!(
                 "MOVIE missing {request}; searched GAME_DIR, MOVIES, ANIMS, VIDEO; no installed file found"
             );
             return Err(absent());
@@ -401,7 +284,7 @@ impl Storage {
             path: target,
             dir,
         });
-        eprintln!(
+        rg_log!(
             "Isolated native user storage: {}",
             self.user.as_ref().unwrap().path.display()
         );
@@ -416,92 +299,6 @@ fn directory(parent: &Dir, name: &OsStr) -> io::Result<Dir> {
         Err(e) => return Err(e),
     }
     parent.open_dir_nofollow(name)
-}
-
-fn sync_directory(dir: &Dir) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        dir.open(".")?.sync_all()
-    }
-    #[cfg(windows)]
-    {
-        let _ = dir;
-        Ok(())
-    }
-}
-
-/// Move a file between already opened user directories without replacing an
-/// existing name. Native rename avoids requiring hard links on FAT/exFAT.
-pub(crate) fn rename_noreplace(
-    source: &Dir,
-    old: &OsStr,
-    destination: &Dir,
-    new: &OsStr,
-) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::{fd::AsRawFd, unix::ffi::OsStrExt};
-        let old = CString::new(old.as_bytes()).map_err(|_| denied())?;
-        let new = CString::new(new.as_bytes()).map_err(|_| denied())?;
-        if unsafe {
-            libc::renameat2(
-                source.as_raw_fd(),
-                old.as_ptr(),
-                destination.as_raw_fd(),
-                new.as_ptr(),
-                libc::RENAME_NOREPLACE,
-            )
-        } != 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-    }
-    #[cfg(windows)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
-        use windows_sys::Wdk::Storage::FileSystem::{
-            FILE_RENAME_INFORMATION, FileRenameInformation, NtSetInformationFile,
-        };
-        use windows_sys::Win32::{
-            Foundation::RtlNtStatusToDosError, Storage::FileSystem::DELETE,
-            System::IO::IO_STATUS_BLOCK,
-        };
-        let mut options = OpenOptions::new();
-        options.access_mode(DELETE).follow(FollowSymlinks::No);
-        let file = source.open_with(old, &options)?;
-        let name = new.encode_wide().collect::<Vec<_>>();
-        let bytes = std::mem::offset_of!(FILE_RENAME_INFORMATION, FileName) + name.len() * 2;
-        let mut buffer = vec![
-            0u64;
-            bytes
-                .max(std::mem::size_of::<FILE_RENAME_INFORMATION>())
-                .div_ceil(8)
-        ];
-        let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFORMATION>();
-        unsafe {
-            (*info).RootDirectory = destination.as_raw_handle();
-            (*info).FileNameLength = (name.len() * 2) as u32;
-            (*info)
-                .FileName
-                .as_mut_ptr()
-                .copy_from_nonoverlapping(name.as_ptr(), name.len());
-            let mut result: IO_STATUS_BLOCK = std::mem::zeroed();
-            let status = NtSetInformationFile(
-                file.as_raw_handle(),
-                &mut result,
-                info.cast(),
-                (buffer.len() * 8) as u32,
-                FileRenameInformation,
-            );
-            if status < 0 {
-                return Err(io::Error::from_raw_os_error(
-                    RtlNtStatusToDosError(status) as i32
-                ));
-            }
-        }
-    }
-    Ok(())
 }
 
 fn copy_file(source: &Path, destination: &Dir, name: &OsStr) -> io::Result<()> {
@@ -669,7 +466,7 @@ pub unsafe extern "C" fn rg_user_storage_init(game: *const c_char, user: *const 
         Ok::<_, io::Error>(())
     })();
     if let Err(error) = &result {
-        eprintln!("Native user storage initialization failed: {error}");
+        rg_log!("Native user storage initialization failed: {error}");
     }
     result.is_ok() as c_int
 }
