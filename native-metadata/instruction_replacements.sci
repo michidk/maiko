@@ -7,9 +7,6 @@
 # the image at that address differs. Comment lines and blank lines are removed before the
 # file is given to the translator (tools/pipeline.py, read_replacements).
 #
-# Evidence written as `history:<commit>:<path>` names a file removed from the tree before
-# publication; read it with `git show <commit>:<path>`.
-#
 # Keep this documentation current: a new entry needs Original, Replacement, Effect, Why and
 # Evidence lines and a sha256 line, or the build stops. Entries that share one comment block
 # are separated from the next block by a blank line.
@@ -19,7 +16,7 @@
 # Replacement: calls host service 9 or 10, which clears the same bit in the host's own lock state.
 # Effect: the game keeps its original lock-state logic; a native process cannot write BIOS memory or raise INT 9.
 # Why: the DOS BIOS data area and software interrupts do not exist natively.
-# Evidence: runtime/host/lib.rs services 9 and 10; history:aad2c0c:docs/research/RESEARCH.md keyboard section.
+# Evidence: runtime/host/lib.rs services 9 and 10.
 # sha256: 6b503dd400ddcfbea3b5262026602b372f091e2252d7dcedcbf295435982bb5b
 loc_20DCD,20,CALL host_clear_scroll_lock
 # sha256: 6c649aedb7444e65b41d586347d927c05fc616e66ceb9b348df75d59077e2708
@@ -61,7 +58,7 @@ loc_B9D2F,9,CALL host_prepare_graphics
 # Replacement: returns zero from the conversion when EAX is null (TEST EAX,EAX; JZ to the function's zero-result path), otherwise executes the original MOV.
 # Effect: null input converts to 0. Every non-null conversion path is unchanged.
 # Why: DOS4GW lets a null read return low memory; a native process faults. The game reaches this with a null configuration string while parsing the attack/defence/taunt tables.
-# Evidence: history:aad2c0c:docs/research/RESEARCH.md ('native-only byte-checked guard at original 0xEB55D'); history:aad2c0c:docs/research/decisions.tsv 2026-11-11T16:15:37Z.
+# Evidence: tests/original_numeric.c covers absent optional input and the non-null conversion cases.
 # sha256: f07aeb88b7e724ef0713d76dbd681acc2c11e4b1fe9d7500770ded65b29bd9a5
 loc_EB55D,2,test eax,eax|jz loc_EB5C3|mov dl,[eax]
 
@@ -70,7 +67,7 @@ loc_EB55D,2,test eax,eax|jz loc_EB5C3|mov dl,[eax]
 # Replacement: RG_VARIANT_JUMP takes the variant-1 jump only when the executable hash selected variant 1 at startup; otherwise the original instruction runs.
 # Effect: both known executables behave as they do natively in their own builds.
 # Why: both must run. Which one is the unmodified release is not established.
-# Evidence: metadata/image_variants.json; history:aad2c0c:docs/research/RESEARCH.md ('exactly three changed bytes').
+# Evidence: metadata/image_variants.json; tests/image_variant.c.
 # sha256: 57a97cadea0452df11971965cf92e9e279b06b4b5b2806b94dc1174a4fa06871
 loc_55441,2,RG_VARIANT_JUMP loc_5544F|jz loc_5544F
 # sha256: 86c50ee89b1749fd3d78aafa56fe1abe55d39899809d5f2cf0908a56fc213149
@@ -81,7 +78,7 @@ loc_AD96B,5,RG_VARIANT_JUMP loc_AD9E0|mov ecx,2
 # Replacement: when EDX is null, jump to the function's normal exit (loc_D5726); otherwise the original CMP.
 # Effect: an empty scan cleans up without reading memory at address 4.
 # Why: DOS can read address 4 harmlessly; a native process faults.
-# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T17:34:55Z; history:aad2c0c:docs/research/RESEARCH.md ('cleanup null dereference at original 0xD5963').
+# Evidence: tests/original_directory.c covers exhausted scans at depths 0, 1 and 2.
 # sha256: a2e0ef9208b2e1d50c6859cecbc4b780c6cbb4f1edb1d9347d81abbcdae81f4c
 loc_D5963,3,test edx,edx|jz loc_D5726|cmp ecx,[edx+4]
 
@@ -90,7 +87,7 @@ loc_D5963,3,test edx,edx|jz loc_D5726|cmp ecx,[edx+4]
 # Replacement: RG_FONT10_METRIC (runtime/font_metric.inc): the same read for a non-null source; 0xF000 for null. Flags are saved and restored and the upper half of EDX is preserved.
 # Effect: reproduces what the DOS reference showed for this one site.
 # Why: the DOS reference read 0xF000 from the interrupt-table high word at DS:null+0x46; native Windows faults.
-# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T17:56:23Z (reference observation); history:aad2c0c:docs/research/RESEARCH.md. This models the observed DOS reference, not every BIOS or every null read.
+# Evidence: tests/font_metric.c covers null/non-null values and preserved flags/register bits. The recorded DOS observation was 0xF000 at this site; it does not establish a policy for other null reads.
 # sha256: 5007d7e7615549b9d4dd169698d7401f35a90756ce557248e6e40ae7b61cd559
 loc_BDCAD,4,RG_FONT10_METRIC
 
@@ -132,7 +129,7 @@ loc_B5833,8,CALL host_poll_input|cmp word [loc_2055C2],0
 # Replacement: TEST EAX,EAX, a pointer check.
 # Effect: the allocation's existence is tested rather than its uninitialized content.
 # Why: the original relied on DOS memory that is not zero-filled; native pages are zero-filled and that content would reject a valid buffer.
-# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T21:05:47Z (root-cause row).
+# Evidence: original-byte SHA-256 below; no isolated allocation-content regression fixture is recorded.
 # sha256: a47fe7f6ec040a966cb24a4799930b575501c9fc0592cc5f2bb577ee74f7cdda
 loc_117C5B,3,test eax,eax
 
@@ -141,7 +138,7 @@ loc_117C5B,3,test eax,eax
 # Replacement: after the load, TEST EAX,EAX and jump to the generic path (loc_9AC81 or loc_394D0) when the pointer is null.
 # Effect: objects with no animation skip the animation-type comparisons and take the generic flag clearing, without a fake record being allocated.
 # Why: the DOS reference reads a null record as the word 0xCA60, which fails both comparisons, so the generic path is what DOS takes.
-# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T21:19:54Z and 21:21:53Z.
+# Evidence: tests/original_animation_flags.c includes the missing-animation case.
 # sha256: af292594c8f7811f1da7be096cbbb95241d21a79ad79d2090077259e020515dd
 loc_9AC64,6,mov eax,[eax+0x247]|test eax,eax|jz loc_9AC81
 # sha256: af292594c8f7811f1da7be096cbbb95241d21a79ad79d2090077259e020515dd
@@ -152,7 +149,7 @@ loc_3924E,6,mov eax,[eax+0x247]|test eax,eax|jz loc_394D0
 # Replacement: when EAX is null, skip to the function's no-op exit (loc_46687); otherwise the original compare.
 # Effect: with no selected player the setter returns 0 and writes nothing.
 # Why: the DOS reference reads DS:null+0x272 as 0, so the original returns 0 without writing.
-# Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T21:26:06Z; tests/original_attribute.c.
+# Evidence: tests/original_attribute.c covers absent tables and a missing startup player.
 # sha256: ec6a8365e3706b686e8fbeab4454c39169ae8c8b63b8e87e2e22fe94ae08a3e0
 loc_4667E,7,test eax,eax|jz loc_46687|cmp dword [eax+0x272],0
 
@@ -203,7 +200,7 @@ loc_F1EE3,6,CALL host_audio_callbacks_prepare|mov edx,[loc_1AA258]
 # Replacement: after the load, TEST EAX,EAX and jump to loc_BCB4F, the 'not within range' result, when the shape is null. The guard sits before the first x87 push so the floating-point stack stays balanced.
 # Effect: an object with no shape is never within range, instead of faulting. Fixes the crash on entering CATACOMB.RGM.
 # Why: DOS4GW reads address 0xC as the interrupt table. The result there is not measured. A DOS-reference read of that dword is a BIOS pointer, a huge float, which would make the test return 'within range'; 'not within range' is the conservative choice.
-# Evidence: history:aad2c0c:docs/development/VALIDATION.md 'Catacomb null-shape guard'; reproduces with entry markers 0 and 2.
+# Evidence: entering CATACOMB.RGM with entry markers 0 and 2 reproduced the fault; no standalone radius regression fixture is recorded.
 # Open: measure the DOS reference at address 0xC and replace this guess with the observed value, as RG_FONT10_METRIC does.
 # sha256: 736aaffccc35e5ac4a9c0d7b2f64ae9ed7ead848f3eb93c8ad4b50b9b76b5e39
 loc_BCB2D,2,mov eax,[eax]|test eax,eax|jz loc_BCB4F

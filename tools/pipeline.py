@@ -250,7 +250,7 @@ def native_startup_book(image, text):
     no-op path. MENU.INI `ignore_autosave=1` keeps its original direct-world path.
     Effect: a new player sees the book menu first. This deliberately differs from the original.
     Why: reported on real Windows: starting straight into the game bypassed the book.
-    Evidence: history:aad2c0c:docs/development/VALIDATION.md (fresh start, Continue disabled); tests/check_startup_override.py.
+    Evidence: tests/check_linux_menu.py (fresh start, Continue disabled); tests/check_startup_override.py.
     Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.
     """
     original = bytes.fromhex('e840ed02006685c0741cc705a31d030001000000')
@@ -379,7 +379,7 @@ def native_startup_clock(image, text):
     Effect: the 12 Hz loading warm-up advances at its fixed rate instead of as fast as the host runs.
     Simulation arithmetic is untouched.
     Why: reported on real Windows: a burst of fast movement at the start.
-    Evidence: history:aad2c0c:docs/development/VALIDATION.md (startup pacing); the Linux and Wine runs record the countdowns.
+    Evidence: tests/startup_timing_cases.py; tests/native_timing.c; the Linux and Wine runs record the countdowns.
     Guards: the 12 original bytes are checked and the call must occur exactly once and not already be present.
     """
     if image.at(0x5f6bc, 12) != bytes.fromhex('e8a0000000833d2446030000'):

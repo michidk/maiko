@@ -1,6 +1,6 @@
 # Agent notes for Maiko
 
-Maiko is a static recompilation of *The Elder Scrolls Adventures: Redguard*. It translates the original DOS engine to native Windows and Linux code and runs it on a Rust host. Read [README.md](README.md), then [docs/architecture.md](docs/architecture.md) and [docs/building.md](docs/building.md).
+Maiko is a native Windows and Linux runtime for an owned copy of *The Elder Scrolls Adventures: Redguard*. Read [README.md](README.md), then [docs/architecture.md](docs/architecture.md) and [docs/building.md](docs/building.md).
 
 ## Branches and publishing
 
@@ -9,7 +9,7 @@ Maiko is a static recompilation of *The Elder Scrolls Adventures: Redguard*. It 
 - Pull `main` before starting and again before every commit. Reconcile with changes from other sessions; never overwrite peer work and never force-push.
 - Publish through the GitHub API as the managed App so GitHub signs the commit: GraphQL `createCommitOnBranch` on `main` with `expectedHeadOid`. Put `Co-authored-by: Michael Lohr <michael@lohr.dev>` and the agent's own `Co-authored-by` line in `message.body`, then read the commit back and confirm a valid signature and both trailers.
 - Use Conventional Commits (`type(scope): description`). Do not commit game files, CD images, generated translations, build output, saves or `.cache/` and `artifacts/`.
-- There is no CI in this repository. Run the source checks in [docs/building.md](docs/building.md) before committing.
+- The Pages workflow runs the source checks. Run the same checks in [docs/building.md](docs/building.md) before committing.
 
 ## What belongs in the repository
 

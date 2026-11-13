@@ -1,6 +1,6 @@
 # Maiko
 
-Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows and Linux, without DOSBox. It translates the original DOS engine to native code and replaces the DOS services the engine relied on (graphics, input, sound, files, timers) with a native runtime. The game itself is still the original: the same code, levels, scripts, art and sound.
+Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows and Linux, without DOSBox. It provides native graphics, input, sound, file and timing services for your own installation.
 
 **Maiko is experimental.** The opening of the game, the island and many interiors run, but nobody has played the whole game through yet. See [Known limitations](#known-limitations) before relying on it.
 
@@ -10,7 +10,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 - Windows 10 or newer, 64-bit, with a graphics driver that supports OpenGL.
 - A Redguard installation that contains `RGFX.EXE`, the Glide version of the game executable. The GOG release includes it. Maiko recognizes two builds of this file and refuses any other, so it never runs code it was not checked against.
-- A runtime ZIP built from your own executable using the [client-side browser builder](https://michidk.github.io/maiko/) or [Rust CLI](docs/client-builder.md). Your executable stays on your device. The [maintainer build](docs/building.md) remains available for testing runtime changes.
+- A runtime ZIP built from your own executable using the [client-side browser builder](https://michidk.github.io/maiko/) or [Rust CLI](docs/client-builder.md). Your executable stays on your device. [Source checks](docs/building.md) are available for contributors.
 
 ## Play on Windows
 
@@ -73,7 +73,7 @@ Open an issue and attach `native-test.log`. Say what you were doing, which Redgu
 
 ## Linux
 
-A Linux build exists and is used to test the game automatically, but there is no packaged Linux release yet. If you are comfortable building from source, see [docs/building.md](docs/building.md).
+The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries and require a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver.
 
 ## Known limitations
 
@@ -86,12 +86,10 @@ A Linux build exists and is used to test the game automatically, but there is no
 
 ## Legal
 
-Maiko is released under the [MIT licence](LICENSE). It is an independent fan project and is not affiliated with or endorsed by Bethesda Softworks or ZeniMax. *The Elder Scrolls* and *Redguard* belong to their owners. This repository contains no game code or assets, and the runtime Maiko builds from your own copy contains translated game code and is for your own use. You must own Redguard to use Maiko. Third-party components and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+Maiko is released under the [MIT licence](LICENSE). It is an independent fan project and is not affiliated with or endorsed by Bethesda Softworks or ZeniMax. *The Elder Scrolls* and *Redguard* belong to their owners. This repository contains no game code or assets, and generated packages contain content derived from your own installation and must not be redistributed. You must own Redguard to use Maiko. Third-party components and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## For developers
 
-- [docs/building.md](docs/building.md): build, test and package.
-- [docs/architecture.md](docs/architecture.md): how the translation and the runtime fit together.
+- [docs/building.md](docs/building.md): source checks.
+- [docs/architecture.md](docs/architecture.md): runtime structure.
 - [AGENTS.md](AGENTS.md): repository workflow and rules for contributors and coding agents.
-
-The format and engine documentation that this port relies on is maintained in [redguard-preservation](https://github.com/michidk/redguard-preservation).
