@@ -50,7 +50,7 @@ def main():
     began = time.monotonic()
     launched_ns = time.time_ns()
     deadline = began + args.seconds
-    environment = dict(os.environ, LIBGL_ALWAYS_SOFTWARE='1', RG_CAPTURE_DIR=str(root))
+    environment = dict(os.environ, LIBGL_ALWAYS_SOFTWARE='1', RG_CAPTURE_DIR=str(root), RG_FLASH_LOG='1')
     with (root / 'ship-combat.log').open('w') as log:
         process = subprocess.Popen(
             [str(runtime / 'redguard-native'), '--game-dir', args.game_dir,

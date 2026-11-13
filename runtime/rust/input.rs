@@ -1,7 +1,4 @@
 //! SDL window and DOS keyboard/mouse state shared by the Windows/Linux hosts.
-#[path = "controller.rs"]
-mod controller;
-use controller::Controllers;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Scancode;
 use sdl2::mouse::MouseButton;
@@ -27,10 +24,6 @@ struct Input {
     closed: bool,
     queue: VecDeque<u8>,
     held: [bool; 512],
-    keyboard_held: [bool; 512],
-    controller_held: [bool; 512],
-    controllers: Option<Controllers>,
-    controllers_initialized: bool,
 }
 
 impl Default for Input {
@@ -51,10 +44,6 @@ impl Default for Input {
             closed: false,
             queue: VecDeque::with_capacity(256),
             held: [false; 512],
-            keyboard_held: [false; 512],
-            controller_held: [false; 512],
-            controllers: None,
-            controllers_initialized: false,
         }
     }
 }
@@ -138,6 +127,21 @@ fn dos_scan(key: Scancode) -> u16 {
     }
 }
 
+/// Display choice from the command line: `--fullscreen` or `--window-size WIDTHxHEIGHT`.
+/// The game keeps rendering at its own resolution; SDL scales it to the window.
+static DISPLAY: std::sync::Mutex<(bool, Option<(u32, u32)>)> = std::sync::Mutex::new((false, None));
+
+pub fn set_display(fullscreen: bool, size: Option<(u32, u32)>) {
+    let mut display = DISPLAY.lock().unwrap_or_else(|e| e.into_inner());
+    *display = (fullscreen || display.0, size.or(display.1));
+}
+
+pub fn parse_size(text: &str) -> Option<(u32, u32)> {
+    let (w, h) = text.split_once(['x', 'X'])?;
+    let (w, h): (u32, u32) = (w.parse().ok()?, h.parse().ok()?);
+    ((320..=8192).contains(&w) && (240..=8192).contains(&h)).then_some((w, h))
+}
+
 impl Input {
     fn scan(&mut self, code: u16, release: bool) {
         let needed = if code & 256 != 0 { 2 } else { 1 };
@@ -169,16 +173,19 @@ impl Input {
             gl.set_context_version(2, 1);
             gl.set_double_buffer(true);
             gl.set_depth_size(24);
-            let window = video
-                .window("Redguard native experiment", width, height)
-                .opengl()
-                .build()
-                .map_err(|e| e.to_string())?;
+            let (fullscreen, size) = *DISPLAY.lock().unwrap_or_else(|e| e.into_inner());
+            let (w, h) = size.unwrap_or((width, height));
+            let mut builder = video.window("Redguard native experiment", w, h);
+            builder.opengl();
+            if fullscreen {
+                builder.fullscreen_desktop();
+            }
+            let window = builder.build().map_err(|e| e.to_string())?;
             let events = sdl.event_pump()?;
             self.window = Some(window);
             self.events = Some(events);
             self.sdl = Some(sdl);
-        } else {
+        } else if *DISPLAY.lock().unwrap_or_else(|e| e.into_inner()) == (false, None) {
             self.window
                 .as_mut()
                 .unwrap()
@@ -199,46 +206,8 @@ impl Input {
         }
     }
 
-    fn controller_keys(&mut self) {
-        self.controller_held = if self.focused {
-            self.controllers
-                .as_ref()
-                .map_or([false; 512], Controllers::keys)
-        } else {
-            [false; 512]
-        };
-        // Release old directions before pressing new ones, including reversals.
-        for down in [false, true] {
-            for code in 1..512 {
-                let held = self.keyboard_held[code] || self.controller_held[code];
-                if held == down && self.held[code] != held {
-                    self.scan(code as u16, !held);
-                }
-            }
-        }
-    }
-
     fn pump(&mut self) -> bool {
-        if !self.controllers_initialized
-            && let Some(sdl) = &self.sdl
-        {
-            // Controller failure must not prevent keyboard-only play or retry each frame.
-            self.controllers_initialized = true;
-            match Controllers::new(sdl) {
-                Ok(controllers) => self.controllers = Some(controllers),
-                Err(error) => eprintln!("Native controllers unavailable: {error}"),
-            }
-            self.controller_keys();
-        }
         while let Some(event) = self.events.as_mut().and_then(|events| events.poll_event()) {
-            if self
-                .controllers
-                .as_mut()
-                .is_some_and(|controllers| controllers.event(&event))
-            {
-                self.controller_keys();
-                continue;
-            }
             match event {
                 Event::Quit { .. }
                 | Event::Window {
@@ -251,10 +220,6 @@ impl Input {
                 } => {
                     self.focused = true;
                     self.known = false;
-                    if let Some(controllers) = &mut self.controllers {
-                        controllers.refresh();
-                    }
-                    self.controller_keys();
                 }
                 Event::Window {
                     win_event: WindowEvent::FocusLost,
@@ -266,8 +231,6 @@ impl Input {
                         }
                     }
                     self.focused = false;
-                    self.keyboard_held.fill(false);
-                    self.controller_held.fill(false);
                     self.buttons = 0;
                     self.dx = 0;
                     self.dy = 0;
@@ -286,15 +249,7 @@ impl Input {
                 } => {
                     let code = dos_scan(key);
                     if self.focused && code != 0 {
-                        let release = matches!(event, Event::KeyUp { .. });
-                        let index = usize::from(code);
-                        self.keyboard_held[index] = !release;
-                        let held = self.keyboard_held[index] || self.controller_held[index];
-                        if self.held[index] != held
-                            || matches!(event, Event::KeyDown { repeat: true, .. })
-                        {
-                            self.scan(code, !held);
-                        }
+                        self.scan(code, matches!(event, Event::KeyUp { .. }));
                     }
                 }
                 Event::MouseMotion { x, y, .. } => {
@@ -434,6 +389,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn window_size_accepts_only_sane_dimensions() {
+        assert_eq!(parse_size("1600x1200"), Some((1600, 1200)));
+        assert_eq!(parse_size("1280X720"), Some((1280, 720)));
+        for bad in ["", "1600", "0x0", "100x100", "axb", "9000x9000", "1600x"] {
+            assert_eq!(parse_size(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
     fn full_key_queue_requests_close_without_exiting_or_partial_extended_scan() {
         let mut input = Input::default();
         for _ in 0..128 {
@@ -468,7 +432,3 @@ mod tests {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "input_controller_tests.rs"]
-mod controller_tests;

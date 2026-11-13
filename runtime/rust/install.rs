@@ -33,6 +33,20 @@ impl Selection {
                     result.choose = true;
                     continue;
                 }
+                "--fullscreen" => {
+                    crate::input::set_display(true, None);
+                    continue;
+                }
+                "--window-size" => {
+                    let size = args
+                        .next()
+                        .as_deref()
+                        .and_then(|a| a.to_str())
+                        .and_then(crate::input::parse_size)
+                        .ok_or_else(storage::denied)?;
+                    crate::input::set_display(false, Some(size));
+                    continue;
+                }
                 _ => return Err(storage::denied()),
             };
             if slot.is_some() {
@@ -163,7 +177,7 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
                 unsafe { storage::path_from_c(arg) }.map(PathBuf::into_os_string)
             })
             .collect::<io::Result<Vec<_>>>()?;
-        let selection=Selection::parse(args).inspect_err(|_| eprintln!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO]"))?;
+        let selection=Selection::parse(args).inspect_err(|_| eprintln!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT]"))?;
         select(selection)
     })();
     if let Err(e) = &result {

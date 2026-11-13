@@ -25,7 +25,53 @@ impl StartupPacer {
     }
 }
 
+/// Frames after the warm-up ends during which the original's frame-time smoothing is switched off.
+const UNSMOOTHED_FRAMES: u32 = 60;
+
+/// What to do with the original's smoothing flag (guest word at loc_1A4654) this frame.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Smoothing {
+    Keep,
+    Disable,
+    Restore(u32),
+}
+
+/// The warm-up is paced at 12 Hz, so the original's smoothed time step starts out believing the
+/// game runs at 12 frames per second. A faster renderer then moves everything about three times too
+/// fast until the smoothing catches up (seconds on a fast machine). Switching the smoothing off for
+/// a short stretch after the warm-up makes the first real frames measure their own duration.
+#[derive(Default)]
+pub struct SmoothingRelease {
+    warming: bool,
+    saved: Option<u32>,
+    frames_left: u32,
+}
+
+impl SmoothingRelease {
+    pub fn step(&mut self, remaining: u32, flag: u32) -> Smoothing {
+        if remaining != 0 {
+            self.warming = true;
+            self.frames_left = 0;
+            return self.saved.take().map_or(Smoothing::Keep, Smoothing::Restore);
+        }
+        if self.warming {
+            self.warming = false;
+            self.saved = Some(flag);
+            self.frames_left = UNSMOOTHED_FRAMES;
+            return Smoothing::Disable;
+        }
+        if self.frames_left > 0 {
+            self.frames_left -= 1;
+            if self.frames_left == 0 {
+                return self.saved.take().map_or(Smoothing::Keep, Smoothing::Restore);
+            }
+        }
+        Smoothing::Keep
+    }
+}
+
 thread_local! {
+    pub static SMOOTHING: RefCell<SmoothingRelease> = RefCell::new(SmoothingRelease::default());
     static STARTUP_PACER: RefCell<StartupPacer> = RefCell::new(StartupPacer::default());
 }
 
@@ -115,6 +161,28 @@ pub extern "C" fn rg_clock_milliseconds() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn smoothing_is_released_after_warmup_and_restored_once() {
+        let mut release = SmoothingRelease::default();
+        assert_eq!(release.step(0, 1), Smoothing::Keep);
+        assert_eq!(release.step(12, 1), Smoothing::Keep);
+        assert_eq!(release.step(1, 1), Smoothing::Keep);
+        assert_eq!(release.step(0, 1), Smoothing::Disable);
+        for _ in 0..UNSMOOTHED_FRAMES - 1 {
+            assert_eq!(release.step(0, 0), Smoothing::Keep);
+        }
+        assert_eq!(release.step(0, 0), Smoothing::Restore(1));
+        assert_eq!(release.step(0, 1), Smoothing::Keep);
+    }
+
+    #[test]
+    fn a_new_warmup_restores_the_flag_immediately() {
+        let mut release = SmoothingRelease::default();
+        release.step(3, 1);
+        assert_eq!(release.step(0, 1), Smoothing::Disable);
+        assert_eq!(release.step(5, 0), Smoothing::Restore(1));
+    }
+
     #[test]
     fn startup_steps_follow_twelve_hz_on_a_fast_renderer() {
         let mut pacer = StartupPacer::default();

@@ -49,6 +49,7 @@ unsafe extern "C" {
     static loc_1A824C: u8;
     static loc_1A4620: u8;
     static loc_1A4624: u8;
+    static mut loc_1A4654: u8;
     static loc_1EEC48: u8;
     static loc_1EEC54: u8;
     static loc_1F29C4: u8;
@@ -221,7 +222,21 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
         }
         match service {
             27 => {
-                pace_startup_clock(read32(&raw const loc_1A4624));
+                let remaining = read32(&raw const loc_1A4624);
+                pace_startup_clock(remaining);
+                // Original flag at loc_1A4654 turns the frame-time smoothing on; see SmoothingRelease.
+                let flag = read32(&raw const loc_1A4654);
+                let action = maiko_runtime::timing::SMOOTHING
+                    .with(|release| release.borrow_mut().step(remaining, flag));
+                match action {
+                    maiko_runtime::timing::Smoothing::Keep => {}
+                    maiko_runtime::timing::Smoothing::Disable => {
+                        (&raw mut loc_1A4654).cast::<u32>().write_unaligned(0)
+                    }
+                    maiko_runtime::timing::Smoothing::Restore(value) => {
+                        (&raw mut loc_1A4654).cast::<u32>().write_unaligned(value)
+                    }
+                }
                 return;
             }
             24 => {

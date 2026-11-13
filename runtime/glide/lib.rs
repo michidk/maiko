@@ -49,6 +49,8 @@ struct Bridge {
     locks: [Lock; 2],
     seen: [bool; 124],
     frame: u32,
+    swaps: u32,
+    was_flat: bool,
 }
 impl Default for Bridge {
     fn default() -> Self {
@@ -58,6 +60,8 @@ impl Default for Bridge {
             locks: Default::default(),
             seen: [false; 124],
             frame: 0,
+            swaps: 0,
+            was_flat: false,
         }
     }
 }
@@ -151,6 +155,46 @@ fn dimensions(resolution: u32) -> (u32, u32) {
     SIZES.get(resolution as usize).copied().unwrap_or((0, 0))
 }
 impl Bridge {
+    /// Diagnostic for the reported one-frame flashes of pure fog colour: with `RG_FLASH_LOG` set,
+    /// sample the back buffer at every swap and report frames that are one flat colour while the
+    /// frame before was not. Reads the buffer only; never changes what is drawn.
+    unsafe fn log_flat_frame(&mut self) {
+        unsafe {
+            if std::env::var_os("RG_FLASH_LOG").is_none() {
+                return;
+            }
+            let mut info = NativeLfb::default();
+            if grLfbLock(0, 1, 0, 0, 0, &mut info) == 0 {
+                return;
+            }
+            let (w, h) = (self.width.max(1), self.height.max(1));
+            let mut first = None;
+            let mut flat = true;
+            for i in 0..4096u32 {
+                let (x, y) = (i * 7919 % w, i * 104_729 % h);
+                let p = info
+                    .pointer
+                    .cast::<u8>()
+                    .add(y as usize * info.stride as usize + x as usize * 2)
+                    .cast::<u16>()
+                    .read_unaligned();
+                if *first.get_or_insert(p) != p {
+                    flat = false;
+                    break;
+                }
+            }
+            grLfbUnlock(0, 1);
+            self.swaps = self.swaps.wrapping_add(1);
+            if flat && !self.was_flat {
+                eprintln!(
+                    "FLASH flat frame swap={} colour={:04x}",
+                    self.swaps,
+                    first.unwrap_or(0)
+                );
+            }
+            self.was_flat = flat;
+        }
+    }
     unsafe fn capture(&mut self) {
         unsafe {
             let Some(directory) = std::env::var_os("RG_CAPTURE_DIR") else {
@@ -260,6 +304,7 @@ impl Bridge {
                         return false;
                     }
                     self.capture();
+                    self.log_flat_frame();
                     grBufferSwap(a[0]);
                 }
                 94 => {

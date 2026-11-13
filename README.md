@@ -1,6 +1,6 @@
 # Maiko
 
-Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows and Linux, without DOSBox. It provides native graphics, input, sound, file and timing services for your own installation.
+Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows and Linux, without DOSBox. It translates the original DOS engine to native code and replaces the DOS services the engine relied on (graphics, input, sound, files, timers) with a native runtime. The game itself is still the original: the same code, levels, scripts, art and sound.
 
 **Maiko is experimental.** The opening of the game, the island and many interiors run, but nobody has played the whole game through yet. See [Known limitations](#known-limitations) before relying on it.
 
@@ -10,7 +10,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 - Windows 10 or newer, 64-bit, with a graphics driver that supports OpenGL.
 - A Redguard installation that contains `RGFX.EXE`, the Glide version of the game executable. The GOG release includes it. Maiko recognizes two builds of this file and refuses any other, so it never runs code it was not checked against.
-- A runtime ZIP built from your own executable using the [client-side browser builder](https://michidk.github.io/maiko/) or [Rust CLI](docs/client-builder.md). Your executable stays on your device. [Source checks](docs/building.md) are available for contributors.
+- Maiko's runtime ZIP. It contains the translated game engine, so it is built from your own copy of Redguard and not downloaded: [docs/building.md](docs/building.md) lists the steps ("Build the Windows runtime from your own copy"). It needs Linux with Docker to build, and the result runs on Windows.
 
 ## Play on Windows
 
@@ -27,26 +27,9 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 Nothing is copied into or changed in your game folder. The controls are the original ones from the game's `KEYS.INI`, and the original options menu works.
 
-### Game controllers
+### Fullscreen and window size
 
-SDL2-compatible gamepads work on Windows and Linux. Connect one before starting or plug it in while playing. The layout uses the button positions below, with Xbox names as a reference. Multiple connected controllers can provide input.
-
-| Control | Original key | Action with the default game settings |
-|---|---|---|
-| Left stick or D-pad | Arrow keys | Move forward/backward and turn; navigate menus |
-| A / bottom face button | Space | Jump |
-| X / left face button | Left Ctrl | Attack or interact |
-| B / right face button | Escape | Back or cancel |
-| Y / top face button | S | Draw or sheathe sword |
-| Left shoulder | Left Shift | Walk modifier |
-| Right shoulder | Left Alt | Alt modifier |
-| Start / Menu | Escape | Open the book menu or go back |
-| Back / View | I | Inventory |
-| Left-stick click | Enter | Confirm menu selection |
-
-The stick acts as digital directions, with a 50% activation threshold and a 37.5% release threshold to avoid drift and repeated changes near the edge. Controller presses use the same keyboard path as physical keys, so changing those keys in the game's settings also changes their controller actions. Keyboard and mouse remain usable alongside the controller. Unplugging a controller releases its inputs; switching away from the window releases all game inputs, and held controller inputs resume when focus returns.
-
-The right stick, triggers, vibration and controller-specific remapping are not implemented. Inventory and other screens that require a mouse still need one.
+By default the game opens in a window at its own size. In `RUN.cmd`, set `DISPLAY_ARGS` to `--fullscreen` for a borderless fullscreen window at your desktop resolution, or to `--window-size 1600x1200` (any width and height from 320x240 to 8192x8192) for a window of that size. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. The same options work when you start `redguard-native.exe` yourself.
 
 ### Movies
 
@@ -73,7 +56,7 @@ Open an issue and attach `native-test.log`. Say what you were doing, which Redgu
 
 ## Linux
 
-The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries and require a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver.
+A Linux build exists and is used to test the game automatically, but there is no packaged Linux release yet. If you are comfortable building from source, see [docs/building.md](docs/building.md).
 
 ## Known limitations
 
@@ -86,10 +69,12 @@ The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages.
 
 ## Legal
 
-Maiko is released under the [MIT licence](LICENSE). It is an independent fan project and is not affiliated with or endorsed by Bethesda Softworks or ZeniMax. *The Elder Scrolls* and *Redguard* belong to their owners. This repository contains no game code or assets, and generated packages contain content derived from your own installation and must not be redistributed. You must own Redguard to use Maiko. Third-party components and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+Maiko is released under the [MIT licence](LICENSE). It is an independent fan project and is not affiliated with or endorsed by Bethesda Softworks or ZeniMax. *The Elder Scrolls* and *Redguard* belong to their owners. This repository contains no game code or assets, and the runtime Maiko builds from your own copy contains translated game code and is for your own use. You must own Redguard to use Maiko. Third-party components and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## For developers
 
-- [docs/building.md](docs/building.md): source checks.
-- [docs/architecture.md](docs/architecture.md): runtime structure.
+- [docs/building.md](docs/building.md): build, test and package.
+- [docs/architecture.md](docs/architecture.md): how the translation and the runtime fit together.
 - [AGENTS.md](AGENTS.md): repository workflow and rules for contributors and coding agents.
+
+The format and engine documentation that this port relies on is maintained in [redguard-preservation](https://github.com/michidk/redguard-preservation).
