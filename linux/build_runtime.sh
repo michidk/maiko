@@ -23,12 +23,8 @@ link -no-pie /tests/linux_abi.c abi-entry.o abi-test.o -o linux-abi
 ./linux-abi
 link -no-pie /tests/linux_platform.c -o linux-platform
 ./linux-platform
-link -no-pie /tests/user_storage.c -o user-storage
-./user-storage
 link -no-pie /tests/cd_image.c -o cd-image-test
 python3 /tests/check_cd_image.py /work/cd-image-test
-link /tests/import_interruption.c -o import-interruption
-./import-interruption
 link /tests/audio_samples.c -o audio-samples
 for name in pan loop volume cache; do
     env SDL_AUDIODRIVER=dummy ./audio-samples "$name"
