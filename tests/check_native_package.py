@@ -131,7 +131,7 @@ assert 'Native Glide window 1024x768 opened=1' in log
 assert 'Isolated native user storage:' in log
 if a.game_on_drive_d:assert 'getcwd result=C:\\' in log
 assert 'Native audio device=dummy' in log
-assert 'Native CD audio unavailable:' in log
+assert 'CD music unavailable:' in log
 assert ('GOG movies: using bundled installed data' in log)==a.installed_gog
 assert ('Native CD image mounted' in log)==a.installed_gog
 assert (root/'user-data/.redguard-storage-v1').is_file()

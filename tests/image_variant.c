@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
-uint32_t rg_exe_variant, rg_skip_intro, rg_skip_outro;
+extern uint32_t rg_exe_variant, rg_skip_intro, rg_skip_outro; /* defined by the Rust runtime (install.rs) */
 extern unsigned test_variant_flags(unsigned nonzero), test_variant_condition(unsigned nonzero), test_skip_call(unsigned nonzero);
 int main(void) {
     for (unsigned set=0;set<=1;++set) {

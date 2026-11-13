@@ -6,6 +6,24 @@ import subprocess
 from .toolchain import ROOT
 
 
+MIT = """Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
+
+
+def generated_mit(package):
+    """MIT notice for a crate whose published package carries no license file.
+
+    The crate's manifest offers MIT (alone or as one option), so the MIT text is given with the
+    copyright holders named in the manifest; the notice says where it came from.
+    """
+    holders = ', '.join(a.split('<')[0].strip() for a in package['authors']) or 'the authors'
+    return ('MIT License (generated from the crate manifest: the published package has no license file; '
+            + str(package['repository']) + ')\n\nCopyright (c) ' + holders + '\n\n' + MIT + '\n')
+
+
 def notices():
     cargo = shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo')
     metadata = json.loads(subprocess.check_output([
@@ -37,10 +55,17 @@ def notices():
             # distributed in the sibling sdl2 crate rather than this package.
             sdl = next(p for p in packages.values() if p['name'] == 'sdl2')
             files.add(Path(sdl['manifest_path']).parent/'LICENSE')
-        if not files:
+        # Crates that embed fonts ship their licences beside the fonts.
+        files |= {path for path in (directory/'fonts').glob('*.txt')} if (directory/'fonts').is_dir() else set()
+        generated = None
+        if not files and 'MIT' in str(package['license']):
+            generated = generated_mit(package)
+        elif not files:
             raise ValueError('No installed license notice for '+package['name'])
         label = package['name']+' '+package['version']+' ('+str(package['license'])+')'
         result.append('===== '+label+' =====\n')
+        if generated:
+            result.append('--- generated MIT notice ---\n'+generated+'\n')
         for path in sorted(files):
             result.append('--- '+path.name+' ---\n'+path.read_text()+'\n')
     return '\n'.join(result)
