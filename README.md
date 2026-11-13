@@ -10,7 +10,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 - Windows 10 or newer, 64-bit, with a graphics driver that supports OpenGL.
 - A Redguard installation that contains `RGFX.EXE`, the Glide version of the game executable. The GOG release includes it. Maiko recognizes two builds of this file and refuses any other, so it never runs code it was not checked against.
-- Maiko's runtime ZIP. It contains the translated game engine, so it is built from your own copy of Redguard and not downloaded: [docs/building.md](docs/building.md) lists the steps ("Build the Windows runtime from your own copy"). It needs Linux with Docker to build, and the result runs on Windows.
+- A runtime ZIP built from your own executable using the [client-side browser builder](https://michidk.github.io/maiko/) or [Rust CLI](docs/client-builder.md). Your executable stays on your device. The [maintainer build](docs/building.md) remains available for testing runtime changes.
 
 ## Play on Windows
 

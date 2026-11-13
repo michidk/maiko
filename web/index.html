@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="description" content="Build a native Windows or Linux version of Redguard from your own executable. The Rust patcher runs entirely on your device.">
+  <title>Maiko · Build your native Redguard package</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <header><a class="wordmark" href="./">Maiko</a><a href="https://github.com/michidk/maiko">Source &amp; documentation</a></header>
+  <main>
+    <section class="introduction" aria-labelledby="title">
+      <div><h1 id="title">Play Redguard on<br>Windows or Linux.</h1><p class="lead">The original adventure, running natively. Build a package from your own copy of the game, without DOSBox.</p></div>
+      <aside><strong>An experimental port</strong><p>The opening and many locations work. A complete playthrough is still untested. You need to own Redguard and keep its original game files.</p></aside>
+    </section>
+    <section class="builder" aria-labelledby="builder-title">
+      <div class="builder-heading"><h2 id="builder-title">Build your package</h2><p>Your file stays on this device.</p></div>
+      <noscript><p>This builder needs JavaScript and WebAssembly. You can also use the Rust CLI described in the repository documentation.</p></noscript>
+      <fieldset id="platforms"><legend>Where will you play?</legend>
+        <label class="platform"><input type="radio" name="target" value="windows"><span><strong>Windows</strong><small>64-bit · Windows 10 or newer</small></span></label>
+        <label class="platform"><input type="radio" name="target" value="linux"><span><strong>Linux</strong><small>64-bit · glibc 2.36+ · X11/XWayland</small></span></label>
+      </fieldset>
+      <p id="detection" class="hint"></p>
+      <label class="file-label" for="executable">Your original RGFX.EXE</label>
+      <p id="file-help" class="hint">Find it inside your Redguard installation. Select only the executable. The other game files stay where they are.</p>
+      <input type="file" id="executable" accept=".exe" aria-describedby="file-help">
+      <div class="actions"><button id="build" disabled>Build package</button><button id="cancel" class="secondary" hidden>Cancel</button><a id="download" class="download" hidden>Download your ZIP</a></div>
+      <progress id="progress" aria-label="Building your package" hidden></progress>
+      <p id="status" role="status" aria-live="polite">Choose your executable to begin.</p>
+      <pre id="error" role="alert" hidden></pre>
+    </section>
+    <section class="instructions" aria-labelledby="next-title"><h2 id="next-title">Once your ZIP is ready</h2><ol><li>Extract it into its own folder, outside your game installation.</li><li>On Windows, open <code>RUN.cmd</code>. On Linux, run <code>./RUN.sh /path/to/Redguard</code> in a terminal.</li><li>Windows asks for the original game folder. Linux uses the path you pass to RUN.sh and needs a working OpenGL driver; see the included README. Your saves and settings go into the package's separate <code>user-data</code> folder.</li></ol><p>You can also build locally with the <a href="https://github.com/michidk/maiko/blob/main/docs/client-builder.md">Rust command-line tool</a>. macOS and mobile devices are not supported as game targets.</p></section>
+  </main>
+  <footer>Maiko is an independent fan project. Redguard belongs to Bethesda Softworks and ZeniMax. No game files are included.</footer>
+</body>
+</html>

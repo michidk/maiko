@@ -1,0 +1,81 @@
+[
+  {
+    "name": "native_startup_book",
+    "documentation": "Show the native startup book, preserving the original direct-start override.\n\n    Original: a fresh install with no usable autosave skips the book and starts the intro immediately,\n    and the book only fades in when an autosave was admitted.\n    Replacement: the default fresh start enters the book with New Game selected and Continue disabled,\n    through the original disable-entry path; startup Escape with no admitted save takes the original\n    no-op path. MENU.INI `ignore_autosave=1` keeps its original direct-world path.\n    Effect: a new player sees the book menu first. This deliberately differs from the original.\n    Why: reported on real Windows: starting straight into the game bypassed the book.\n    Evidence: history:aad2c0c:docs/development/VALIDATION.md (fresh start, Continue disabled); tests/check_startup_override.py.\n    Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.\n    ",
+    "guards": [
+      {
+        "address": 132598,
+        "length": 20,
+        "sha256": "9bf94ea1931857a98ca0a58b3e1eee2fe82a9898b7cf59bda19da3ef15e261b4"
+      },
+      {
+        "address": 132666,
+        "length": 9,
+        "sha256": "eb0c30517d43f6280823f34201d61d6179909e5a258a1f2a24a1072777f269e2"
+      },
+      {
+        "address": 703295,
+        "length": 10,
+        "sha256": "b62d4e090b5d93c639833515cef018c0255dd93c121550c80f7cc7eb0b9382de"
+      },
+      {
+        "address": 702490,
+        "length": 13,
+        "sha256": "47771aa863c2f6820ab77e74ee498a581ffc303285e197d1301b7ea15d3995c4"
+      },
+      {
+        "address": 718964,
+        "length": 9,
+        "sha256": "f95a40dc56960cc1a78d502959895f9c7f67c109460bd6fc4317c3125d749b23"
+      },
+      {
+        "address": 706724,
+        "length": 11,
+        "sha256": "b08b24ff868df46ec3f9fa261c18c5b01badff10d3088ab821009f6bf6ff333b"
+      }
+    ],
+    "replacements": [
+      {
+        "before": "CALL loc_4F33B\ntest ax, ax\nACTION_CONDITIONAL_JUMP_FORWARD\njz loc_2061C\nmov dword [loc_1A1DA3], 0x1\n",
+        "after": "CALL loc_4F33B\ntest ax, ax\nACTION_CONDITIONAL_JUMP_FORWARD\njz loc_2061C\nmov dword [loc_1A1DA3], 0x1\nnative_startup_book:\n"
+      },
+      {
+        "before": "jnz loc_20697\nmov eax, 0xffffffff\n",
+        "after": "jnz loc_20697\nmov dword [loc_1A1DA3], 0x0\nmov dword [loc_1A3F74], 0x0\njmp native_startup_book\nmov eax, 0xffffffff\n"
+      },
+      {
+        "before": "mov al, [loc_1A1DA3]\nmov [loc_1FA372], al\n",
+        "after": "mov byte [loc_1FA372], 0x1\ncmp dword [loc_1A1DA3], 0x0\njnz native_startup_selection_done\nmov eax, [loc_1A667B]\nmov ecx, 0x40\nnative_startup_select_new:\ntest eax, eax\njz native_startup_selection_done\ncmp dword [eax+0x4], 0xa\njnz native_startup_select_next\ntest byte [eax+0xc], 0x8\njnz native_startup_select_next\ntest byte [eax+0xc], 0x1\njz native_startup_select_next\nmov [loc_1A6677], eax\njmp native_startup_selection_done\nnative_startup_select_next:\ntest byte [eax+0xc], 0x40\njnz native_startup_selection_done\nmov eax, [eax+0x31]\ndec ecx\njnz native_startup_select_new\nnative_startup_selection_done:\n"
+      },
+      {
+        "before": "cmp dword [loc_1A1DA3], 0x1\nACTION_CONDITIONAL_JUMP_FORWARD\njnz near loc_AB91B\n",
+        "after": "cmp dword [loc_1A1DA3], 0x1\nACTION_CONDITIONAL_JUMP_FORWARD\njz native_startup_book_fade\ncmp dword [loc_1F9BD0], 0x1\nACTION_CONDITIONAL_JUMP_FORWARD\njnz near loc_AB91B\nnative_startup_book_fade:\n"
+      },
+      {
+        "before": "loc_AF874:\ncmp dword [loc_1F9BD0], 0x2\nACTION_CONDITIONAL_JUMP_FORWARD\njnz loc_AF889\n",
+        "after": "loc_AF874:\ncmp dword [loc_1F9BD0], 0x2\nACTION_CONDITIONAL_JUMP_FORWARD\njz native_startup_disable_continue\ncmp dword [loc_1F9BD0], 0x1\nACTION_CONDITIONAL_JUMP_FORWARD\njnz loc_AF889\ncmp dword [loc_1A1DA3], 0x0\nACTION_CONDITIONAL_JUMP_FORWARD\njnz loc_AF889\nnative_startup_disable_continue:\n"
+      },
+      {
+        "before": "loc_AC8A4:\ncmp dword [loc_1F9BD0], 0x2\nACTION_CONDITIONAL_JUMP_FORWARD\njnz loc_AC8AF\n",
+        "after": "loc_AC8A4:\ncmp dword [loc_1F9BD0], 0x2\njz loc_AC8AD\ncmp dword [loc_1F9BD0], 0x1\njnz loc_AC8AF\ncmp dword [loc_1A1DA3], 0x0\njnz loc_AC8AF\n"
+      }
+    ]
+  },
+  {
+    "name": "native_startup_clock",
+    "documentation": "Pace the original fixed-step clock before it advances the simulation.\n\n    Original: at 0x5F6BC the original calls its clock update (loc_5F761) and then tests the step counter.\n    Replacement: call host_startup_clock_pace first (runtime/rust/timing.rs).\n    Effect: the 12 Hz loading warm-up advances at its fixed rate instead of as fast as the host runs.\n    Simulation arithmetic is untouched.\n    Why: reported on real Windows: a burst of fast movement at the start.\n    Evidence: history:aad2c0c:docs/development/VALIDATION.md (startup pacing); the Linux and Wine runs record the countdowns.\n    Guards: the 12 original bytes are checked and the call must occur exactly once and not already be present.\n    ",
+    "guards": [
+      {
+        "address": 390844,
+        "length": 12,
+        "sha256": "e4d4292a7df4c01a4ee2eb577bc19a5eedeaab7c6be477013154bd71b32f9651"
+      }
+    ],
+    "replacements": [
+      {
+        "before": "CALL loc_5F761\ncmp dword [loc_1A4624], 0x0\n",
+        "after": "CALL host_startup_clock_pace\nCALL loc_5F761\ncmp dword [loc_1A4624], 0x0\n"
+      }
+    ]
+  }
+]

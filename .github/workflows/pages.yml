@@ -1,0 +1,57 @@
+name: Build and deploy the client-side builder
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: oven-sh/setup-bun@v2
+      - name: Install source-check dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev
+      - name: Check sources
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          cargo test --workspace --locked
+          sh tests/check_portable.sh
+          python3 tests/check_patch_tables.py
+          python3 -m tools.audit_runtime --check
+      - run: bun install --frozen-lockfile
+      - run: bun test web
+      - name: Install the matching WebAssembly binding generator
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - name: Build the website and verify pinned runtime downloads
+        run: bun run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

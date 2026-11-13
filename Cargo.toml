@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "runtime/host", "runtime/glide"]
+members = [".", "runtime/host", "runtime/glide", "patcher"]
 default-members = ["."]
 resolver = "3"
 

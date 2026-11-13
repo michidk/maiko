@@ -19,3 +19,8 @@ game/
 *.gog
 *.iso
 *.sav
+
+# Client-side builder output
+/node_modules/
+/web/pkg/
+/web/dist/

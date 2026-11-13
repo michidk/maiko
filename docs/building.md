@@ -2,6 +2,8 @@
 
 Maiko translates your own copy of the game's `RGFX.EXE` into native code, links it with the Rust runtime and packages the result. The translated engine is derived from the game, so builds are made locally from your installation and are not committed to this repository. Everything downloaded or generated goes into the ignored `.cache/` and `artifacts/` folders.
 
+For a package from an accepted runtime snapshot, use the [client-side browser builder or Rust CLI](client-builder.md). The steps below build and test the runtime itself.
+
 ## Requirements
 
 - Linux x86-64 (the Windows runtime is cross-built and checked under Wine in a container).
