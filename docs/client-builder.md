@@ -58,7 +58,7 @@ A stable `vX.Y.Z` tag starts the release workflow. Tags must point to a commit o
 
 Each release contains:
 
-- `maiko-patcher-linux-x86_64.tar.gz` and `maiko-patcher-windows-x86_64.tar.gz`: standalone CLI, licence and usage instructions. Wasmtime is installed separately. The Linux CLI is built on Ubuntu 24.04 and requires glibc 2.39 or newer; the runtime kit has its own requirements above.
+- `maiko-patcher-linux-x86_64.tar.gz` and `maiko-patcher-windows-x86_64.tar.gz`: standalone CLI, licence and usage instructions. Wasmtime is installed separately. The Linux CLI is statically linked with musl; the runtime kit has its own desktop and glibc requirements above.
 - `maiko-browser.tar.gz`: the complete static builder, including its checked support kits.
 - `maiko-runtime-kit-linux.zip` and `maiko-runtime-kit-windows.zip`: the exact kits embedded in that browser build, including their upstream notices and corresponding source files. Pass these filenames to the CLI's `--kit` option.
 - `SHA256SUMS`, `LICENSE` and `README.md`.
