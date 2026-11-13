@@ -5,8 +5,8 @@ use maiko_runtime::{
     files::rg_file_service,
     guest::{GuestFrame, GuestRegs},
     host::*,
-    input::*,
-    install::rg_install_select,
+    input::{overlay, *},
+    install::{rg_install_select, rg_skip_intro, rg_skip_outro},
     memory::*,
     platform::*,
     storage::{rg_host_chdir, rg_host_cwd},
@@ -54,6 +54,7 @@ unsafe extern "C" {
     static loc_1EEC54: u8;
     static loc_1F29C4: u8;
     static loc_1F29E0: u8;
+    static loc_1A3F5C: u8;
     static rg_tick_delta: u32;
 }
 #[unsafe(no_mangle)]
@@ -108,6 +109,25 @@ unsafe fn runtime_state() {
         }
         eprintln!("{text}");state.last=now;state.actor=actor;state.startup=startup;state.ui=ui;state.rows+=1;
     });
+    }
+}
+fn overlay_panel(ui: &mut overlay::egui::Ui) {
+    unsafe {
+        ui.label(format!("World {}", read32(&raw const loc_1A3F5C) as i32));
+        let actor = read32(&raw const loc_1A3865) as usize as *const u8;
+        if rg_host_readable(actor.cast(), 0xd7) != 0 {
+            ui.label(format!(
+                "Cyrus at {}, {}, {}",
+                read32(actor.add(0xcb)) as i32,
+                read32(actor.add(0xcf)) as i32,
+                read32(actor.add(0xd3)) as i32
+            ));
+        }
+        ui.label(format!(
+            "Skip intro {}, skip outro {}",
+            rg_skip_intro != 0,
+            rg_skip_outro != 0
+        ));
     }
 }
 /// # Safety
@@ -498,6 +518,7 @@ pub unsafe extern "C" fn rg_native_main(argc: c_int, argv: *const *const c_char)
     unsafe {
         rg_host_setup();
         rg_crash_install();
+        overlay::set_panel(overlay_panel);
         if rg_install_select(argc, argv) == 0 || rg_clock_start() == 0 {
             return 1;
         }

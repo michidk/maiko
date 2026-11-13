@@ -10,6 +10,14 @@ type Picker = unsafe extern "C" fn(*mut c_char, usize) -> c_int;
 static PICKER: Mutex<Option<Picker>> = Mutex::new(None);
 #[unsafe(no_mangle)]
 pub static mut rg_exe_variant: u32 = 0;
+// Read by the translated code: RG_SKIP_JUMP and the startup book (tools/pipeline.py).
+#[unsafe(no_mangle)]
+pub static mut rg_skip_intro: u32 = 0;
+#[unsafe(no_mangle)]
+pub static mut rg_skip_outro: u32 = 0;
+/// Save slot to load instead of showing the startup book, or -1.
+#[unsafe(no_mangle)]
+pub static mut rg_load_save: i32 = -1;
 const PRIMARY: &str = "844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852ac1607ee4dfdf";
 const ALTERNATE: &str = "06d7a399cf01eec6bca3be39aaab1a39c42dc88116b6b74ae6f5f0547f7cdaf3";
 
@@ -19,6 +27,9 @@ struct Selection {
     user: Option<PathBuf>,
     media: Option<PathBuf>,
     choose: bool,
+    skip_intro: bool,
+    skip_outro: bool,
+    load_save: Option<u16>,
 }
 impl Selection {
     fn parse(args: impl IntoIterator<Item = OsString>) -> io::Result<Self> {
@@ -45,6 +56,23 @@ impl Selection {
                         .and_then(crate::input::parse_size)
                         .ok_or_else(storage::denied)?;
                     crate::input::set_display(false, Some(size));
+                    continue;
+                }
+                "--skip-intro" if !result.skip_intro => {
+                    result.skip_intro = true;
+                    continue;
+                }
+                "--skip-outro" if !result.skip_outro => {
+                    result.skip_outro = true;
+                    continue;
+                }
+                "--load-save" if result.load_save.is_none() => {
+                    // The original clamps slots to 0..=999 (SAVEGAME.000 to SAVEGAME.999).
+                    let slot = args.next().and_then(|slot| slot.to_str()?.parse().ok());
+                    result.load_save = Some(
+                        slot.filter(|&slot| slot <= 999)
+                            .ok_or_else(storage::denied)?,
+                    );
                     continue;
                 }
                 _ => return Err(storage::denied()),
@@ -135,6 +163,24 @@ fn select(selection: Selection) -> io::Result<()> {
             .ok_or_else(storage::absent)?
             .initialize_user(&user)?;
     }
+    if let Some(slot) = selection.load_save {
+        let save = storage::STORAGE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .ok_or_else(storage::absent)?
+            .resolved(&format!("C:\\SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV"));
+        if !save.is_ok_and(|save| save.is_file()) {
+            eprintln!("Save slot {slot} not found: SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV");
+            return Err(storage::absent());
+        }
+    }
+    // Variant 1 already skips the outro in its bytes (metadata/image_variants.json).
+    unsafe {
+        rg_skip_intro = u32::from(selection.skip_intro);
+        rg_skip_outro = u32::from(selection.skip_outro || rg_exe_variant == 1);
+        rg_load_save = selection.load_save.map_or(-1, i32::from);
+    }
     if let Some(media) = &selection.media {
         let mut path = [0; 4096];
         unsafe {
@@ -177,7 +223,7 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
                 unsafe { storage::path_from_c(arg) }.map(PathBuf::into_os_string)
             })
             .collect::<io::Result<Vec<_>>>()?;
-        let selection=Selection::parse(args).inspect_err(|_| eprintln!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT]"))?;
+        let selection=Selection::parse(args).inspect_err(|_| eprintln!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
         select(selection)
     })();
     if let Err(e) = &result {
@@ -197,6 +243,11 @@ mod tests {
             vec!["--bad"],
             vec!["--game-dir", "a", "--game-dir", "b"],
             vec!["--game-dir", "a", "--choose-game-dir"],
+            vec!["--skip-intro", "--skip-intro"],
+            vec!["--load-save"],
+            vec!["--load-save", "1000"],
+            vec!["--load-save", "-1"],
+            vec!["--load-save", "1", "--load-save", "2"],
         ] {
             assert!(Selection::parse(args.into_iter().map(OsString::from)).is_err());
         }
@@ -204,5 +255,11 @@ mod tests {
             Selection::parse(["--game-dir", "a b", "--user-dir", "saves"].map(OsString::from))
                 .unwrap();
         assert_eq!(selected.game, Some(PathBuf::from("a b")));
+        let selected = Selection::parse(
+            ["--skip-outro", "--load-save", "7", "--skip-intro"].map(OsString::from),
+        )
+        .unwrap();
+        assert!(selected.skip_intro && selected.skip_outro);
+        assert_eq!(selected.load_save, Some(7));
     }
 }

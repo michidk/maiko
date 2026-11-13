@@ -2,7 +2,7 @@
 //! Guest pointer-bearing structures are copied into explicit native layouts.
 use maiko_runtime::{
     guest::GuestFrame,
-    input::{rg_input_pump, rg_input_window},
+    input::{draw_overlay, overlay, rg_input_pump, rg_input_window},
     memory::{rg_low_alloc, rg_low_free},
 };
 use std::cell::RefCell;
@@ -68,6 +68,7 @@ impl Default for Bridge {
 thread_local! {static BRIDGE:RefCell<Bridge>=RefCell::new(Bridge::default());}
 unsafe extern "C" {
     fn grBufferSwap(interval: u32);
+    fn grSstIdle();
     fn grSstQueryHardware(info: *mut c_void) -> u32;
     fn grSstWinOpen(
         window: usize,
@@ -305,6 +306,11 @@ impl Bridge {
                     }
                     self.capture();
                     self.log_flat_frame();
+                    if overlay::is_open() {
+                        // grBufferSwap draws the game's batched triangles; draw them first.
+                        grSstIdle();
+                        draw_overlay();
+                    }
                     grBufferSwap(a[0]);
                 }
                 94 => {

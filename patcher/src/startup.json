@@ -1,12 +1,17 @@
 [
   {
     "name": "native_startup_book",
-    "documentation": "Show the native startup book, preserving the original direct-start override.\n\n    Original: a fresh install with no usable autosave skips the book and starts the intro immediately,\n    and the book only fades in when an autosave was admitted.\n    Replacement: the default fresh start enters the book with New Game selected and Continue disabled,\n    through the original disable-entry path; startup Escape with no admitted save takes the original\n    no-op path. MENU.INI `ignore_autosave=1` keeps its original direct-world path.\n    Effect: a new player sees the book menu first. This deliberately differs from the original.\n    Why: reported on real Windows: starting straight into the game bypassed the book.\n    Evidence: tests/check_linux_menu.py (fresh start, Continue disabled); tests/check_startup_override.py.\n    Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.\n    ",
+    "documentation": "Show the native startup book, preserving the original direct-start override.\n\n    Original: a fresh install with no usable autosave skips the book and starts the intro immediately,\n    and the book only fades in when an autosave was admitted.\n    Replacement: the default fresh start enters the book with New Game selected and Continue disabled,\n    through the original disable-entry path; startup Escape with no admitted save takes the original\n    no-op path. MENU.INI `ignore_autosave=1` keeps its original direct-world path.\n    Effect: a new player sees the book menu first. This deliberately differs from the original.\n    Why: reported on real Windows: starting straight into the game bypassed the book.\n    Evidence: tests/check_linux_menu.py (fresh start, Continue disabled); tests/check_startup_override.py.\n    Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.\n\n    Load save (--load-save SLOT): when the host sets rg_load_save (runtime/rust/install.rs), the startup\n    book is not shown. The slot goes to the original's load slot (0x1F9C0C) and the book's result becomes\n    0x1772, the command the book returns for Continue and Load, so the original LoadGame path at 0x206F4\n    loads it. rg_load_save is cleared, so later book entries are untouched.\n    ",
     "guards": [
       {
         "address": 132598,
         "length": 20,
         "sha256": "9bf94ea1931857a98ca0a58b3e1eee2fe82a9898b7cf59bda19da3ef15e261b4"
+      },
+      {
+        "address": 132618,
+        "length": 13,
+        "sha256": "477e14edebca80c9aab027ccbfcc373cfb5fddfe18953de36a9af565925c9832"
       },
       {
         "address": 132666,
@@ -38,6 +43,10 @@
       {
         "before": "CALL loc_4F33B\ntest ax, ax\nACTION_CONDITIONAL_JUMP_FORWARD\njz loc_2061C\nmov dword [loc_1A1DA3], 0x1\n",
         "after": "CALL loc_4F33B\ntest ax, ax\nACTION_CONDITIONAL_JUMP_FORWARD\njz loc_2061C\nmov dword [loc_1A1DA3], 0x1\nnative_startup_book:\n"
+      },
+      {
+        "before": "native_startup_book:\nmov eax, 0x1\nACTION_CALL\n;call loc_AB924\nCALL loc_AB924\nmov [ebp-0x10], eax\n",
+        "after": "native_startup_book:\nmov eax, [rel rg_load_save]\ntest eax, eax\njs native_startup_book_menu\nmov [loc_1F9C0C], eax\nmov dword [rel rg_load_save], 0xffffffff\nmov eax, 0x1772\njmp native_startup_book_result\nnative_startup_book_menu:\nmov eax, 0x1\nACTION_CALL\n;call loc_AB924\nCALL loc_AB924\nnative_startup_book_result:\nmov [ebp-0x10], eax\n"
       },
       {
         "before": "jnz loc_20697\nmov eax, 0xffffffff\n",

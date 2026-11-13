@@ -10,12 +10,14 @@ rem   set "DISPLAY_ARGS=--window-size 1600x1200"
 set "DISPLAY_ARGS="
 rem Keep copied saves/settings beside this runtime, separate from the original game.
 set "USER_DIR=%~dp0user-data"
+rem Optional startup options, for example: set "OPTIONS=--skip-intro --skip-outro --load-save 1"
+set "OPTIONS="
 if not "%~1"=="" set "GAME_DIR=%~1"
 cd /d "%~dp0"
 if defined GAME_DIR (
-  redguard-native.exe --game-dir "%GAME_DIR%\." --user-dir "%USER_DIR%" %DISPLAY_ARGS% > native-test.log 2>&1
+  redguard-native.exe --game-dir "%GAME_DIR%\." --user-dir "%USER_DIR%" %DISPLAY_ARGS% %OPTIONS% > native-test.log 2>&1
 ) else (
-  redguard-native.exe --choose-game-dir --user-dir "%USER_DIR%" %DISPLAY_ARGS% > native-test.log 2>&1
+  redguard-native.exe --choose-game-dir --user-dir "%USER_DIR%" %DISPLAY_ARGS% %OPTIONS% > native-test.log 2>&1
 )
 set "native_exit=%errorlevel%"
 >>native-test.log echo Exit code: %native_exit%

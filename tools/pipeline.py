@@ -252,6 +252,11 @@ def native_startup_book(image, text):
     Why: reported on real Windows: starting straight into the game bypassed the book.
     Evidence: tests/check_linux_menu.py (fresh start, Continue disabled); tests/check_startup_override.py.
     Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.
+
+    Load save (--load-save SLOT): when the host sets rg_load_save (runtime/rust/install.rs), the startup
+    book is not shown. The slot goes to the original's load slot (0x1F9C0C) and the book's result becomes
+    0x1772, the command the book returns for Continue and Load, so the original LoadGame path at 0x206F4
+    loads it. rg_load_save is cleared, so later book entries are untouched.
     """
     original = bytes.fromhex('e840ed02006685c0741cc705a31d030001000000')
     if image.at(0x205f6, len(original)) != original:
@@ -264,6 +269,32 @@ def native_startup_book(image, text):
     after = before + 'native_startup_book:\n'
     if text.count(before) != 1:
         raise ValueError('Native startup autosave branch inventory changed')
+    text = text.replace(before, after)
+    if image.at(0x2060a, 13) != bytes.fromhex('b801000000e810b308008945f0'):
+        raise ValueError('Original startup book call bytes changed')
+    before = ('native_startup_book:\n'
+              'mov eax, 0x1\n'
+              'ACTION_CALL\n'
+              ';call loc_AB924\n'
+              'CALL loc_AB924\n'
+              'mov [ebp-0x10], eax\n')
+    after = ('native_startup_book:\n'
+             'mov eax, [rel rg_load_save]\n'
+             'test eax, eax\n'
+             'js native_startup_book_menu\n'
+             'mov [loc_1F9C0C], eax\n'
+             'mov dword [rel rg_load_save], 0xffffffff\n'
+             'mov eax, 0x1772\n'
+             'jmp native_startup_book_result\n'
+             'native_startup_book_menu:\n'
+             'mov eax, 0x1\n'
+             'ACTION_CALL\n'
+             ';call loc_AB924\n'
+             'CALL loc_AB924\n'
+             'native_startup_book_result:\n'
+             'mov [ebp-0x10], eax\n')
+    if text.count(before) != 1:
+        raise ValueError('Native startup book call inventory changed')
     text = text.replace(before, after)
     # Preserve ignore_autosave=1's original direct-world path. Only replace
     # the default fresh-install auto-intro path with the requested book.
@@ -480,7 +511,7 @@ def main():
         source.write_text(text)
         report['native_bios_tick_pointer_rewrites']=count
         with (work/'extern.inc').open('a') as out:
-            out.write('extern rg_bios_ticks\nextern host_startup_clock_pace\n')
+            out.write('extern rg_bios_ticks\nextern host_startup_clock_pace\nextern rg_load_save\n')
         # Address-taken handwritten clipping helpers were previously emitted as
         # raw x86 bytes. Each must use the translated stack and call target.
         roots=[0xd933c,0xd93cc,0xd945c,0xd94ec,0xd9578,0xd9604]

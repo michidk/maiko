@@ -23,7 +23,7 @@ maiko-patcher build --input /path/to/RGFX.EXE --target linux \
 
 Use `--target windows` with `windows.zip` for Windows x64. `--wasmtime PATH` selects a local Wasmtime installation. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
 
-Extract the generated ZIP into a separate writable folder. Windows users open `RUN.cmd` and choose the original game folder. Linux users run `sh RUN.sh /path/to/Redguard`; the package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory.
+Extract the generated ZIP into a separate writable folder. Windows users open `RUN.cmd` and choose the original game folder. Linux users run `sh RUN.sh /path/to/Redguard`; the package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory. Startup options such as `--skip-intro` go in `OPTIONS` in `RUN.cmd`, or after the game folder for `RUN.sh`; see the README.
 
 ## Runtime kits
 
