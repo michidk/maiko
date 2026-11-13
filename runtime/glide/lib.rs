@@ -1,5 +1,6 @@
 //! Translation of the DOS Glide ABI into the external OpenGLide host ABI.
 //! Guest pointer-bearing structures are copied into explicit native layouts.
+use maiko_runtime::memory::{guest_address, guest_ptr};
 use maiko_runtime::{
     guest::GuestFrame,
     input::{draw_overlay, overlay, rg_input_pump, rg_input_window},
@@ -124,13 +125,13 @@ unsafe extern "C" {
 }
 unsafe fn texture(address: u32) -> Texture {
     unsafe {
-        let p = address as usize as *const u32;
+        let p = guest_ptr::<u32>(address);
         Texture {
             small: p.read_unaligned() as i32,
             large: p.add(1).read_unaligned() as i32,
             aspect: p.add(2).read_unaligned() as i32,
             format: p.add(3).read_unaligned() as i32,
-            data: p.add(4).read_unaligned() as usize as *const c_void,
+            data: guest_ptr::<c_void>(p.add(4).read_unaligned()),
         }
     }
 }
@@ -251,7 +252,7 @@ impl Bridge {
             }
             // Each import has its own argument count. Do not construct a slice
             // beyond the caller's arguments at the top of the guest stack.
-            let address = (f.esp as u32).wrapping_add(4) as usize as *const u32;
+            let address = guest_ptr::<u32>((f.esp as u32).wrapping_add(4));
             let a = GuestArgs(address);
             if !self.seen[index as usize] {
                 eprintln!("Native Glide entry {index}");
@@ -282,7 +283,7 @@ impl Bridge {
                 37 => grFogMode(a[0]),
                 36 => grFogColorValue(a[0]),
                 65 => {
-                    f.eax = grSstQueryHardware(a[0] as usize as *mut c_void).into();
+                    f.eax = grSstQueryHardware(guest_ptr::<c_void>(a[0])).into();
                 }
                 75 => {
                     (self.width, self.height) = dimensions(a[1]);
@@ -322,7 +323,7 @@ impl Bridge {
                     grTexDownloadMipMap(a[0], a[1], a[2], &info);
                 }
                 84 => {
-                    grTexDownloadTable(a[0], a[1], a[2] as usize as *const c_void);
+                    grTexDownloadTable(a[0], a[1], guest_ptr::<c_void>(a[2]));
                 }
                 89 => {
                     f.eax = grTexMinAddress(a[0]).into();
@@ -331,23 +332,20 @@ impl Bridge {
                     f.eax = grTexMaxAddress(a[0]).into();
                 }
                 38 => {
-                    grFogTable(a[0] as usize as *const u8);
+                    grFogTable(guest_ptr::<u8>(a[0]));
                 }
                 34 => {
                     grDrawTriangle(
-                        a[0] as usize as *const c_void,
-                        a[1] as usize as *const c_void,
-                        a[2] as usize as *const c_void,
+                        guest_ptr::<c_void>(a[0]),
+                        guest_ptr::<c_void>(a[1]),
+                        guest_ptr::<c_void>(a[2]),
                     );
                 }
                 28 => {
-                    grDrawLine(
-                        a[0] as usize as *const c_void,
-                        a[1] as usize as *const c_void,
-                    );
+                    grDrawLine(guest_ptr::<c_void>(a[0]), guest_ptr::<c_void>(a[1]));
                 }
                 31 => {
-                    grDrawPoint(a[0] as usize as *const c_void);
+                    grDrawPoint(guest_ptr::<c_void>(a[0]));
                 }
                 49 => {
                     if a[0] > 1 || (a[2] > 2 && a[2] != 255) {
@@ -357,7 +355,7 @@ impl Bridge {
                     if lock.guest != 0 {
                         return false;
                     }
-                    let info = a[5] as usize as *mut u32;
+                    let info = guest_ptr::<u32>(a[5]);
                     if info.read_unaligned() != 20 {
                         return false;
                     }
@@ -385,7 +383,7 @@ impl Bridge {
                         .copy_from_nonoverlapping(lock.native.pointer.cast(), bytes);
                     info.cast::<[u32; 5]>().write_unaligned([
                         20,
-                        lock.guest as u32,
+                        guest_address(lock.guest as *const u8),
                         lock.native.stride,
                         lock.native.mode as u32,
                         lock.native.origin as u32,

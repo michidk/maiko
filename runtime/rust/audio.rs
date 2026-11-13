@@ -1,6 +1,7 @@
 //! Shared Miles service adapter. SR owns sample decoding; SDL_mixer owns output.
 use crate::guest::GuestFrame;
 use crate::host::{rg_host_lock, rg_host_readable};
+use crate::memory::{guest_address, guest_ptr};
 use crate::memory::{rg_guest_pointer, rg_low_alloc, rg_low_free};
 use crate::stream::{
     PcmStream, rg_stream_load, rg_stream_ready, rg_stream_reset, rg_stream_status,
@@ -325,7 +326,7 @@ impl Audio {
                 return true;
             }
             19 => {
-                frame.eax = self.driver as u64;
+                frame.eax = guest_address(self.driver as *const c_void).into();
                 return self.opened;
             }
             _ => {}
@@ -338,7 +339,7 @@ impl Audio {
             24 => 5,
             _ => return false,
         };
-        let pointer = frame.esp as u32 as usize as *const u32;
+        let pointer = guest_ptr::<u32>(frame.esp as u32);
         if rg_host_readable(pointer.cast(), (argc + 1) * 4) == 0 {
             return false;
         }
@@ -349,30 +350,29 @@ impl Audio {
         }
         let a = args;
         if service == 15 {
-            frame.eax = rg_low_alloc(a[1] as usize) as u64;
+            frame.eax = guest_address(rg_low_alloc(a[1] as usize)).into();
             return true;
         }
         if service == 16 {
-            return unsafe { rg_low_free(a[1] as usize as *mut c_void) } != 0;
+            return unsafe { rg_low_free(guest_ptr::<c_void>(a[1])) } != 0;
         }
         if service == 28 || service == 29 {
-            frame.eax = if a[2] == 0
-                || rg_host_readable(a[1] as usize as *const c_void, a[2] as usize) == 0
-            {
-                0
-            } else {
-                (unsafe {
-                    rg_host_lock(
-                        a[1] as usize as *mut c_void,
-                        a[2] as usize,
-                        c_int::from(service == 28),
-                    )
-                }) as u64
-            };
+            frame.eax =
+                if a[2] == 0 || rg_host_readable(guest_ptr::<c_void>(a[1]), a[2] as usize) == 0 {
+                    0
+                } else {
+                    (unsafe {
+                        rg_host_lock(
+                            guest_ptr::<c_void>(a[1]),
+                            a[2] as usize,
+                            c_int::from(service == 28),
+                        )
+                    }) as u64
+                };
             return true;
         }
         if service == 20 {
-            if !self.opened || a[1] as usize != self.driver {
+            if !self.opened || guest_ptr::<c_void>(a[1]) as usize != self.driver {
                 return false;
             }
             let mut streams = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
@@ -388,13 +388,13 @@ impl Audio {
                         stream.pcm.output_rate = Game_AudioRate as u32;
                     }
                 }
-                frame.eax = stream.handle as u64;
+                frame.eax = guest_address(stream.handle as *const c_void).into();
             }
             return true;
         }
         if service == 25 {
             if !self.opened
-                || a[1] as usize != self.driver
+                || guest_ptr::<c_void>(a[1]) as usize != self.driver
                 || !(512..=96000).contains(&a[2])
                 || a[3] > 3
             {
@@ -409,7 +409,11 @@ impl Audio {
         if !self.opened || a[1] == 0 {
             return false;
         }
-        if let Some(slot) = self.samples.iter().position(|s| s.handle == a[1] as usize) {
+        if let Some(slot) = self
+            .samples
+            .iter()
+            .position(|s| s.handle == guest_ptr::<c_void>(a[1]) as usize)
+        {
             let sample = &mut self.samples[slot];
             let handle = sample.handle as *mut c_void;
             unsafe {
@@ -428,12 +432,12 @@ impl Audio {
                     }
                     4 => {
                         if a[3] > 16 * 1024 * 1024
-                            || rg_host_readable(a[2] as usize as *const c_void, a[3] as usize) == 0
+                            || rg_host_readable(guest_ptr::<c_void>(a[2]), a[3] as usize) == 0
                         {
                             return false;
                         }
                         sample.length = a[3];
-                        Game_AIL_set_sample_address(handle, a[2] as usize as *mut c_void, a[3]);
+                        Game_AIL_set_sample_address(handle, guest_ptr::<c_void>(a[2]), a[3]);
                     }
                     5 => {
                         if !(512..=44000).contains(&a[2]) || Game_AIL_sample_status(handle) == 4 {
@@ -512,7 +516,10 @@ impl Audio {
         let Some(all) = streams.as_mut() else {
             return false;
         };
-        let Some(slot) = all.iter().position(|s| s.handle == a[1] as usize) else {
+        let Some(slot) = all
+            .iter()
+            .position(|s| s.handle == guest_ptr::<c_void>(a[1]) as usize)
+        else {
             return false;
         };
         if service == 23 && a[4] != 0 {
@@ -520,7 +527,7 @@ impl Audio {
             let stream = &mut all[slot].pcm;
             if index > 1
                 || stream.buffer[index].state != 1
-                || rg_host_readable(a[3] as usize as *const c_void, a[4] as usize) == 0
+                || rg_host_readable(guest_ptr::<c_void>(a[3]), a[4] as usize) == 0
             {
                 return false;
             }
@@ -533,13 +540,12 @@ impl Audio {
             };
             prepared.buffer[index].state = 1;
             drop(streams);
-            if unsafe { rg_stream_load(&mut prepared, a[2], a[3] as usize as *const c_void, a[4]) }
-                == 0
+            if unsafe { rg_stream_load(&mut prepared, a[2], guest_ptr::<c_void>(a[3]), a[4]) } == 0
             {
                 return false;
             }
             if !self.capture(unsafe {
-                std::slice::from_raw_parts(a[3] as usize as *const u8, a[4] as usize)
+                std::slice::from_raw_parts(guest_ptr::<u8>(a[3]), a[4] as usize)
             }) {
                 prepared.clear();
                 return false;
@@ -617,14 +623,14 @@ impl Audio {
             }
             22 => frame.eax = unsafe { rg_stream_ready(pcm) }.into(),
             23 => {
-                if unsafe { rg_stream_load(pcm, a[2], a[3] as usize as *const c_void, a[4]) } == 0 {
+                if unsafe { rg_stream_load(pcm, a[2], guest_ptr::<c_void>(a[3]), a[4]) } == 0 {
                     return false;
                 }
             }
             24 => {
                 if a[2..]
                     .iter()
-                    .any(|&p| p != 0 && rg_host_readable(p as usize as *const c_void, 4) == 0)
+                    .any(|&p| p != 0 && rg_host_readable(guest_ptr::<c_void>(p), 4) == 0)
                 {
                     return false;
                 }
@@ -641,7 +647,7 @@ impl Audio {
                 for (&address, value) in a[2..].iter().zip(info) {
                     if address != 0 {
                         unsafe {
-                            (address as usize as *mut u32).write_unaligned(value);
+                            (guest_ptr::<u32>(address)).write_unaligned(value);
                         }
                     }
                 }

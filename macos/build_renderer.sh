@@ -27,6 +27,6 @@ for arch in x86_64 arm64; do
         --ld-path=/usr/lib/llvm-14/bin/ld64.lld \
         -Wl,-platform_version,macos,11.0,11.3 \
         -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path \
-        /work/glide/backend_smoke.cpp "/results/libredguard-glide-$arch.dylib" \
+        /work/tests/backend_smoke.cpp "/results/libredguard-glide-$arch.dylib" \
         -framework SDL2 -o "/results/glide-smoke-$arch"
 done

@@ -1,0 +1,70 @@
+Patch: Release Darwin region-query object ports in SR's offset heap
+Upstream: M-HT/SR at SR_COMMIT in tools/pipeline.py, games/Albion/SR-Main/Game_memory.c.
+Original: the Darwin allocator and pointer-offset initializer discard object_name returned by mach_vm_region, retaining its send right on each query.
+Replacement: initialize the returned port to MACH_PORT_NULL and deallocate each nonzero port immediately after the query, before handling its result.
+Effect: preserves region selection and error behavior while releasing query-owned send rights on iterations and early exits. Other platforms are unchanged.
+Why: the complete Mac engine uses these allocator paths, and repeated allocations must not accumulate Mach port rights.
+Evidence: all three pinned upstream mach_vm_region call sites return object_name; runtime/rust/darwin.rs follows the same lifetime rule. Cross-linking checks the SDK declarations; real-Mac allocation stress remains unverified.
+
+--- a/sr_Game_memory.c
++++ b/sr_Game_memory.c
+@@ -40,6 +40,7 @@
+ #include <sys/mman.h>
+ #include <mach/mach_init.h>
+ #include <mach/mach_vm.h>
++#include <mach/mach_port.h>
+ #include <pthread.h>
+ #else
+ #if !defined(_GNU_SOURCE)
+@@ -964,6 +964,7 @@
+     vm_region_basic_info_data_64_t info;
+     mach_msg_type_number_t count;
+     mach_port_t object_name;
++    kern_return_t region_result;
+ 
+     if (size == 0) return NULL;
+ 
+@@ -1000,7 +1001,10 @@
+ 
+     region_address = pointer_offset;
+     count = VM_REGION_BASIC_INFO_COUNT_64;
+-    if (KERN_SUCCESS != mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t) &info, &count, &object_name)) return NULL;
++    object_name = MACH_PORT_NULL;
++    region_result = mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t) &info, &count, &object_name);
++    if (object_name != MACH_PORT_NULL) mach_port_deallocate(task, object_name);
++    if (KERN_SUCCESS != region_result) return NULL;
+ 
+     // first free region (starting at address zero) belongs to segment __PAGEZERO, so don't try using memory here
+ 
+@@ -1011,7 +1015,10 @@
+     {
+         region_address = free_region_start;
+         count = VM_REGION_BASIC_INFO_COUNT_64;
+-        if (KERN_SUCCESS != mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t) &info, &count, &object_name))
++        object_name = MACH_PORT_NULL;
++        region_result = mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t) &info, &count, &object_name);
++        if (object_name != MACH_PORT_NULL) mach_port_deallocate(task, object_name);
++        if (KERN_SUCCESS != region_result)
+         {
+             region_address = free_region_end = pointer_offset + UINT64_C(0x80000000);
+             region_size = 0;
+@@ -1342,6 +1349,7 @@
+     vm_region_basic_info_data_64_t rinfo;
+     mach_msg_type_number_t count;
+     mach_port_t object_name;
++    kern_return_t region_result;
+ 
+     pointer_offset = 0;
+ 
+@@ -1377,7 +1385,10 @@
+     {
+         region_address = maddr;
+         count = VM_REGION_BASIC_INFO_COUNT_64;
+-        if (KERN_SUCCESS != mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t) &rinfo, &count, &object_name)) break;
++        object_name = MACH_PORT_NULL;
++        region_result = mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t) &rinfo, &count, &object_name);
++        if (object_name != MACH_PORT_NULL) mach_port_deallocate(task, object_name);
++        if (KERN_SUCCESS != region_result) break;
+ 
+         if (region_address - maddr >= min_length)
+         {

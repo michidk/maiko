@@ -524,3 +524,93 @@ loc_12A27F,0x9,0 ; second version dispatch JB retains comparison
 loc_12A281,0,0x9 ; JBE consumes preceding version comparison
 loc_12E093,0x1,0 ; JE retains CMPSB carry for sign conversion
 loc_12E095,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_12E202,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_12E204,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_D6698,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_D669A,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_12D641,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_12D643,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_12E691,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_12E693,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_12E7FE,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_12E800,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_1337FC,0x9,0 ; JAE preserves SAHF carry/zero for shared JBE
+loc_133808,0,0x9 ; JBE consumes incoming floating comparison
+
+loc_134A67,0x38,0 ; JGE carries CMP ZF/SF/OF into shared JLE
+loc_134AAF,0,0x38 ; JLE consumes the same signed comparison
+
+loc_1352E8,0x8,0 ; JMP carries byte CMP ZF to shared SETNE
+loc_1352D2,0,0x8 ; SETNE consumes incoming ZF
+loc_1355BB,0x1,0 ; JE retains CMPSB carry for ECX sign conversion
+loc_1355BD,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_1355F6,0x1,0 ; JE retains CMPSB carry for ECX sign conversion
+loc_1355F8,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_135622,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_135624,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_13566F,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_135671,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_135715,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_135717,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_13574E,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_135750,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_13B321,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_13B323,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_13B35F,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_13B361,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_13B393,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_13B395,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_13B401,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_13B403,0,0x1 ; SBB consumes incoming CMPSB carry
+loc_13B48B,0x1,0 ; JE retains CMPSB carry for sign conversion
+loc_13B48D,0,0x1 ; SBB consumes incoming CMPSB carry
+
+loc_1393B6,0x30,0 ; JNE carries word TEST SF/OF to JGE
+loc_1393BC,0,0x30 ; JGE consumes incoming sign comparison
+
+loc_13BFAA,0x1,0 ; JBE retains unsigned CMP carry for JAE
+loc_13BFB3,0,0x1 ; JAE consumes incoming carry
+
+loc_13C525,0x1,0 ; JAE retains ADD carry for normalization RCR
+loc_13C527,0,0x1 ; RCR consumes incoming ADD carry
+
+loc_13C5F2,0x1,0 ; JNE retains ADD carry for mantissa ADC
+loc_13C5F9,0,0x1 ; ADC after PUSH consumes incoming carry
+loc_13C5FE,0x1,0 ; JNE retains ADD carry for exponent ADC
+loc_13C602,0,0x1 ; ADC consumes incoming carry
+
+loc_13CE4D,0x8,0 ; JGE retains CMP equality for shared JNE
+loc_13CEF1,0,0x8 ; JNE consumes incoming CMP equality
+loc_144E58,0x8,0x0 ; JE retains first opcode CMP equality
+loc_144E5A,0x8,0x0 ; second opcode CMP materializes return equality
+loc_144E5D,0x8,0x8 ; RET forwards selected opcode equality
+loc_144E6A,0x8,0x0 ; JNE retains selector CMP equality
+loc_144E72,0x8,0x0 ; JNE retains address CMP equality
+loc_144E7D,0x0,0x8 ; epilogue consumes selected CMP equality
+loc_144E7F,0x8,0x0 ; RET forwards selector/address equality
+loc_144EA5,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144EC3,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144ED3,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144EE3,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144EF3,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144EFA,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144F28,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144F38,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_144F48,0x0,0x8 ; caller consumes equality returned by descriptor helper
+loc_D5966,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_ABC12,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_AC608,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_AC966,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B22DA,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B25D2,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B25DC,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B25AE,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B2642,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_C7C90,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_C7CA3,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_24195,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_2419E,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B583B,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_117C5E,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_46685,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_5543A,0x8,0 ; variant-aware replacement consumes original CMP equality

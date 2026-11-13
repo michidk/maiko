@@ -107,21 +107,19 @@ with prefix.with_suffix('.log').open('w') as log:
         deadline=time.monotonic()+a.seconds
         world_at=None;state_address=None;ui_address=None;extra_symbols={}
         if a.controls or a.exercise or a.modal_ui or a.movie_skip or a.jump_cycle:
-            for line in (root/('native-symbols.txt' if a.wine else 'linux-symbols.txt')).read_text().splitlines():
-                parts=line.split()
-                if len(parts)==3:extra_symbols[parts[2]]=int(parts[0],16)
-                if len(parts)==3 and parts[2]=='loc_1A3865':state_address=int(parts[0],16)
-                if len(parts)==3 and parts[2]=='loc_1A824C':ui_address=int(parts[0],16)
+            extra_symbols = book.addresses
+            state_address = extra_symbols.get('loc_1A3865')
+            ui_address = extra_symbols.get('loc_1A824C')
             if state_address is None:raise RuntimeError('Missing original selected-player symbol')
         def state():
             with open(f'/proc/{process.pid}/mem','rb',buffering=0) as memory:
-                memory.seek(state_address);actor=struct.unpack('<I',memory.read(4))[0]
+                memory.seek(state_address);actor=book.pointer(struct.unpack('<I',memory.read(4))[0])
                 if not actor:return None
                 memory.seek(actor+0xcb);position=list(struct.unpack('<iii',memory.read(12)))
-                memory.seek(actor+0x247);anim=struct.unpack('<I',memory.read(4))[0]
+                memory.seek(actor+0x247);anim=book.pointer(struct.unpack('<I',memory.read(4))[0])
                 group=None
                 if anim:memory.seek(anim);group=struct.unpack('<H',memory.read(2))[0]
-                memory.seek(actor+0x272);attrs=struct.unpack('<I',memory.read(4))[0]
+                memory.seek(actor+0x272);attrs=book.pointer(struct.unpack('<I',memory.read(4))[0])
                 health=None
                 if attrs:memory.seek(attrs+3);health=memory.read(1)[0]
                 memory.seek(actor+0x1b1);motion=list(memory.read(3))
@@ -138,7 +136,7 @@ with prefix.with_suffix('.log').open('w') as log:
         def movie_state():
             with open(f'/proc/{process.pid}/mem','rb',buffering=0) as memory:
                 def read(address,n=4):memory.seek(address);return int.from_bytes(memory.read(n),'little')
-                pointer=read(extra_symbols['loc_1FA7B4'])
+                pointer=book.pointer(read(extra_symbols['loc_1FA7B4']))
                 result={'handle':pointer,'sample_starts':read(extra_symbols['rg_audio_starts'],8),'nonzero_frames':read(extra_symbols['rg_audio_nonzero'],8),'stream_buffers':read(extra_symbols['rg_audio_stream_buffers'],8),'stream_nonzero':read(extra_symbols['rg_audio_stream_nonzero'],8),'stream_mixed':read(extra_symbols['rg_audio_stream_mixed'],8),'stream_underrun':read(extra_symbols['rg_audio_stream_underrun'],8)}
                 if pointer:
                     result.update(width=read(pointer+4),height=read(pointer+8),frames=read(pointer+12),frame=read(pointer+0x374),audio_track=read(pointer+0x444))

@@ -10,7 +10,25 @@
 #include <math.h>
 #include <fenv.h>
 
+extern void c_rg_overlap_test(_cpu *);
+extern void c_rg_overlap_move(_cpu *);
+extern void c_rg_bit_scan(_cpu *);
+extern void c_rg_cpu_features(_cpu *);
+extern void c_rg_scan_not_equal(_cpu *);
+extern void c_rg_scan_equal(_cpu *);
+extern void c_rg_high_logic(_cpu *);
+extern void c_rg_high_pair(_cpu *);
+extern void c_rg_pack_dwords(_cpu *);
+extern void c_rg_byte_rotate(_cpu *);
+extern void c_rg_variable_shift(_cpu *);
+extern void c_rg_high_not(_cpu *);
+extern void c_rg_high_exchange(_cpu *);
+extern void c_rg_byte_carry(_cpu *);
 extern void c_rg_round(_cpu *);
+extern void c_rg_scale(_cpu *);
+extern void c_rg_exp2minus1(_cpu *);
+extern void c_rg_log2e(_cpu *);
+extern void c_rg_log2ten(_cpu *);
 extern void c_rg_store_extended(_cpu *);
 extern void c_rg_jecxz(_cpu *);
 extern void c_rg_jo(_cpu *);
@@ -27,6 +45,10 @@ extern void c_rg_flags(_cpu *);
 extern void c_rg_signed_divide(_cpu *);
 extern void c_rg_unsigned_divide(_cpu *);
 extern void c_rg_compare(_cpu *);
+extern void c_rg_indexed_fst(_cpu *),c_rg_indexed_fstp(_cpu *);
+extern void c_rg_indexed_fist(_cpu *),c_rg_indexed_fistp(_cpu *);
+extern void c_rg_indexed_fistp16(_cpu *),c_rg_indexed_cw(_cpu *),c_rg_indexed_sw(_cpu *);
+extern unsigned char rg_indexed_output[];
 
 extern void c_rg_fsubr_to_1(_cpu *);
 extern void c_rg_fsubr_to_2(_cpu *);
@@ -67,6 +89,54 @@ int main(void) {
     state->_ecx = 0x23456789; state->_edx = 0x3456789a;
     state->_ebp = 0x56789abc; state->_esi = 0x6789abcd;
     state->stack_bottom = arena; state->stack_top = arena + 65536;
+    const struct {void (*call)(_cpu *); unsigned width, pop; uint32_t bits;} indexed_stores[]={
+        {c_rg_indexed_fst,4,0,0x42f78000},
+        {c_rg_indexed_fstp,4,1,0x42f78000},
+        {c_rg_indexed_fist,4,0,124},
+        {c_rg_indexed_fistp,4,1,124},
+        {c_rg_indexed_fistp16,2,1,124},
+        {c_rg_indexed_cw,2,0,0x37f},
+        {c_rg_indexed_sw,2,0,0x4100}
+    };
+    for (unsigned i=0;i<sizeof indexed_stores/sizeof indexed_stores[0];++i) {
+        for (unsigned index=0;index<4;++index) {
+            memset(rg_indexed_output,0xa5,32);
+            state->_ecx=index; state->_st_top=0; state->_st[0]=123.75;
+            state->_st_cw=0x37f; state->_st_sw_cond=0x4100;
+            indexed_stores[i].call(state);
+            uint32_t bits=0;
+            memcpy(&bits,rg_indexed_output+index*indexed_stores[i].width,indexed_stores[i].width);
+            assert(bits==indexed_stores[i].bits && state->_st_top==indexed_stores[i].pop);
+            assert(state->_ecx==index && state->_esp==stack);
+            for (unsigned byte=0;byte<32;++byte)
+                if (byte<index*indexed_stores[i].width || byte>=(index+1)*indexed_stores[i].width)
+                    assert(rg_indexed_output[byte]==0xa5);
+        }
+    }
+    state->_ecx=0x23456789; state->_st_top=0;
+    puts("PASS relocated indexed x87 floating, integer, control and status stores preserve their values and surrounding bytes");
+    /* Check the actual overlapping TEST/MOV expansion for every AX value.
+       TEST changes only SF/ZF/PF/CF/OF; preserve the other modelled flags. */
+    for (uint32_t ax = 0; ax <= 0xffff; ++ax) {
+        uint32_t value = ax & 0xcf89;
+        uint32_t parity = value & 255;
+        parity ^= parity >> 4; parity ^= parity >> 2; parity ^= parity >> 1;
+        uint32_t flags = 0x612 | (!value ? ZF : 0) |
+            ((value & 0x8000) ? SF : 0) | (!(parity & 1) ? PF : 0);
+        state->_eax = 0x76540000 | ax; state->_edi = 0xdeadbeef;
+        state->_eflags = 0x612 | CF | OF | ZF | SF | PF;
+        c_rg_overlap_test(state);
+        assert(state->_eax == (0x76540000 | ax) && state->_edi == 0xdeadbeef);
+        if (state->_eflags != flags || state->_esp != stack) {
+            fprintf(stderr, "overlap AX=%04x flags=%08x expected=%08x stack=%08x expected=%08x\n",
+                ax, state->_eflags, flags, state->_esp, stack);
+            abort();
+        }
+    }
+    state->_ecx = 0x23456789; state->_edi = 0;
+    uint32_t overlap_flags = state->_eflags;
+    c_rg_overlap_move(state);
+    assert(state->_edi == state->_ecx && state->_eflags == overlap_flags);
     /* BSWAP must preserve both set and clear condition flags. */
     for (uint32_t bits = 0; bits < 64; ++bits) {
         uint32_t flags = 0x202 | ((bits & 1) ? CF : 0) | ((bits & 2) ? PF : 0) |
@@ -86,6 +156,60 @@ int main(void) {
     memcpy(&value, arena + 64, sizeof value);
     assert(value == 0x78563412 && state->_eax == value);
     check_registers(state, state->_eflags, stack);
+    uint64_t packed_input[] = {UINT64_C(0x00008000ffff7fff), UINT64_C(0x800000007fffffff), 0};
+    memcpy(arena + 64, packed_input, sizeof packed_input);
+    uint32_t preserved_flags = state->_eflags;
+    c_rg_pack_dwords(state);
+    memcpy(packed_input, arena + 64, sizeof packed_input);
+    assert(packed_input[2] == UINT64_C(0x80007fff7fff8000));
+    assert(state->_eflags == preserved_flags && state->_esp == stack);
+    state->_eax = 0xabcd1281; state->_ecx = 1;
+    c_rg_byte_rotate(state);
+    assert(state->_eax == 0xabcd12c0 && (state->_eflags & (CF|OF)) == CF);
+    state->_edx = 0x80000001; state->_ecx = 1;
+    c_rg_variable_shift(state);
+    assert(state->_edx == 0x40000000 && (state->_eflags & (CF|OF|SF|ZF|PF)) == (CF|OF|PF));
+    state->_ecx = 0x12345678;
+    c_rg_high_not(state);
+    assert(state->_ecx == 0x1234a978);
+    state->_edi = state->_ebx; state->_edx = 0x12345678; arena[64] = 0x9a;
+    c_rg_high_exchange(state);
+    assert(arena[64] == 0x56 && state->_edx == 0x12349a78);
+    state->_eax = 0xabcdef80; state->_eflags = CF;
+    c_rg_byte_carry(state);
+    assert(state->_eax == 0xabcdef70 && (state->_eflags & CF));
+    state->_ecx = 0x23456789; state->_edx = 0x3456789a;
+    state->_eax = 0;
+    c_rg_cpu_features(state);
+    assert(state->_eax == 1 && state->_ebx == 0x756e6547 && state->_edx == 0x49656e69 && state->_ecx == 0x6c65746e);
+    state->_eax = 1;
+    c_rg_cpu_features(state);
+    assert((state->_edx & (1u<<23)) && !(state->_edx & (1u<<4)));
+    for (unsigned bit=0;bit<32;++bit) {
+        state->_eax = 1u << bit;
+        c_rg_bit_scan(state);
+        assert(state->_edx == bit && !(state->_eflags & ZF));
+    }
+    state->_eax = 0; c_rg_bit_scan(state); assert(state->_eflags & ZF);
+    uint32_t scans[] = {17,17,23,17};
+    memcpy(arena+64,scans,sizeof scans);
+    uint32_t scan_base = (uint32_t)((uintptr_t)arena-base)+64;
+    state->_eax = 23; state->_edi = scan_base; state->_ecx = 4; state->_eflags = 0;
+    c_rg_scan_not_equal(state);
+    assert(state->_ecx == 1 && state->_edi == scan_base+12 && (state->_eflags & ZF));
+    state->_eax = 17; state->_edi = scan_base; state->_ecx = 4; state->_eflags = 0;
+    c_rg_scan_equal(state);
+    assert(state->_ecx == 1 && state->_edi == scan_base+12 && !(state->_eflags & ZF) && (state->_eflags & CF));
+    state->_eax = 17; state->_edi = scan_base+12; state->_ecx = 4; state->_eflags = DF;
+    c_rg_scan_not_equal(state);
+    assert(state->_ecx == 3 && state->_edi == scan_base+8 && (state->_eflags & ZF));
+    state->_edi = 0; state->_ecx = 0; state->_eflags = 0x8d7;
+    c_rg_scan_equal(state); assert(state->_edi == 0 && state->_ecx == 0 && state->_eflags == 0x8d7);
+    state->_edi = scan_base; state->_ecx = 0x12345678; arena[64] = 0x81;
+    c_rg_high_logic(state); assert(arena[64] == 0xd7);
+    state->_eax = 0x12345678; state->_ebx = 0x9876abcd;
+    c_rg_high_pair(state); assert(state->_eax == 0x1234ab78 && state->_ebx == 0x987656cd);
+    state->_ebx = scan_base; state->_ecx = 0x23456789; state->_edx = 0x3456789a;
     float input = 1.25f, output;
     state->_st_cw = 0x37f;
     memcpy(arena + 64, &input, sizeof input);
@@ -98,6 +222,25 @@ int main(void) {
         c_rg_flags(state);
         assert(state->_eax == expected && state->_esp == stack);
     }
+    for (unsigned top = 0; top < 8; ++top) {
+        for (int i = -8; i <= 8; ++i) {
+            state->_st_top = top;
+            double input = i / 8.0;
+            state->_st[top] = input;
+            c_rg_exp2minus1(state);
+            assert(fabs(state->_st[top] - (exp2(input) - 1.0)) < 1e-15);
+            assert(state->_st_top == top && state->_esp == stack);
+        }
+        state->_st_top = top;
+        c_rg_log2e(state);
+        assert(state->_st_top == ((top + 7) & 7));
+        assert(state->_st[state->_st_top] == log2(exp(1.0)));
+        state->_st_top = top;
+        c_rg_log2ten(state);
+        assert(state->_st_top == ((top + 7) & 7));
+        assert(state->_st[state->_st_top] == log2(10.0));
+    }
+    state->_st_top = 0;
     const int32_t signed_cases[][2] = {
         {13,5}, {-13,5}, {13,-5}, {-13,-5}, {INT32_MIN,1},
         {INT32_MAX,-1}, {0,7}, {1,INT32_MIN}, {INT32_MIN,INT32_MAX}
@@ -130,6 +273,19 @@ int main(void) {
         c_rg_unsigned_divide(state);
         assert(state->_eax == a / b && state->_edx == a % b && state->_esp == stack);
     }
+    for (unsigned top = 0; top < 8; ++top) {
+        const double powers[] = {-8.9, -2.5, -0.9, 0.0, 0.9, 2.5, 8.9};
+        for (unsigned i = 0; i < sizeof powers / sizeof powers[0]; ++i) {
+            state->_st_top = top;
+            state->_st[top] = -1.25;
+            state->_st[(top + 1) & 7] = powers[i];
+            c_rg_scale(state);
+            assert(state->_st[top] == ldexp(-1.25, (int)powers[i]));
+            assert(state->_st[(top + 1) & 7] == powers[i]);
+            assert(state->_st_top == top && state->_esp == stack);
+        }
+    }
+    state->_st_top = 0;
     void (*reversed[2][7])(_cpu *) = {
         {c_rg_fsubr_to_1, c_rg_fsubr_to_2, c_rg_fsubr_to_3, c_rg_fsubr_to_4, c_rg_fsubr_to_5, c_rg_fsubr_to_6, c_rg_fsubr_to_7},
         {c_rg_fdivr_to_1, c_rg_fdivr_to_2, c_rg_fdivr_to_3, c_rg_fdivr_to_4, c_rg_fdivr_to_5, c_rg_fdivr_to_6, c_rg_fdivr_to_7}
@@ -323,6 +479,6 @@ int main(void) {
         }
     }
     assert(!munmap(arena, 65536));
-    puts("PASS translated BSWAP EAX/EDI, all condition flags, offset memory, x87, shared-flag branches, inline signed/unsigned division reversed x87 destinations, all rounding modes, extended loads, remainder condition bits, atan quadrants, FTST, counter/overflow branches, extended stores and balanced guest returns");
+    puts("PASS translated BSWAP EAX/EDI, all condition flags, offset memory, x87, shared-flag branches, inline signed/unsigned division reversed x87 destinations, all rounding modes, extended loads, remainder condition bits, atan quadrants, FTST, counter/overflow branches, extended stores, MMX packing, byte rotates, variable shifts, high-byte operations, BSF, virtual CPUID, repeated SCASD and balanced guest returns");
     return 0;
 }
