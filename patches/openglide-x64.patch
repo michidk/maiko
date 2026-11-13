@@ -1,10 +1,10 @@
-Patch: OpenGLide-ng 64-bit, read-only-install and continuous fog fixes
+Patch: OpenGLide-ng 64-bit, read-only-install, fog and alpha-texture fixes
 Upstream: https://github.com/eugenenuke/openglide-ng at the commit named by BACKEND in tools/package_native.py; applied by tools/build_glide.py and tools/build_linux.py.
-Original: FindConfig reads its configuration file without checking that it opened; GetOptions writes OpenGLid.ini unchecked and recurses if it cannot remove a bad file; RDTSC reads the timestamp counter with the 32-bit "=A" constraint, which is wrong on x86-64. OGLFogDistance rounds depth up to the next fog-table entry, so small camera or water-vertex movements abruptly change a whole triangle's fog density.
-Replacement: FindConfig returns when the file is missing; GetOptions logs "Cannot write wrapper configuration; using defaults" and returns, and only recurses if the bad file was removed; RDTSC assembles the 64-bit value from EAX and EDX. OGLFogDistance interpolates adjacent densities in reciprocal depth and retains endpoint clamping.
-Effect: the renderer starts when the game directory is read-only (the native build mounts it read-only), its timing counter is correct on 64-bit, and distant fog no longer jumps at table boundaries. Fog remains calculated per vertex; this does not implement the original hardware's per-pixel fog or dithering.
-Why: the game is run from an unmodified, possibly read-only installation, and the build is 64-bit. Glide interpolates fog in reciprocal depth; stepping between table entries produces moving dark bands on the opening ship's water.
-Evidence: tests/backend_smoke.cpp checks rendered white triangles against black fog across the distant-water thresholds, at an interior depth, with falling densities and outside the table range. Before the fog fix, moving from depth 2730.650 to 2730.680 changed the captured red channel from 115 to 57. The opening-ship band persists with waves frozen or flattened and disappears with fog disabled in native Linux software-GL probes; this is not hardware or real-Windows acceptance. The Glide window checks exercise startup in Linux and Wine.
+Original: FindConfig reads its configuration file without checking that it opened; GetOptions writes OpenGLid.ini unchecked and recurses if it cannot remove a bad file; RDTSC reads the timestamp counter with the 32-bit "=A" constraint, which is wrong on x86-64. OGLFogDistance rounds depth up to the next fog-table entry, so small camera or water-vertex movements abruptly change a whole triangle's fog density. ConvertA8toAP88 also copies opacity into luminance, making translucent alpha-only texels dark.
+Replacement: FindConfig returns when the file is missing; GetOptions logs "Cannot write wrapper configuration; using defaults" and returns, and only recurses if the bad file was removed; RDTSC assembles the 64-bit value from EAX and EDX. OGLFogDistance interpolates adjacent densities in reciprocal depth and retains endpoint clamping. Alpha-only conversion keeps full luminance while preserving the supplied opacity.
+Effect: the renderer starts when the game directory is read-only (the native build mounts it read-only), its timing counter is correct on 64-bit, and distant fog no longer jumps at table boundaries. Fog remains calculated per vertex; this does not implement the original hardware's per-pixel fog or dithering. Alpha-only sprites retain their tint through translucent and bilinear-filtered edges instead of developing dark halos.
+Why: the game is run from an unmodified, possibly read-only installation, and the build is 64-bit. Glide interpolates fog in reciprocal depth; stepping between table entries produces moving dark bands on the opening ship's water. The sun uses an alpha-only texture with a constant tint and source-alpha blending; opacity must not also dim its RGB.
+Evidence: tests/backend_smoke.cpp checks rendered white triangles against black fog across the distant-water thresholds, at an interior depth, with falling densities and outside the table range. Before the fog fix, moving from depth 2730.650 to 2730.680 changed the captured red channel from 115 to 57. The opening-ship band persists with waves frozen or flattened and disappears with fog disabled in native Linux software-GL probes; this is not hardware or real-Windows acceptance. The Glide window checks exercise startup in Linux and Wine. The alpha-only framebuffer regression blends several opacities and a bilinear transparent/opaque boundary over white and black, checking both brightness and preserved opacity; before correction opacity 64 darkened red from 255 to 205.
 
 diff --git a/GLutil.cpp b/GLutil.cpp
 index 8cef475..e009e09 100644
@@ -78,3 +78,18 @@ diff --git a/OGLFogTables.cpp b/OGLFogTables.cpp
 +    return (Glide.FogTable[lower] +
 +            fraction * (Glide.FogTable[upper] - Glide.FogTable[lower])) * D1OVER255;
  }
+diff --git a/FormatConversion.cpp b/FormatConversion.cpp
+--- a/FormatConversion.cpp
++++ b/FormatConversion.cpp
+@@ -107,11 +107,7 @@ void ConvertA8toAP88( FxU8 *Buffer1, FxU16 *Buffer2, FxU32 Pixels )
+ {
+     while ( Pixels )
+     {
+-#if defined(CONSTANT_LUMINOSITY_ALPHA_TEXTURE)
+         *Buffer2 = ( ( ( *Buffer1 ) << 8 ) | 0xFF );
+-#else
+-        *Buffer2 = ( ( ( *Buffer1 ) << 8 ) | ( *Buffer1 ) );
+-#endif
+         Buffer1++;
+         Buffer2++;
+         Pixels--;

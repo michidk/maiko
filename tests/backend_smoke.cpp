@@ -55,6 +55,48 @@ static void check_fog_interpolation() {
     puts("PASS fog table interpolation at distance boundaries and reciprocal midpoint");
 }
 
+static void check_alpha_texture() {
+    uint8_t pixels[16*16];
+    GrTexInfo tex={GR_LOD_16,GR_LOD_16,GR_ASPECT_1x1,GR_TEXFMT_ALPHA_8,pixels};
+    auto address=grTexMinAddress(GR_TMU0);
+    grTexFilterMode(GR_TMU0,GR_TEXTUREFILTER_BILINEAR,GR_TEXTUREFILTER_BILINEAR);
+    guTexCombineFunction(GR_TMU0,GR_TEXTURECOMBINE_DECAL);
+    guColorCombineFunction(GR_COLORCOMBINE_TEXTURE_TIMES_CCRGB);
+    grConstantColorValue(0xffffffff);
+    grAlphaCombine(GR_COMBINE_FUNCTION_SCALE_OTHER,GR_COMBINE_FACTOR_ONE,
+                   GR_COMBINE_LOCAL_CONSTANT,GR_COMBINE_OTHER_TEXTURE,FXFALSE);
+    grAlphaBlendFunction(GR_BLEND_SRC_ALPHA,GR_BLEND_ONE_MINUS_SRC_ALPHA,
+                         GR_BLEND_ONE,GR_BLEND_ZERO);
+    // Alpha-only textures supply white RGB at every opacity. With white tint
+    // over a white sky, neither translucent texels nor filtered edges darken it.
+    for (int background:{0,255}) for (int alpha:{0,64,128,192,255,-1}) {
+        for (int i=0;i<16*16;++i)
+            pixels[i]=(uint8_t)(alpha<0 ? (i%16<8 ? 0 : 255) : alpha);
+        grTexDownloadMipMap(GR_TMU0,address,GR_MIPMAPLEVELMASK_BOTH,&tex);
+        grTexSource(GR_TMU0,address,GR_MIPMAPLEVELMASK_BOTH,&tex);
+        grBufferClear(background ? 0xffffffff : 0,255,0xffff);
+        GrVertex a={},b={},c={};
+        a.x=40; a.y=40; b.x=400; b.y=40; c.x=40; c.y=400;
+        for (auto vertex:{&a,&b,&c}) {
+            vertex->r=vertex->g=vertex->b=vertex->a=255;
+            vertex->oow=vertex->tmuvtx[0].oow=1;
+            vertex->tmuvtx[0].sow=128; vertex->tmuvtx[0].tow=128;
+        }
+        grDrawTriangle(&a,&b,&c);
+        GrLfbInfo_t info={}; info.size=sizeof info;
+        assert(grLfbLock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER,GR_LFBWRITEMODE_565,
+                         GR_ORIGIN_UPPER_LEFT,FXFALSE,&info));
+        auto row=(const uint16_t*)((const char*)info.lfbPtr+100*info.strideInBytes);
+        unsigned red=(row[100]>>11)*255/31;
+        int expected=background ? 255 : (alpha<0 ? 128 : alpha);
+        fprintf(stderr,"Alpha-only background=%d opacity=%d red=%u expected=%d\n",
+                background,alpha,red,expected);
+        assert((int)red>=expected-8 && (int)red<=expected+8);
+        assert(grLfbUnlock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER));
+    }
+    puts("PASS alpha-only texture opacity and bilinear edge preserve white RGB");
+}
+
 int main(int argc,char **) {
 #ifdef _WIN32
     if (argc>1) assert(SetCurrentDirectoryA("Z:\\readonly"));
@@ -129,6 +171,7 @@ int main(int argc,char **) {
     assert(grLfbUnlock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER));
     grBufferSwap(0);
     check_fog_interpolation();
+    check_alpha_texture();
     grGlideShutdown();
     puts("PASS native x64 Glide textured triangle, framebuffer readback and swap");
 }
