@@ -4,7 +4,7 @@ The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows, Lin
 
 Both interfaces use the same Rust library for input validation and package creation. The browser uses an isolated worker; the CLI uses a private temporary directory.
 
-The pinned Windows and Linux kits predate controller support and automatic installation discovery on main. For those downloaded snapshots, follow their included README and use `RUN.cmd` on Windows or `./RUN.sh /path/to/Redguard` on Linux. The source builds described below include the newer launch behavior.
+The pinned Windows and Linux kits include controller support and automatic game-folder discovery. Start `redguard-native.exe` on Windows or `./redguard-native` on Linux directly; it asks for the game folder only if it cannot find it. The included README repeats this.
 
 For macOS, select `RGFX.EXE`, build the ZIP and extract it. Open
 `redguard-native` and select your owned installation when asked. The Mac runtime

@@ -12,6 +12,7 @@ test('Mac detection builds locally, supports cancellation and downloads a univer
     scrollHeight = 100;
     scrollTop = 0;
     clientHeight = 100;
+    classList = { toggle() {}, add() {}, remove() {} };
     removeAttribute() {}
     focus() {}
   }

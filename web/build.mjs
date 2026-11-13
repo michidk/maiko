@@ -14,7 +14,7 @@ await rm('web/dist', { recursive: true, force: true });
 await mkdir('web/dist/kits', { recursive: true });
 const built = await Bun.build({ entrypoints: ['web/main.js', 'web/worker.js'], outdir: 'web/dist', target: 'browser', minify: true, external: ['./pkg/maiko_patcher.js'] });
 if (!built.success) throw new AggregateError(built.logs, 'Website build failed');
-for (const name of ['index.html', 'style.css', 'kits.json']) await cp(`web/${name}`, `web/dist/${name}`);
+for (const name of ['index.html', 'style.css', 'kits.json', 'favicon.svg', 'og.png']) await cp(`web/${name}`, `web/dist/${name}`);
 await cp('web/pkg', 'web/dist/pkg', { recursive: true });
 await cp('web/fonts', 'web/dist/fonts', { recursive: true });
 const kits = JSON.parse(await readFile('web/kits.json', 'utf8'));

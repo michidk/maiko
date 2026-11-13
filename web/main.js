@@ -10,6 +10,9 @@ const status = document.querySelector('#status');
 const logPanel = document.querySelector('#log-panel');
 const log = document.querySelector('#log');
 const copyLog = document.querySelector('#copy-log');
+const dropzone = document.querySelector('#dropzone');
+const dzName = document.querySelector('#dz-name');
+const dzDetail = document.querySelector('#dz-detail');
 let worker = null;
 let downloadUrl = null;
 const selectedTarget = () => document.querySelector('input[name="target"]:checked')?.value;
@@ -30,6 +33,8 @@ function controls() {
   const busy = worker !== null;
   const macos = selectedTarget() === 'macos';
   document.querySelector('#browser-instructions').hidden = macos;
+  document.querySelector('#windows-instructions').hidden = selectedTarget() === 'linux';
+  document.querySelector('#linux-instructions').hidden = selectedTarget() !== 'linux';
   document.querySelector('#macos-guidance').hidden = !macos;
   document.querySelector('#macos-instructions').hidden = !macos;
   file.disabled = busy;
@@ -83,10 +88,23 @@ copyLog.addEventListener('click', copyTheLog);
 function changed() {
   resetDownload();
   clearLog();
+  const chosen = file.files?.[0];
+  dzName.textContent = chosen ? chosen.name : 'Choose RGFX.EXE or drop it here';
+  dzDetail.textContent = chosen ? `${(chosen.size / 1024 / 1024).toFixed(1)} MB · stays on this device` : 'Only this one file is needed.';
+  dropzone.classList.toggle('has-file', Boolean(chosen));
   status.textContent = file.files?.length ? 'Ready to build.' : '';
   controls();
 }
 file.addEventListener('change', changed);
+dropzone.addEventListener('dragover', event => { event.preventDefault(); dropzone.classList.add('dragging'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging'));
+dropzone.addEventListener('drop', event => {
+  event.preventDefault();
+  dropzone.classList.remove('dragging');
+  if (file.disabled || !event.dataTransfer?.files?.length) return;
+  file.files = event.dataTransfer.files;
+  changed();
+});
 platforms.addEventListener('change', changed);
 cancel.addEventListener('click', () => { stop(); status.textContent = 'Build cancelled.'; });
 build.addEventListener('click', async () => {
