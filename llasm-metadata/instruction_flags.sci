@@ -166,6 +166,7 @@ loc_F339F,0,0x9 ; shared JBE consumes incoming comparison
 loc_F3FDC,0x9,0 ; unsigned tag CMP survives lower-bound branch
 loc_F3FDE,0,0x9 ; LEA preserves comparison for following JBE
 loc_F517C,0x8,0 ; AND result zero survives JMP
+loc_F517E,0x8,0 ; absent Smacker audio track XOR supplies zero to shared JNE
 loc_F5180,0,0x8 ; MOV preserves zero from AND or XOR for JNE
 loc_F7105,0x1,0 ; REP CMPSB carry survives equal branch
 loc_F7107,0,0x1 ; shared SBB converts mismatch carry to sign
