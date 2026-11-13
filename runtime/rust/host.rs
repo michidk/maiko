@@ -57,7 +57,11 @@ pub extern "C" fn rg_host_readable(pointer: *const c_void, size: usize) -> c_int
                 .checked_add(info.RegionSize)
                 .is_some_and(|region_end| end <= region_end)) as c_int
     }
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
+    {
+        crate::darwin::readable(address, end) as c_int
+    }
+    #[cfg(target_os = "linux")]
     {
         use std::io::{BufRead, BufReader};
         let Ok(file) = std::fs::File::open("/proc/self/maps") else {
@@ -146,8 +150,17 @@ pub unsafe extern "C" fn rg_host_disk(drive: u32, available: *mut u64, total: *m
             return 0;
         }
         let info = info.assume_init();
-        *available = info.f_bavail * info.f_frsize;
-        *total = info.f_blocks * info.f_frsize;
+        #[cfg(target_os = "macos")]
+        let (available_blocks, total_blocks, block_size) = (
+            u64::from(info.f_bavail),
+            u64::from(info.f_blocks),
+            u64::from(info.f_frsize),
+        );
+        #[cfg(not(target_os = "macos"))]
+        let (available_blocks, total_blocks, block_size) =
+            (info.f_bavail, info.f_blocks, info.f_frsize);
+        *available = available_blocks.saturating_mul(block_size);
+        *total = total_blocks.saturating_mul(block_size);
         1
     }
 }

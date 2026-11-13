@@ -9,11 +9,39 @@ class BookMenu:
         addresses = {}
         for line in Path(symbols).read_text().splitlines():
             fields = line.split()
-            if len(fields) == 3 and fields[2] in ('loc_1A824C', 'loc_1F9D84', 'loc_1A6577'):
+            if len(fields) == 3:
                 addresses[fields[2]] = int(fields[0], 16)
+        self.guest_base = 0
+        if 'pointer_offset' in addresses:
+            # LLasm executables use PIE and store 32-bit offsets in game data.
+            # Resolve ELF symbols independently of those guest pointers.
+            executable = Path(f'/proc/{process.pid}/exe').resolve()
+            with executable.open('rb') as image:
+                header = image.read(18)
+            if header[:4] != b'\x7fELF':
+                raise RuntimeError('Offset backend probe requires a native ELF process')
+            bias = 0
+            if int.from_bytes(header[16:18], 'little') == 3:
+                for line in Path(f'/proc/{process.pid}/maps').read_text().splitlines():
+                    fields = line.split(maxsplit=5)
+                    if len(fields) == 6 and fields[2] == '00000000' and fields[5] == str(executable):
+                        bias = int(fields[0].split('-')[0], 16)
+                        break
+                if not bias:
+                    raise RuntimeError('Could not locate the translated ELF mapping')
+            addresses = {name: value + bias for name, value in addresses.items()}
+            with open(f'/proc/{process.pid}/mem', 'rb', buffering=0) as memory:
+                memory.seek(addresses['pointer_offset'])
+                self.guest_base = int.from_bytes(memory.read(8), 'little')
+            if not self.guest_base:
+                raise RuntimeError('Guest offset arena has not initialized')
+        self.addresses = addresses
         self.mode = addresses['loc_1A824C']
         self.flags = addresses['loc_1F9D84']
         self.main_page = addresses['loc_1A6577']
+
+    def pointer(self, address):
+        return self.guest_base + address if address else 0
 
     def main_entry(self, index=None):
         with open(f'/proc/{self.process.pid}/mem', 'rb', buffering=0) as memory:
@@ -23,12 +51,12 @@ class BookMenu:
                 if len(value) != size:
                     raise OSError('Short read of original book entry')
                 return int.from_bytes(value, 'little')
-            entry = read(self.main_page + (0x100 if index is None else 0x104))
+            entry = self.pointer(read(self.main_page + (0x100 if index is None else 0x104)))
             if index is not None:
                 for _ in range(index):
                     if not entry:
                         raise RuntimeError('Original main-page entry missing')
-                    entry = read(entry + 0x31)
+                    entry = self.pointer(read(entry + 0x31))
             if not entry:
                 raise RuntimeError('Original main-page selection missing')
             action = read(entry + 4)

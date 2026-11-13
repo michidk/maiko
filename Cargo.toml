@@ -15,6 +15,9 @@ publish = false
 path = "runtime/rust/lib.rs"
 crate-type = ["staticlib", "rlib"]
 
+[features]
+llasm = []
+
 [dependencies]
 sdl2 = { version = "=0.38.0", default-features = false, features = ["raw-window-handle", "mixer"] }
 raw-window-handle = "=0.6.2"
