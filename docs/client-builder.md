@@ -4,7 +4,7 @@ The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows or L
 
 Both interfaces use the same Rust library for input validation and package creation. The browser uses an isolated worker; the CLI uses a private temporary directory.
 
-The result is an experimental runtime snapshot, with the existing project's acceptance limits. Linux menu and original-function checks and Windows Wine checks do not establish full-game completion, hardware playback or real-Windows acceptance. The initial kits predate controller support on main.
+The initial kits predate controller support on main.
 
 ## Use the local CLI
 

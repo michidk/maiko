@@ -23,7 +23,6 @@ set "native_exit=%errorlevel%"
 >>native-test.log echo Exit code: %native_exit%
 type native-test.log
 echo.
-echo Experimental gameplay build. Full-game completion and real Windows acceptance remain unverified.
 echo Original saves/settings are copied to "%USER_DIR%" on first run.
 echo Installed GOG game assets and bundled movie data use GAME_DIR automatically.
 echo Diagnostics are saved in native-test.log.

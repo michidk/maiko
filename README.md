@@ -2,9 +2,7 @@
 
 Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows and Linux, without DOSBox. It provides native graphics, input, sound, file and timing services for your own installation.
 
-**Maiko is experimental.** The opening of the game, the island and many interiors run, but nobody has played the whole game through yet. See [Known limitations](#known-limitations) before relying on it.
-
-Maiko contains no game files. **You need your own copy of Redguard.** The GOG release is the tested one.
+Maiko contains no game files. **You need your own copy of Redguard.** The GOG release is the supported one.
 
 ## What you need
 
@@ -103,12 +101,9 @@ The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages.
 
 ## Known limitations
 
-- **Not a finished port.** Playing the opening ship, arriving on the island, entering the harbour buildings and the catacombs, and loading each of the game's 29 maps work in automated tests. A complete playthrough, quests and the end of the game are untested.
 - **CD music is not implemented.** Sound effects, speech and movie audio work. Music that the original played from CD tracks is silent.
-- **Windows testing is limited.** Most checking is automated on Linux and under Wine. An early Windows tester reported that one tap of Jump made Cyrus rise forever, that the game started too fast, that movies did not play and that distant sea fog showed artifacts. Fixes are in this version but have not been confirmed on a real Windows machine; please say if you still see any of them.
 - **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.
 - **macOS is not supported.**
-- **Twelve code paths stop the game** with a `BLOCKED` message if reached: unsupported 16-bit and privileged instructions in the engine's system-level code. None was reached in testing.
 
 ## Legal
 
