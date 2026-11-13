@@ -175,6 +175,7 @@ with prefix.with_suffix('.log').open('w') as log:
                     report['movie_world_warmup_finished_verified']=True
                     # World rendering can be slower than a150ms key tap under
                     # software GL. Wait for the actual book mode before Quit.
+                    time.sleep(4)  # an Escape during the opening ship scene skips it and reloads the world
                     key('Escape',.6)
                     until=time.monotonic()+10
                     while process.poll() is None and time.monotonic()<until:
