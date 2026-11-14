@@ -91,10 +91,11 @@ pub fn initialize_in(directory: &Path) -> io::Result<PathBuf> {
         let _ = std::fs::remove_file(path);
     }
     crate::rg_log!(
-        "event=startup version={} revision={} os={} arch={} backend={} pid={} executable={:?} args={:?} log={}",
+        "event=startup version={} revision={} os={} os_version={:?} arch={} backend={} pid={} executable={:?} args={:?} log={}",
         env!("CARGO_PKG_VERSION"),
         env!("MAIKO_REVISION"),
         std::env::consts::OS,
+        os_version(),
         std::env::consts::ARCH,
         if cfg!(feature = "llasm") {
             "llasm"
@@ -107,6 +108,43 @@ pub fn initialize_in(directory: &Path) -> io::Result<PathBuf> {
         path.display()
     );
     Ok(path)
+}
+
+#[cfg(unix)]
+fn os_version() -> String {
+    let mut name: libc::utsname = unsafe { std::mem::zeroed() };
+    if unsafe { libc::uname(&mut name) } != 0 {
+        return "unknown".into();
+    }
+    let field = |value: &[libc::c_char]| {
+        let bytes = value
+            .iter()
+            .take_while(|&&c| c != 0)
+            .map(|&c| c as u8)
+            .collect::<Vec<_>>();
+        String::from_utf8_lossy(&bytes).into_owned()
+    };
+    format!(
+        "{} {} {}",
+        field(&name.sysname),
+        field(&name.release),
+        field(&name.version)
+    )
+}
+
+#[cfg(windows)]
+fn os_version() -> String {
+    use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
+    use windows_sys::Win32::System::SystemInformation::OSVERSIONINFOW;
+    let mut info: OSVERSIONINFOW = unsafe { std::mem::zeroed() };
+    info.dwOSVersionInfoSize = size_of::<OSVERSIONINFOW>() as u32;
+    if unsafe { RtlGetVersion(&mut info) } != 0 {
+        return "unknown".into();
+    }
+    format!(
+        "Windows {}.{}.{}",
+        info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber
+    )
 }
 
 /// Normal records may allocate and lock. Fatal handlers use raw OS writes.
