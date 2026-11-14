@@ -10,7 +10,9 @@ from tools.pipeline import read_replacements, replacement_text
 
 TABLES = {'native-metadata/instruction_replacements.sci': True,
           'metadata/instruction_replacements.sci': True,
-          'llasm-metadata/instruction_replacements.sci': True}
+          'llasm-metadata/instruction_replacements.sci': True,
+          'native-metadata/v5_fixes.sci': True,
+          'llasm-metadata/v5_fixes.sci': True}
 for name, hashed in TABLES.items():
     entries = read_replacements(ROOT / name, require_hash=hashed)
     assert entries, name
@@ -19,6 +21,11 @@ for name, hashed in TABLES.items():
     labels = [e[0] for e in entries]
     assert len(labels) == len(set(labels)), f'{name}: duplicate label'
     print(f'{name}: {len(entries)} entries')
+
+# The optional version 5 fixes change the same original bytes on both backends.
+sites = {name: [(e[0], e[1], e[3]) for e in read_replacements(ROOT / name)]
+         for name in ('native-metadata/v5_fixes.sci', 'llasm-metadata/v5_fixes.sci')}
+assert sites['native-metadata/v5_fixes.sci'] == sites['llasm-metadata/v5_fixes.sci'], 'v5 fix sites differ between backends'
 
 GOOD = ('# Original: a\n# Replacement: b\n# Effect: c\n# Why: d\n# Evidence: e\n# sha256: ' + '0' * 64 + '\nloc_1,2,RET\n')
 BAD = {'missing documentation': GOOD.replace('# Why: d\n', ''),

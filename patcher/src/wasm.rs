@@ -3,7 +3,7 @@ use crate::{
     finish::finish,
     image::Image,
     kit::{Kit, Target},
-    prepare::{Files, prepare},
+    prepare::{Files, Options, prepare},
 };
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
@@ -43,25 +43,27 @@ fn from_js(value: JsValue) -> Result<Files, JsValue> {
 pub struct Builder {
     input: Vec<u8>,
     kit: Kit,
+    options: Options,
 }
 #[wasm_bindgen]
 impl Builder {
     #[wasm_bindgen(constructor)]
-    pub fn new(input: &[u8], kit: &[u8], target: &str) -> Result<Builder, JsValue> {
+    pub fn new(input: &[u8], kit: &[u8], target: &str, v5_fixes: bool) -> Result<Builder, JsValue> {
         Image::load(input).map_err(error)?;
         let kit = Kit::load(kit, Target::parse(target).map_err(error)?).map_err(error)?;
         Ok(Self {
             input: input.to_vec(),
             kit,
+            options: Options { v5_fixes },
         })
     }
     pub fn prepare(&self) -> Result<JsValue, JsValue> {
         let mut files = self.kit.compiler_files();
         files.extend(
             if self.kit.manifest.target == Target::Macos {
-                crate::llasm::prepare_input(&self.input)
+                crate::llasm::prepare_input(&self.input, self.options)
             } else {
-                prepare(&self.input)
+                prepare(&self.input, self.options)
             }
             .map_err(error)?,
         );

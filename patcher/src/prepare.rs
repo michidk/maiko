@@ -11,6 +11,13 @@ pub fn text<'a>(files: &'a Files, name: &str) -> Result<&'a str> {
         .map_err(|_| format!("Invalid UTF-8 in {name}"))
 }
 
+/// Optional changes selected when a package is built.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Options {
+    /// Append `v5_fixes.sci`: the behavior of the build 5.0 executable on the reference image.
+    pub v5_fixes: bool,
+}
+
 fn append(files: &mut Files, name: &str, value: &str) {
     files
         .entry(name.into())
@@ -62,7 +69,7 @@ pub(crate) fn replacements(bytes: &[u8], image: &Image) -> Result<String> {
     Ok(output)
 }
 
-pub fn prepare(bytes: &[u8]) -> Result<Files> {
+pub fn prepare(bytes: &[u8], options: Options) -> Result<Files> {
     let image = Image::load(bytes)?;
     let mut files = Files::new();
     for (path, data) in SOURCES
@@ -104,6 +111,15 @@ pub fn prepare(bytes: &[u8]) -> Result<Files> {
         match name {
             "instruction_replacements.sci" => {
                 append(&mut files, name, &replacements(data, &image)?)
+            }
+            "v5_fixes.sci" => {
+                if options.v5_fixes {
+                    append(
+                        &mut files,
+                        "instruction_replacements.sci",
+                        &replacements(data, &image)?,
+                    )
+                }
             }
             "global_aliases.sci" | "fixup_do_not_interpret_as_code.sci" => files
                 .entry(name.into())

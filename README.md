@@ -14,6 +14,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 - **Finds your game itself.** It looks in the usual GOG, Wine, Heroic and Lutris folders and only asks if it finds nothing. Your installation is never modified.
 - **Separate saves and settings**, kept in a `user-data` folder next to the program, plus session logs for bug reports.
 - **Startup shortcuts:** `--skip-intro`, `--skip-outro` and `--load-save N`.
+- **Optional version 5 fixes.** Build with the bug fixes of the later build 5.0 executable from the 1998 demo; see [Version 5 fixes](#version-5-fixes).
 - **Nothing leaves your device.** You build the program from your own `RGFX.EXE` in your browser or with a CLI. Maiko ships no game code or assets.
 
 ## Setup
@@ -47,9 +48,23 @@ maiko-patcher build --input /path/to/Redguard/RGFX.EXE --target linux \
   --kit maiko-runtime-kit-linux.zip --output maiko-linux-x64.zip
 ```
 
-Use `--target windows` with the Windows kit for a Windows package, and `--wasmtime PATH` to pick a specific Wasmtime. The patcher reads your game without modifying it, works in a private temporary folder and refuses to overwrite an existing output file. The macOS package is only available from the browser builder.
+Use `--target windows` with the Windows kit for a Windows package, and `--wasmtime PATH` to pick a specific Wasmtime. Add `--v5-fixes` for the [version 5 fixes](#version-5-fixes). The patcher reads your game without modifying it, works in a private temporary folder and refuses to overwrite an existing output file. The macOS package is only available from the browser builder.
 
 Details, including how the kits are made, are in [docs/client-builder.md](docs/client-builder.md). [Source checks](docs/building.md) are available for contributors.
+
+### Version 5 fixes
+
+The 1998 demo ships a later build of `RGFX.EXE`: version 1.0, build 5.0, where the GOG and CD executable is build 1.0. Maiko can build your executable with that build's fixes. Tick **Version 5 fixes** in the browser builder or pass `--v5-fixes` to the patcher. They are off by default. With them:
+
+- a dying player no longer grabs a rope or hook;
+- a fall off a ledge starts clear of the edge instead of stuttering on it;
+- object flats bind their texture when they are created and no longer stop the game with `Bad Texture Index`;
+- with speech on, dialogue lines without a voice recording are shown as timed subtitles, even with subtitles turned off; build 1.0 never shows them;
+- a missing dialogue line plays a stock line instead of stopping the game;
+- inventory models use full-resolution textures;
+- animation selection skips empty slots.
+
+The demo's island lock, its `[RTX_PATCH]` table and its debug overlay are not included. The [Redguard Preservation demo page](https://michidk.github.io/redguard-preservation/demo.html#executable) describes every change; each patch is documented in `native-metadata/v5_fixes.sci`.
 
 ## Play on Windows
 

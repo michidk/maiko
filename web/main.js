@@ -1,4 +1,5 @@
 import { detectPlatform } from './platform.js';
+import { STAMP_SIZE, versionStamp } from './stamp.js';
 
 const file = document.querySelector('#executable');
 const platforms = document.querySelector('#platforms');
@@ -13,6 +14,9 @@ const copyLog = document.querySelector('#copy-log');
 const dropzone = document.querySelector('#dropzone');
 const dzName = document.querySelector('#dz-name');
 const dzDetail = document.querySelector('#dz-detail');
+const v5Fixes = document.querySelector('#v5-fixes');
+const v5Option = document.querySelector('#v5-option');
+const v5Included = document.querySelector('#v5-included');
 let worker = null;
 let downloadUrl = null;
 const selectedTarget = () => document.querySelector('input[name="target"]:checked')?.value;
@@ -36,6 +40,7 @@ function controls() {
   document.querySelector('#linux-instructions').hidden = selectedTarget() !== 'linux';
   document.querySelector('#macos-instructions').hidden = selectedTarget() !== 'macos';
   file.disabled = busy;
+  v5Fixes.disabled = busy;
   platforms.disabled = busy;
   cancel.hidden = !busy;
   progress.hidden = !busy;
@@ -83,6 +88,19 @@ async function copyTheLog() {
   setTimeout(() => { copyLog.textContent = 'Copy log'; }, 2000);
 }
 copyLog.addEventListener('click', copyTheLog);
+// The size and the version stamp at the end of the file are read locally; nothing is sent anywhere.
+async function describe(chosen) {
+  const size = `${(chosen.size / 1024 / 1024).toFixed(1)} MB`;
+  let stamp = null;
+  try { stamp = versionStamp(new Uint8Array(await chosen.slice(-STAMP_SIZE).arrayBuffer())); } catch { stamp = null; }
+  if (file.files?.[0] !== chosen) return;
+  dzDetail.textContent = stamp ? `${size} · version ${stamp.version}, build ${stamp.build} · stays on this device` : `${size} · stays on this device`;
+  // Build 5.0 already contains the fixes, so the option is only offered for older builds.
+  const included = (stamp?.buildMajor ?? 0) >= 5;
+  v5Option.hidden = included;
+  v5Included.hidden = !included;
+  if (included) v5Fixes.checked = false;
+}
 function changed() {
   resetDownload();
   clearLog();
@@ -90,6 +108,9 @@ function changed() {
   dzName.textContent = chosen ? chosen.name : 'Choose RGFX.EXE or drop it here';
   dzDetail.textContent = chosen ? `${(chosen.size / 1024 / 1024).toFixed(1)} MB · stays on this device` : 'Only this one file is needed.';
   dropzone.classList.toggle('has-file', Boolean(chosen));
+  v5Option.hidden = false;
+  v5Included.hidden = true;
+  if (chosen) describe(chosen);
   status.textContent = file.files?.length ? 'Ready to build.' : '';
   controls();
 }
@@ -120,6 +141,7 @@ build.addEventListener('click', async () => {
     worker = current;
     controls();
     progressLine('Reading your executable locally…');
+    if (v5Fixes.checked) progressLine('Version 5 fixes selected.');
     current.onerror = event => failure(`The build worker stopped: ${event.message || 'reload the page and try again.'}`);
     current.onmessage = ({ data }) => {
       if (worker !== current) return;
@@ -137,7 +159,7 @@ build.addEventListener('click', async () => {
       }
     };
     const buffer = await input.arrayBuffer();
-    if (worker === current) current.postMessage({ input: buffer, target }, [buffer]);
+    if (worker === current) current.postMessage({ input: buffer, target, v5Fixes: v5Fixes.checked }, [buffer]);
   } catch (cause) { failure(cause instanceof Error ? cause.message : String(cause)); }
 });
 window.addEventListener('pagehide', () => { stop(); resetDownload(); });

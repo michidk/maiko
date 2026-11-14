@@ -1,7 +1,7 @@
 //! Checked offset-arena translation inputs and CPU-state service boundaries.
 use crate::{
     image::{Image, Result, hash},
-    prepare::{Files, SOURCES, prepare, replacements, text},
+    prepare::{Files, Options, SOURCES, prepare, replacements, text},
 };
 use regex::Regex;
 use serde::Deserialize;
@@ -14,32 +14,9 @@ struct Check {
     sha256: String,
 }
 
-pub fn prepare_input(input: &[u8]) -> Result<Files> {
-    let image = Image::load(input)?;
-    let mut files = prepare(input)?;
-    let mut checks = None;
-    for &(path, bytes) in SOURCES {
-        let Some(name) = path.strip_prefix("llasm-metadata/") else {
-            continue;
-        };
-        match name {
-            "global_aliases.sci" => files
-                .entry(name.into())
-                .or_default()
-                .extend_from_slice(bytes),
-            "instruction_replacements.sci" => {
-                files.insert(name.into(), replacements(bytes, &image)?.into_bytes());
-            }
-            "instruction_checks.json" => checks = Some(bytes),
-            _ if name.ends_with(".sci") => {
-                files.insert(name.into(), bytes.to_vec());
-            }
-            _ => {}
-        }
-    }
-    let checks: Vec<Check> = serde_json::from_slice(checks.ok_or("Missing LLasm byte checks")?)
-        .map_err(|e| e.to_string())?;
-    let table: Vec<_> = text(&files, "instruction_replacements.sci")?
+/// Address and length of every entry in a checked replacement table.
+fn sites(table: &str) -> Result<Vec<(u32, usize)>> {
+    table
         .lines()
         .map(|line| {
             let mut fields = line.splitn(3, ',');
@@ -57,7 +34,37 @@ pub fn prepare_input(input: &[u8]) -> Result<Files> {
                 length,
             ))
         })
-        .collect::<Result<_>>()?;
+        .collect()
+}
+
+pub fn prepare_input(input: &[u8], options: Options) -> Result<Files> {
+    let image = Image::load(input)?;
+    let mut files = prepare(input, options)?;
+    let mut checks = None;
+    let mut v5_fixes = None;
+    for &(path, bytes) in SOURCES {
+        let Some(name) = path.strip_prefix("llasm-metadata/") else {
+            continue;
+        };
+        match name {
+            "global_aliases.sci" => files
+                .entry(name.into())
+                .or_default()
+                .extend_from_slice(bytes),
+            "instruction_replacements.sci" => {
+                files.insert(name.into(), replacements(bytes, &image)?.into_bytes());
+            }
+            "instruction_checks.json" => checks = Some(bytes),
+            "v5_fixes.sci" => v5_fixes = Some(bytes),
+            _ if name.ends_with(".sci") => {
+                files.insert(name.into(), bytes.to_vec());
+            }
+            _ => {}
+        }
+    }
+    let checks: Vec<Check> = serde_json::from_slice(checks.ok_or("Missing LLasm byte checks")?)
+        .map_err(|e| e.to_string())?;
+    let table = sites(text(&files, "instruction_replacements.sci")?)?;
     if checks.len() != table.len() {
         return Err("LLasm replacement inventory changed".into());
     }
@@ -89,6 +96,22 @@ pub fn prepare_input(input: &[u8]) -> Result<Files> {
         if !table.iter().any(|entry| entry.0 == address) {
             return Err(format!("LLasm is missing native replacement {address:#x}"));
         }
+    }
+    if options.v5_fixes {
+        let llasm = replacements(v5_fixes.ok_or("Missing LLasm version 5 fixes")?, &image)?;
+        let native = SOURCES
+            .iter()
+            .find(|(name, _)| *name == "native-metadata/v5_fixes.sci")
+            .ok_or("Missing native version 5 fixes")?
+            .1;
+        // Both backends must change exactly the same original bytes.
+        if sites(&llasm)? != sites(&replacements(native, &image)?)? {
+            return Err("LLasm and native version 5 fixes differ".into());
+        }
+        files
+            .get_mut("instruction_replacements.sci")
+            .ok_or("Missing LLasm replacements")?
+            .extend_from_slice(llasm.as_bytes());
     }
     Ok(files)
 }

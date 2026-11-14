@@ -145,6 +145,23 @@ legend.step-title { margin-top: 0; }
 .dropzone input:disabled { cursor: not-allowed; }
 .dz-name { font: 600 1.15rem 'Cinzel', serif; color: var(--gold-pale); overflow-wrap: anywhere; }
 .dz-detail { font-size: 1rem; color: var(--parchment-dark); }
+.option-group { margin-top: 18px; }
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--gold-muted);
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.option:has(input:checked) { border-color: var(--gold-light); background: rgba(212, 165, 55, .12); }
+.option input { accent-color: var(--gold-light); width: 18px; height: 18px; margin: 3px 0 0; flex-shrink: 0; }
+.option strong { display: block; font: 600 1.05rem 'Cinzel', serif; color: var(--gold-pale); }
+.option small { display: block; font-size: 1rem; color: var(--parchment-dark); margin-top: 4px; }
+.option-link { margin: 8px 0 0; }
+.option-link a { color: var(--gold-pale); }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 button, .download {
   display: inline-flex;

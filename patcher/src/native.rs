@@ -4,7 +4,7 @@ use crate::{
     finish::finish,
     image::{Image, Result},
     kit::{Kit, Target, safe_path},
-    prepare::{Files, prepare},
+    prepare::{Files, Options, prepare},
 };
 use std::{fs, io::Write, path::Path, process::Command};
 
@@ -61,6 +61,7 @@ pub struct BuildOptions<'a> {
     pub target: Target,
     pub output: &'a Path,
     pub wasmtime: &'a str,
+    pub options: Options,
 }
 
 pub fn build(options: BuildOptions<'_>) -> Result<()> {
@@ -85,7 +86,7 @@ pub fn build(options: BuildOptions<'_>) -> Result<()> {
     let work = temporary.path().join("work");
     fs::create_dir(&work).map_err(|error| error.to_string())?;
     write_files(&work, &kit.compiler_files())?;
-    write_files(&work, &prepare(&input)?)?;
+    write_files(&work, &prepare(&input, options.options)?)?;
     let tools = temporary.path().join("tools");
     fs::create_dir(&tools).map_err(|error| error.to_string())?;
     for tool in options.target.tools() {

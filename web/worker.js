@@ -26,7 +26,7 @@ self.onmessage = async ({ data }) => {
     const bytes = await response.arrayBuffer();
     const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
     if (digest !== kit.sha256) throw new Error('The runtime download failed its checksum check. Reload the page and try again.');
-    builder = new Builder(input, new Uint8Array(bytes), data.target);
+    builder = new Builder(input, new Uint8Array(bytes), data.target, Boolean(data.v5Fixes));
     stage('Building game engine…');
     let files = builder.prepare();
     let executable;
