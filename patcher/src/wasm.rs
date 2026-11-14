@@ -73,7 +73,7 @@ impl Builder {
         let files = from_js(files)?;
         to_js(
             if self.kit.manifest.target == Target::Macos {
-                crate::llasm::finish(files)
+                crate::llasm::finish(files, Image::load(&self.input).map_err(error)?.build)
             } else {
                 finish(&self.input, files)
             }

@@ -21,6 +21,9 @@ pub static mut rg_skip_outro: u32 = 0;
 pub static mut rg_load_save: i32 = -1;
 const PRIMARY: &str = "844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852ac1607ee4dfdf";
 const ALTERNATE: &str = "06d7a399cf01eec6bca3be39aaab1a39c42dc88116b6b74ae6f5f0547f7cdaf3";
+/// Version 1.0 build 5.0 from the 1998 demo. Its patched sites carry the primary build's
+/// instructions, so it runs as variant 0.
+const BUILD5: &str = "900cbfe2d586a7d80796763b1449ba050f8517b7fc7cc4742710c11e46455a31";
 
 #[derive(Default)]
 struct Selection {
@@ -141,10 +144,12 @@ fn validate(path: &Path) -> io::Result<()> {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
     let variant = match hex.as_str() {
-        PRIMARY => 0,
+        PRIMARY | BUILD5 => 0,
         ALTERNATE => 1,
         _ => {
-            rg_log!("Unsupported RGFX.EXE build: {hex}; supported {PRIMARY} or {ALTERNATE}");
+            rg_log!(
+                "Unsupported RGFX.EXE build: {hex}; supported {PRIMARY}, {ALTERNATE} or {BUILD5}"
+            );
             return Err(storage::denied());
         }
     };

@@ -1,6 +1,6 @@
 //! Checked offset-arena translation inputs and CPU-state service boundaries.
 use crate::{
-    image::{Image, Result, hash},
+    image::{Build, Image, Result, moved_aliases, rename_moved_aliases},
     prepare::{Files, Options, SOURCES, prepare, replacements, text},
 };
 use regex::Regex;
@@ -47,17 +47,23 @@ pub fn prepare_input(input: &[u8], options: Options) -> Result<Files> {
             continue;
         };
         match name {
-            "global_aliases.sci" => files
-                .entry(name.into())
-                .or_default()
-                .extend_from_slice(bytes),
+            "global_aliases.sci" => {
+                let aliases = image.aliases(
+                    std::str::from_utf8(bytes).map_err(|_| "Invalid LLasm alias table")?,
+                )?;
+                files
+                    .entry(name.into())
+                    .or_default()
+                    .extend_from_slice(aliases.as_bytes())
+            }
             "instruction_replacements.sci" => {
                 files.insert(name.into(), replacements(bytes, &image)?.into_bytes());
             }
             "instruction_checks.json" => checks = Some(bytes),
             "v5_fixes.sci" => v5_fixes = Some(bytes),
             _ if name.ends_with(".sci") => {
-                files.insert(name.into(), bytes.to_vec());
+                let table = std::str::from_utf8(bytes).map_err(|_| "Invalid LLasm table")?;
+                files.insert(name.into(), image.relabel(table)?.into_bytes());
             }
             _ => {}
         }
@@ -71,9 +77,10 @@ pub fn prepare_input(input: &[u8], options: Options) -> Result<Files> {
     for (check, &(address, length)) in checks.iter().zip(&table) {
         let expected_address = u32::from_str_radix(check.address.trim_start_matches("0x"), 16)
             .map_err(|_| "Invalid LLasm check address")?;
-        if (expected_address, check.length) != (address, length)
-            || hash(image.at(address, length)?) != check.sha256
-        {
+        let checked = image
+            .check(expected_address, check.length, &check.sha256)
+            .map_err(|_| format!("LLasm replacement byte check failed at {address:#x}"))?;
+        if (checked, check.length) != (address, length) {
             return Err(format!(
                 "LLasm replacement byte check failed at {address:#x}"
             ));
@@ -116,7 +123,17 @@ pub fn prepare_input(input: &[u8], options: Options) -> Result<Files> {
     Ok(files)
 }
 
-pub fn finish(mut files: Files) -> Result<Files> {
+pub fn finish(mut files: Files, build: Build) -> Result<Files> {
+    // Build 5.0: give exported names that moved their reference-image names again.
+    let moved = moved_aliases(build)?;
+    if !moved.is_empty() {
+        for (name, bytes) in &mut files {
+            if name.ends_with(".llasm") || name.ends_with(".llinc") {
+                let text = std::str::from_utf8(bytes).map_err(|_| "Invalid LLasm encoding")?;
+                *bytes = rename_moved_aliases(&moved, text)?.into_bytes();
+            }
+        }
+    }
     files.insert("extern.llinc".into(), b"funcv rg_llasm_service $, service\nfunc rg_llasm_target $\nfunc rg_llasm_variant\nfuncv rg_translation_trap address\nextern rg_bios_ticks\nextern rg_skip_intro\nextern rg_load_save\n".to_vec());
     let mut wrappers = String::from(
         "proc rg_dispatch global c_rg_dispatch\ncall rg_llasm_target $\ntcall tmp0\nendp\n",
@@ -234,7 +251,7 @@ mod tests {
 
     #[test]
     fn emits_cpu_state_boundaries_and_relocates_clock() {
-        let files = finish(translated(27)).unwrap();
+        let files = finish(translated(27), Build::Reference).unwrap();
         assert!(text(&files, "host.llinc").unwrap().contains("proc host_glide_0 public\ncall rg_llasm_service $, 8192\nPOP tmp1\nadd esp, esp, 12\ntcall tmp1\nendp"));
         assert!(
             text(&files, "rgfx.llasm")
@@ -258,13 +275,17 @@ mod tests {
     fn refuses_incomplete_or_changed_translation() {
         for count in [0, 26, 28] {
             assert!(
-                finish(translated(count))
+                finish(translated(count), Build::Reference)
                     .unwrap_err()
                     .contains("BIOS clock inventory")
             );
         }
         let mut files = translated(27);
         files.remove("rgfx.llasm");
-        assert!(finish(files).unwrap_err().contains("Missing rgfx.llasm"));
+        assert!(
+            finish(files, Build::Reference)
+                .unwrap_err()
+                .contains("Missing rgfx.llasm")
+        );
     }
 }

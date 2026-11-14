@@ -26,6 +26,7 @@ The game installation is read-only. `cap-std` confines save and settings writes 
 - `tools/`, `glide/` and `audio/`: shared build, renderer and packaging support.
 - `tests/`: independent fixtures, interface checks and runtime checks.
 - `patches/`: documented changes to licensed upstream dependencies.
+- `build5-metadata/`: build 5.0 addresses and site hashes. The metadata names build 1.0 addresses; for a build 5.0 input the patcher rewrites them through this table (`patcher/src/image.rs`).
 
 See [building.md](building.md) for source checks and [client-builder.md](client-builder.md) for package creation.
 

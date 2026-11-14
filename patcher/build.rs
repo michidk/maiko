@@ -2,7 +2,13 @@ use std::{env, fs, path::Path};
 fn main() {
     let root = Path::new("..");
     let mut source = String::from("pub const SOURCES: &[(&str, &[u8])] = &[\n");
-    for directory in ["metadata", "native-metadata", "llasm-metadata", "runtime"] {
+    for directory in [
+        "metadata",
+        "native-metadata",
+        "llasm-metadata",
+        "build5-metadata",
+        "runtime",
+    ] {
         let mut entries: Vec<_> = fs::read_dir(root.join(directory))
             .unwrap()
             .map(|entry| entry.unwrap().path())

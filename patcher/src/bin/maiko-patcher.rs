@@ -58,7 +58,8 @@ fn run() -> Result<(), String> {
         Some(stage @ ("finish" | "finish-llasm")) if args.len() == 4 => {
             let directory = Path::new(&args[3]);
             let files = read_files(directory)?;
-            write_files(directory, if stage == "finish-llasm" { maiko_patcher::llasm::finish(files)? } else { finish(&maiko_patcher::native::read_limited(Path::new(&args[2]), 32 * 1024 * 1024)?, files)? })
+            let input = maiko_patcher::native::read_limited(Path::new(&args[2]), 32 * 1024 * 1024)?;
+            write_files(directory, if stage == "finish-llasm" { maiko_patcher::llasm::finish(files, Image::load(&input)?.build)? } else { finish(&input, files)? })
         }
         _ => Err("Usage: maiko-patcher build --input RGFX.EXE --target linux|windows --kit KIT.zip --output PACKAGE.zip [--wasmtime PATH] [--v5-fixes]\n       maiko-patcher inspect RGFX.EXE | prepare[-llasm] RGFX.EXE DIRECTORY [--v5-fixes] | finish[-llasm] RGFX.EXE DIRECTORY".into())
     }

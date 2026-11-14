@@ -1,7 +1,7 @@
 //! Guarded assembly changes. Startup patch documentation lives in startup.json;
 //! all other transforms mirror the documented hooks in tools/pipeline.py.
 use crate::{
-    image::{Image, Result, hash},
+    image::{Image, Result, moved_aliases, rename_moved_aliases},
     prepare::{Files, runtime_sources, text},
 };
 use regex::Regex;
@@ -134,15 +134,16 @@ pub fn finish(bytes: &[u8], mut files: Files) -> Result<Files> {
         serde_json::from_str(include_str!("startup.json")).map_err(|error| error.to_string())?;
     for hook in hooks {
         for guard in hook.guards {
-            if hash(image.at(guard.address, guard.length)?) != guard.sha256 {
-                return Err(format!("{} original bytes changed", hook.name));
-            }
+            image
+                .check(guard.address, guard.length, &guard.sha256)
+                .map_err(|_| format!("{} original bytes changed", hook.name))?;
         }
         for patch in hook.replacements {
-            if main.matches(&patch.before).count() != 1 {
+            let before = image.relabel(&patch.before)?;
+            if main.matches(&before).count() != 1 {
                 return Err(format!("{} assembly inventory changed", hook.name));
             }
-            main = main.replacen(&patch.before, &patch.after, 1);
+            main = main.replacen(&before, &image.relabel(&patch.after)?, 1);
         }
     }
     let ticks = regex(r"(?m)^mov (dword \[ebp-0x[0-9a-f]+\]|eax|esi|edi), 0x46c$")?;
@@ -154,7 +155,7 @@ pub fn finish(bytes: &[u8], mut files: Files) -> Result<Files> {
         .into_owned();
     let raw_data = regex(r"(?m)^(?:db|dw|dd) ")?;
     for address in [0xd933c, 0xd93cc, 0xd945c, 0xd94ec, 0xd9578, 0xd9604] {
-        let label = format!("loc_{address:X}:\n");
+        let label = format!("loc_{:X}:\n", image.address(address)?);
         if main.matches(&label).count() != 1 {
             return Err(format!("Missing clipping helper {address:#x}"));
         }
@@ -165,7 +166,7 @@ pub fn finish(bytes: &[u8], mut files: Files) -> Result<Files> {
             .ok_or("Missing clipping return")?;
         if raw_data.is_match(body)
             || !body.contains("sub r11d, 0x4")
-            || !body.contains("CALL loc_D92D0")
+            || !body.contains(&image.relabel("CALL loc_D92D0")?)
         {
             return Err(format!("Untranslated clipping helper {address:#x}"));
         }
@@ -179,8 +180,9 @@ pub fn finish(bytes: &[u8], mut files: Files) -> Result<Files> {
         (0xf2340, 0xf2390, "loc_F2390"),
         (0xf2390, 0xf24a0, "host_audio_stream_load"),
     ] {
-        let start = format!("loc_{address:X}:\n");
-        let end = format!("loc_{end:X}:\n");
+        let start = format!("loc_{:X}:\n", image.address(address)?);
+        let end = format!("loc_{:X}:\n", image.address(end)?);
+        let target = image.relabel(target)?;
         if main.matches(&start).count() != 1 || main.matches(&end).count() != 1 {
             return Err("Smacker callback inventory changed".into());
         }
@@ -211,7 +213,8 @@ pub fn finish(bytes: &[u8], mut files: Files) -> Result<Files> {
         0x1303d4, 0x130c8b, 0x110826, 0xc7f20, 0xf976c, 0xc80f8, 0x20000, 0x20095, 0x98673,
         0x138b82, 0x2bd78, 0xd92d0,
     ] {
-        let label = format!("loc_{address:X}:");
+        // The trace service keeps the reference address so logs read the same for every build.
+        let label = format!("loc_{:X}:", image.address(address)?);
         if main.matches(&label).count() != 1 {
             return Err(format!("Missing native trace root {label}"));
         }
@@ -241,5 +244,15 @@ pub fn finish(bytes: &[u8], mut files: Files) -> Result<Files> {
             .extend_from_slice(&value);
     }
     files.remove("RGFX.EXE");
+    // Build 5.0: give exported names that moved their reference-image names again.
+    let moved = moved_aliases(image.build)?;
+    if !moved.is_empty() {
+        for (name, bytes) in &mut files {
+            if name.starts_with("seg") && name.ends_with(".inc") || name == "rgfx.asm" {
+                let text = std::str::from_utf8(bytes).map_err(|_| "Invalid assembly encoding")?;
+                *bytes = rename_moved_aliases(&moved, text)?.into_bytes();
+            }
+        }
+    }
     Ok(files)
 }

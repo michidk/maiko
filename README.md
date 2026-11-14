@@ -21,7 +21,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 You need:
 
-- A Redguard installation containing `RGFX.EXE`, the Glide version of the game executable. The GOG release is the supported one and includes it. Maiko recognizes two builds of this file and refuses any other, so it never runs code it was not checked against.
+- A Redguard installation containing `RGFX.EXE`, the Glide version of the game executable. The GOG release is the supported one and includes it. Maiko recognizes three builds of this file and refuses any other, so it never runs code it was not checked against: the GOG and CD build 1.0, a variant of it, and build 5.0 from the 1998 demo.
 - 64-bit Windows 10 or newer, or a Linux desktop (glibc 2.36 or newer, X11 or XWayland), with a graphics driver that supports OpenGL.
 
 Maiko is built from your own executable, which stays on your device. There are two ways to do it.
@@ -64,7 +64,9 @@ The 1998 demo ships a later build of `RGFX.EXE`: version 1.0, build 5.0, where t
 - inventory models use full-resolution textures;
 - animation selection skips empty slots.
 
-The demo's island lock, its `[RTX_PATCH]` table and its debug overlay are not included. The [Redguard Preservation demo page](https://michidk.github.io/redguard-preservation/demo.html#executable) describes every change; each patch is documented in `native-metadata/v5_fixes.sci`.
+The demo's island lock, its `[RTX_PATCH]` table and its debug overlay are not included.
+
+If you have the build 5.0 `RGFX.EXE` itself, Maiko accepts it directly. It runs with the full game's data, where the island lock stays off, and the option is not offered because the fixes are already in it. Maiko translates it through `build5-metadata/addresses.sci`, which gives the build 5.0 address of every build 1.0 address its patches use. The [Redguard Preservation demo page](https://michidk.github.io/redguard-preservation/demo.html#executable) describes every change; each patch is documented in `native-metadata/v5_fixes.sci`.
 
 ## Play on Windows
 
@@ -155,7 +157,7 @@ Typical causes:
 
 | Message or symptom | What to do |
 |---|---|
-| "The game folder could not be used" | The chosen folder does not contain a recognized `RGFX.EXE`. Choose the inner Redguard folder; if it is right, your `RGFX.EXE` is not one of the two builds Maiko recognizes, so report its SHA-256 (the log prints it) and where you got it. |
+| "The game folder could not be used" | The chosen folder does not contain a recognized `RGFX.EXE`. Choose the inner Redguard folder; if it is right, your `RGFX.EXE` is not one of the builds Maiko recognizes, so report its SHA-256 (the log prints it) and where you got it. |
 | A black window or no window | Check that your graphics driver supports OpenGL, and include the log in a report. |
 | The log says `Native audio device failed` | The game could not open a sound device. Check your default Windows playback device and include the log if it persists. |
 | A message beginning `BLOCKED` | The game reached an instruction Maiko cannot run. This is a bug: report it with the log and what you were doing. |

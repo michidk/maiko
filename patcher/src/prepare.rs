@@ -1,5 +1,5 @@
 //! Prepare the same guarded SR inputs as tools/pipeline.py without host tools.
-use crate::image::{Image, Result, hash};
+use crate::image::{Build, Image, Result};
 use regex::bytes::Regex;
 use std::collections::BTreeMap;
 
@@ -16,6 +16,10 @@ pub fn text<'a>(files: &'a Files, name: &str) -> Result<&'a str> {
 pub struct Options {
     /// Append `v5_fixes.sci`: the behavior of the build 5.0 executable on the reference image.
     pub v5_fixes: bool,
+}
+
+fn utf8(bytes: &[u8]) -> Result<&str> {
+    std::str::from_utf8(bytes).map_err(|_| "Invalid metadata encoding".into())
 }
 
 fn append(files: &mut Files, name: &str, value: &str) {
@@ -56,14 +60,14 @@ pub(crate) fn replacements(bytes: &[u8], image: &Image) -> Result<String> {
                 .ok_or("Missing replacement length")?
                 .parse()
                 .map_err(|_| "Invalid replacement length")?;
-            if parts.next().is_none() {
-                return Err("Missing replacement text".into());
-            }
-            if Some(hash(image.at(address, len)?)).as_deref() != digest.take() {
-                return Err(format!("Original bytes changed at {label}"));
-            }
-            output.push_str(line);
-            output.push('\n');
+            let text = parts.next().ok_or("Missing replacement text")?;
+            let digest = digest
+                .take()
+                .ok_or_else(|| format!("Missing hash for {label}"))?;
+            let address = image
+                .check(address, len, digest)
+                .map_err(|error| format!("{error} ({label})"))?;
+            output.push_str(&format!("loc_{address:X},{len},{}\n", image.relabel(text)?));
         }
     }
     Ok(output)
@@ -77,14 +81,21 @@ pub fn prepare(bytes: &[u8], options: Options) -> Result<Files> {
         .filter(|(path, _)| path.starts_with("metadata/"))
     {
         let name = path.split('/').next_back().ok_or("Invalid embedded path")?;
-        let data = if name == "instruction_replacements.sci" {
-            replacements(data, &image)?.into_bytes()
-        } else {
-            data.to_vec()
+        let data = match name {
+            "instruction_replacements.sci" => replacements(data, &image)?.into_bytes(),
+            "global_aliases.sci" => image.aliases(utf8(data)?)?.into_bytes(),
+            _ if name.ends_with(".sci") => image.relabel(utf8(data)?)?.into_bytes(),
+            _ => data.to_vec(),
         };
         files.insert(name.into(), data);
     }
+    if options.v5_fixes && image.build == Build::Build5 {
+        return Err(
+            "This RGFX.EXE is build 5.0, which already contains the version 5 fixes".into(),
+        );
+    }
     for address in [0xf70b6, 0xf70eb, 0x119cde, 0x13b3d7, 0x13b461] {
+        let address = image.address(address)?;
         if image.at(address, 4)? != [0x66, 0xa9, 0x89, 0xcf] {
             return Err(format!("Overlapping instruction changed at {address:#x}"));
         }
@@ -121,10 +132,13 @@ pub fn prepare(bytes: &[u8], options: Options) -> Result<Files> {
                     )
                 }
             }
-            "global_aliases.sci" | "fixup_do_not_interpret_as_code.sci" => files
-                .entry(name.into())
-                .or_default()
-                .extend_from_slice(data),
+            "global_aliases.sci" => append(&mut files, name, &image.aliases(utf8(data)?)?),
+            "fixup_do_not_interpret_as_code.sci" => {
+                append(&mut files, name, &image.relabel(utf8(data)?)?)
+            }
+            _ if name.ends_with(".sci") => {
+                files.insert(name.into(), image.relabel(utf8(data)?)?.into_bytes());
+            }
             _ => {
                 files.insert(name.into(), data.to_vec());
             }
@@ -140,16 +154,19 @@ pub fn prepare(bytes: &[u8], options: Options) -> Result<Files> {
         );
     }
     for index in 0..124u32 {
-        let address = 0x13d988 + index * 5;
+        let address = image.address(0x13d988)? + index * 5;
         let code = image.at(address, 5)?;
         let displacement =
             i32::from_le_bytes(code[1..].try_into().map_err(|_| "Invalid Glide call")?);
-        if code[0] != 0xe8 || i64::from(address) + 5 + i64::from(displacement) != 0x128c60 {
+        if code[0] != 0xe8
+            || i64::from(address) + 5 + i64::from(displacement)
+                != i64::from(image.address(0x128c60)?)
+        {
             return Err(format!("Glide stub changed at {address:#x}"));
         }
         let pointer = u32::from_le_bytes(
             image
-                .at(0x13dc14 + index * 4, 4)?
+                .at(image.address(0x13dc14)? + index * 4, 4)?
                 .try_into()
                 .map_err(|_| "Invalid Glide pointer")?,
         )
