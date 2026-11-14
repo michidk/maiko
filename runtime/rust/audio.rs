@@ -246,7 +246,8 @@ impl Audio {
             sys::SDL_SetMainReady();
         }
         if unsafe { sys::SDL_InitSubSystem(sys::SDL_INIT_AUDIO) } != 0
-            || unsafe { Mix_OpenAudio(44100, sys::AUDIO_S16LSB as u16, 2, 1024) } != 0
+            // allowed_changes=0: SDL converts to stereo even when the device is 5.1/7.1
+            || unsafe { Mix_OpenAudioDevice(44100, sys::AUDIO_S16LSB as u16, 2, 1024, std::ptr::null(), 0) } != 0
         {
             rg_log!("Native audio device failed: {}", sdl2::get_error());
             unsafe {
@@ -274,6 +275,9 @@ impl Audio {
             || format != sys::AUDIO_S16LSB as u16
             || channels != 2
         {
+            rg_log!(
+                "Native audio device gave rate={rate} format={format:#x} channels={channels}; need 16-bit stereo"
+            );
             self.close();
             return false;
         }
