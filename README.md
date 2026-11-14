@@ -7,7 +7,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 ## Features
 
 - **Native, no DOSBox.** The original game code runs as a native program with its own graphics, input, sound, file and timing services.
-- **Windows and Linux**, 64-bit. Intel and Apple Silicon Macs are experimental.
+- **Windows, Linux and macOS.** 64-bit Windows and Linux; macOS 11 or newer. Intel and Apple Silicon Macs use one universal package.
 - **Hardware rendering.** The Glide version of the game is drawn through OpenGL, in a window of any size or borderless fullscreen.
 - **Original sound, music and movies.** CD music and the intro play from your GOG `game.gog` disc image.
 - **Game controllers.** SDL2 gamepads work alongside keyboard and mouse.
@@ -156,18 +156,14 @@ Open an issue and attach the newest session log. Say what you were doing, which 
 
 The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries and require a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Extract the package and run `./redguard-native` in a terminal; it looks for the game as on Windows (`~/GOG Games/Redguard`, a Wine prefix's `GOG Games/Redguard`, the default Heroic and Lutris folders and the other standard folders), asks in the terminal if it finds nothing and remembers the answer; or pass `--game-dir /path/to/Redguard`. The options above work the same way.
 
-## Known limitations
+## macOS
 
-The browser builder can create an experimental universal Mac package from your
-owned executable. It contains the runtime for Intel and Apple Silicon, without
-original game assets or a command launcher. Follow the separate
-[launch instructions](platforms/macos/LAUNCH.md),
-including installation selection, automatic logs and macOS's quarantine warning. Mac runtime output has been supplied by the owner; full gameplay acceptance is
-still pending. The port is outside the supported Windows/Linux packages.
+The browser builder creates a universal Mac package (Intel and Apple Silicon) from your own executable. Extract it into its own folder and open `redguard-native`; it finds the game as on the other systems. Follow the [launch instructions](platforms/macos/LAUNCH.md) for macOS's quarantine warning, saves and logs.
+
+## Known limitations
 
 - **CD music needs the GOG disc image.** The music is read from the audio tracks of `game.gog`, using the `game.ins` cue sheet beside it (the GOG release has both next to the game folder). Without them the game runs without music.
 - **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.
-- **macOS remains experimental.** Full gameplay acceptance on Mac hardware is pending.
 
 ## Legal
 

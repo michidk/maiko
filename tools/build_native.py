@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build/test the experimental native CRT target, with bounded offline containers."""
+"""Build/test the native CRT target, with bounded offline containers."""
 import argparse
 import json
 import hashlib

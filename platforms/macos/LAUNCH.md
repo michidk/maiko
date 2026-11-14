@@ -1,6 +1,6 @@
 # Launching Maiko on macOS
 
-The experimental runtime requires macOS 11 or newer on Apple Silicon or Intel.
+The runtime requires macOS 11 or newer on Apple Silicon or Intel.
 The package contains a universal `redguard-native` executable, its renderer and
 SDL frameworks. It contains no Redguard installation, game assets or disc media.
 You must supply your own copy of Redguard.

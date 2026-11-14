@@ -31,12 +31,10 @@ function resetDownload() {
 }
 function controls() {
   const busy = worker !== null;
-  const macos = selectedTarget() === 'macos';
-  document.querySelector('#browser-instructions').hidden = macos;
+  document.querySelector('#browser-instructions').hidden = selectedTarget() === 'macos';
   document.querySelector('#windows-instructions').hidden = selectedTarget() === 'linux';
   document.querySelector('#linux-instructions').hidden = selectedTarget() !== 'linux';
-  document.querySelector('#macos-guidance').hidden = !macos;
-  document.querySelector('#macos-instructions').hidden = !macos;
+  document.querySelector('#macos-instructions').hidden = selectedTarget() !== 'macos';
   file.disabled = busy;
   platforms.disabled = busy;
   cancel.hidden = !busy;
@@ -130,7 +128,7 @@ build.addEventListener('click', async () => {
       else if (data.kind === 'complete') {
         downloadUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'application/zip' }));
         download.href = downloadUrl;
-        download.download = target === 'macos' ? 'maiko-macos-universal.zip' : `maiko-${target}-x64.zip`;
+        download.download = `maiko-${target}.zip`;
         download.hidden = false;
         stop();
         progressLine('Your package is ready. The download starts now; use the link if it does not.');

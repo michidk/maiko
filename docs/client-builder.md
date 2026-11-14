@@ -4,12 +4,12 @@ The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows, Lin
 
 Both interfaces use the same Rust library for input validation and package creation. The browser uses an isolated worker; the CLI uses a private temporary directory.
 
-The pinned Windows and Linux kits include controller support and automatic game-folder discovery. Start `redguard-native.exe` on Windows or `./redguard-native` on Linux directly; it asks for the game folder only if it cannot find it. The included README repeats this.
+The pinned kits include controller support and automatic game-folder discovery. Start `redguard-native.exe` on Windows or `./redguard-native` on Linux directly; it asks for the game folder only if it cannot find it. The included README repeats this.
 
 For macOS, select `RGFX.EXE`, build the ZIP and extract it. Open
 `redguard-native` and select your owned installation when asked. The Mac runtime
 has no command launcher. See the [Mac launch guide](../platforms/macos/LAUNCH.md)
-for quarantine removal, saves and logs. The port remains experimental.
+for quarantine removal, saves and logs.
 
 Mac builds run SR's LLasm translator, the D frontend, LLVM optimization and both
 code generators, then link and combine the two Mach-O executables. These tools
@@ -109,7 +109,7 @@ Each release contains:
 
 - `maiko-patcher-linux-x86_64.tar.gz` and `maiko-patcher-windows-x86_64.tar.gz`: standalone CLI, licence and usage instructions. Wasmtime is installed separately. The Linux CLI is statically linked with musl; the runtime kit has its own desktop and glibc requirements above.
 - `maiko-browser.tar.gz`: the complete static builder, including its checked support kits.
-- The runtime kits embedded in the browser build include their upstream notices and corresponding source files. The Linux and Windows kits also work with the CLI's `--kit` option.
+- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`: the kits embedded in the browser build, with their upstream notices and corresponding source files. The Linux and Windows kits also work with the CLI's `--kit` option.
 - `SHA256SUMS`, `LICENSE` and `README.md`.
 
 The workflow stages all assets in a draft and publishes only after uploads succeed. Retrying preserves an already published release. After publication, Pages deploys the browser artifact from that release run. Main also continues to deploy development builds. Published kits remain pinned snapshots until `web/kits.json` is deliberately updated; a version bump does not regenerate them.

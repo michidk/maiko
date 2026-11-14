@@ -48,7 +48,6 @@ test('Mac detection builds locally, supports cancellation and downloads a univer
     });
     await import('./main.js');
     expect(element('#detection').textContent).toBe('macOS selected automatically.');
-    expect(element('#macos-guidance').hidden).toBe(false);
     expect(element('#browser-build').hidden).toBe(false);
     expect(element('#browser-instructions').hidden).toBe(true);
     expect(element('#macos-instructions').hidden).toBe(false);
@@ -75,13 +74,12 @@ test('Mac detection builds locally, supports cancellation and downloads a univer
     await Promise.resolve();
     workers[1].onmessage({ data: { kind: 'complete', buffer: new ArrayBuffer(4) } });
     expect(element('#download').hidden).toBe(false);
-    expect(element('#download').download).toBe('maiko-macos-universal.zip');
+    expect(element('#download').download).toBe('maiko-macos.zip');
     expect(element('#download').clicks).toBe(1);
     expect(element('#status').textContent).toContain('Your package is ready.');
     for (const radio of radios) radio.checked = radio.value === 'windows';
     element('#platforms').dispatchEvent(new Event('change'));
     expect(element('#download').hidden).toBe(true);
-    expect(element('#macos-guidance').hidden).toBe(true);
     expect(element('#macos-instructions').hidden).toBe(true);
     expect(element('#browser-instructions').hidden).toBe(false);
     expect(element('#build').disabled).toBe(false);

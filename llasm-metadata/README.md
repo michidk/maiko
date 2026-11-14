@@ -1,6 +1,6 @@
 # Original-game translation analysis
 
-These files translate Redguard through SR's CPU-state LLasm backend. The Mac port remains experimental. Emitting LLasm does not establish that the resulting game runs correctly.
+These files translate Redguard through SR's CPU-state LLasm backend. Emitting LLasm does not establish that the resulting game runs correctly.
 
 `instruction_flags.sci` records inspected producer/consumer flag contracts. Its texture-size dispatch entries preserve carry and zero across shared CMP branches. Other entries preserve zero, signed comparison flags or CMPSB carry. They do not suppress all unknown-flag errors. The translator must still stop at unresolved regions.
 

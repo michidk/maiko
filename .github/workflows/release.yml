@@ -123,8 +123,7 @@ jobs:
         run: |
           mkdir browser
           tar -xzf release/maiko-browser.tar.gz -C browser
-          cp browser/kits/linux.zip release/maiko-runtime-kit-linux.zip
-          cp browser/kits/windows.zip release/maiko-runtime-kit-windows.zip
+          for target in linux windows macos; do cp "browser/kits/$target.zip" "release/maiko-runtime-kit-$target.zip"; done
           cp LICENSE release/LICENSE
           cp docs/client-builder.md release/README.md
           cd release
