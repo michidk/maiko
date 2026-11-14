@@ -29,6 +29,31 @@ const STOPPED: u32 = 3;
 /// Opaque non-zero handle; the original only passes it back.
 const HANDLE: u32 = 0x5244_4231;
 
+/// The 12-byte sync pattern that begins every CD-ROM data sector; scrambling leaves it intact.
+const SYNC: [u8; 12] = [
+    0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0,
+];
+
+/// Silences CD-ROM data-sector bytes at the start of an audio track's PCM and returns how many
+/// bytes were zeroed. The GOG image's track 2 begins with the overlapping tail of the data track,
+/// which plays as a loud burst. Muting runs through the last of a contiguous chain of sync-marked
+/// sectors and keeps the track's length and timing. (Same as Cyrus' `cyrus_assets::disc`.)
+fn mute_leading_data_sectors(pcm: &mut [u8]) -> usize {
+    let sector = SECTOR as usize;
+    let mut end = 0;
+    // The first sector may start mid-sector, so the first search spans a whole sector.
+    while let Some(offset) = pcm
+        .get(end..(end + sector).min(pcm.len()))
+        .and_then(|window| window.windows(SYNC.len()).position(|bytes| bytes == SYNC))
+    {
+        end = (end + offset + sector).min(pcm.len());
+    }
+    // Whole stereo 16-bit frames only.
+    let end = end.next_multiple_of(4).min(pcm.len());
+    pcm[..end].fill(0);
+    end
+}
+
 /// The image files a cue sheet names, in order, each with the start (`INDEX 01`) of its tracks in
 /// sectors from the start of that file. A single image for the whole disc (GOG `game.ins`) and a rip
 /// with a file per track (Redump) are both one list of files. Tracks are numbered 1, 2, ... in order.
@@ -165,6 +190,8 @@ struct Playing {
     track: u32,
     /// Next sector to read and the sector the range ends before.
     next: u64,
+    /// The range starts at its track's start, where an image may hold data-sector bytes.
+    track_start: bool,
     end: u64,
     chunk: Vec<u8>,
     chunk_at: usize,
@@ -210,6 +237,7 @@ impl Player {
             paused: false,
             track: disc.track_at(start),
             next: start,
+            track_start: disc.bounds.contains(&start),
             end,
             chunk: Vec::new(),
             chunk_at: 0,
@@ -240,6 +268,14 @@ impl Player {
                 match disc.read(playing.next, &mut playing.chunk) {
                     Ok(n) if n > 0 => {
                         playing.chunk.truncate(n / 4 * 4);
+                        if std::mem::take(&mut playing.track_start) {
+                            let muted = mute_leading_data_sectors(&mut playing.chunk);
+                            if muted > 0 {
+                                rg_log!(
+                                    "CD music: muted {muted} bytes of data sectors at the track start"
+                                );
+                            }
+                        }
                         playing.next += (n as u64).div_ceil(SECTOR);
                     }
                     _ => {
@@ -398,6 +434,24 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leading_data_sectors_are_muted_and_audio_is_kept() {
+        let sector = SECTOR as usize;
+        // GOG track 2 layout: sync-marked sectors at bytes 24 and 2376, then audio.
+        let mut pcm = vec![7u8; 6 * sector];
+        for start in [24, 24 + sector] {
+            pcm[start..start + SYNC.len()].copy_from_slice(&SYNC);
+        }
+        assert_eq!(mute_leading_data_sectors(&mut pcm), 4728);
+        assert!(pcm[..4728].iter().all(|byte| *byte == 0));
+        assert!(pcm[4728..].iter().all(|byte| *byte == 7));
+        let mut audio = vec![7u8; 3 * sector];
+        assert_eq!(mute_leading_data_sectors(&mut audio), 0);
+        // A sync mark beyond the first sector is not part of a leading chain.
+        audio[sector + 100..sector + 100 + SYNC.len()].copy_from_slice(&SYNC);
+        assert_eq!(mute_leading_data_sectors(&mut audio), 0);
+    }
 
     const CUE: &str = "FILE \"game.gog\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 51:59:71\n  TRACK 03 AUDIO\n    INDEX 01 57:45:00\n";
 
