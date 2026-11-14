@@ -1,14 +1,14 @@
 {
   "linux": {
-    "url": "https://github.com/michidk/maiko/releases/download/client-runtime-20261114/linux.zip",
+    "url": "https://github.com/michidk/maiko/releases/download/v0.2.2/maiko-runtime-kit-linux.zip",
     "sha256": "6bb99f0ea0214740192d7fd44652480769f039e80d833c5761c021c7cdb52855"
   },
   "windows": {
-    "url": "https://github.com/michidk/maiko/releases/download/client-runtime-20261114/windows.zip",
+    "url": "https://github.com/michidk/maiko/releases/download/v0.2.2/maiko-runtime-kit-windows.zip",
     "sha256": "31699f4d6ce649ecf600043d755f41ae281412e4beb8240db0661f0037ce175e"
   },
   "macos": {
-    "url": "https://github.com/michidk/maiko/releases/download/client-runtime-20261114/macos.zip",
+    "url": "https://github.com/michidk/maiko/releases/download/v0.2.2/maiko-runtime-kit-macos.zip",
     "sha256": "a5f7afc29142f73239c716707bd4c0ca762a3d7acc5f2f7559f208a73d31ff78"
   }
 }

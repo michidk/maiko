@@ -53,8 +53,8 @@ Use Bun, Rust's `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.129:
 ```sh
 bun install --frozen-lockfile
 bun test web
-gh release download client-runtime-20261113 --repo michidk/maiko \
-  --pattern linux.zip --pattern windows.zip --pattern macos.zip --dir .cache/site-kits
+gh release download v0.2.2 --repo michidk/maiko --pattern 'maiko-runtime-kit-*.zip' --dir .cache/site-kits
+# Name them linux.zip, windows.zip and macos.zip.
 MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
 ```
 
@@ -68,7 +68,7 @@ MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
 One command builds the Linux, Windows and macOS kits from an owned `RGFX.EXE`, with the same arguments and outputs for every system:
 
 ```sh
-python3 -m tools.build_kits --exe /path/to/RGFX.EXE --output kits --tag client-runtime-YYYYMMDD
+python3 -m tools.build_kits --exe /path/to/RGFX.EXE --output kits --tag vX.Y.Z
 ```
 
 Inputs: the accepted original executable (the SHA-256 is checked), a new `--output` folder, the release tag the kits will be published under, and `wasmtime` on `PATH` (or `--wasmtime`). The build host needs Docker, Bun, Rust with `rustup`, `wasm-bindgen-cli` 0.2.129, Git, curl, patch, tar, CMake, Ninja and a native C++ compiler. Keep at least 60 GB free, run one build at a time and expect a long run: the Mac backend check alone takes about 10 minutes and 9 GB of memory. The first run also builds the Windows/Linux tools and, if `.cache/client-macos-toolchain` is missing, the Mac compilers (`maiko-kit tools-macos`: checksum-pinned LLVM 19.1.0, WASI SDK 29 and browser-d sources, SR/LLasm, `opt`, `llc` and Mach-O LLD for WebAssembly), which is the slowest step.
@@ -82,11 +82,11 @@ Each kit is proven by building a package from it. Linux and Windows run the real
 
 The SDL, GL and notice files that have no source in the repository come from the pinned seed kits in `platforms/kit-seed.json`; the Mac notices (`LICENSES.txt`) come from the seed Mac kit. Update the seed pins when a kit is deliberately published with new support libraries or notices.
 
-To publish, create the release `client-runtime-YYYYMMDD` and upload the three ZIPs under their asset names, then copy the pins:
+Kits are published only as assets of a versioned `vX.Y.Z` release, like everything else. Every release carries the pinned kits forward, so a release without kit changes needs nothing. After a kit changes, upload the three ZIPs to the latest release under their asset names and copy the pins:
 
 ```sh
 for target in linux windows macos; do cp kits/$target.zip kits/maiko-runtime-kit-$target.zip; done
-gh release create client-runtime-YYYYMMDD --repo michidk/maiko --title client-runtime-YYYYMMDD \
+gh release upload vX.Y.Z --repo michidk/maiko --clobber \
   kits/maiko-runtime-kit-linux.zip kits/maiko-runtime-kit-windows.zip kits/maiko-runtime-kit-macos.zip
 cp kits/kits.json web/kits.json
 ```
