@@ -42,7 +42,8 @@ A kit holds everything needed to turn an owned `RGFX.EXE` into the native game, 
 
 - **Compilers**, built for WebAssembly: SR (the static recompiler), NASM and LLVM's LLD linker. The Mac kit adds SR's LLasm output, the browser D compiler, LLVM `opt` and `llc`.
 - **Link inputs**: C runtime start files, system import libraries, the Rust host and SR's heap and audio objects. The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
-- **The packaged runtime**: the renderer, SDL and (on Linux) GL libraries, licence notices and corresponding source.
+- **The packaged runtime**: the renderer, SDL and (on Linux) GL libraries and licence notices.
+- **Renderer source** in `source/`: OpenGLide is LGPL, so the kit, which is what a release distributes, carries its corresponding source and build files. Generated packages leave it out.
 
 The browser or CLI checks the executable, translates it with SR, assembles the four engine objects with NASM (Mac: compiles them with LLVM for both architectures) and links them with LLD into the program. Browser and CLI produce byte-identical executables. Changed or unrecognized executables fail validation before anything is built.
 
@@ -87,7 +88,7 @@ Each release contains:
 
 - `maiko-patcher-linux-x86_64.tar.gz` and `maiko-patcher-windows-x86_64.tar.gz`: standalone CLI, licence and usage instructions. Wasmtime is installed separately. The Linux CLI is statically linked with musl; the runtime kit has its own desktop and glibc requirements above.
 - `maiko-browser.tar.gz`: the complete static builder, including its checked support kits.
-- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`: the kits this release built and the browser serves, with their upstream notices and corresponding source files. The Linux and Windows kits also work with the CLI's `--kit` option.
+- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`: the kits this release built and the browser serves, with their upstream notices and the renderer's corresponding source. The Linux and Windows kits also work with the CLI's `--kit` option.
 - `SHA256SUMS`, `LICENSE` and `README.md`.
 
 The workflow stages all assets in a draft and publishes only after uploads succeed. Retrying preserves an already published release. After publication, Pages deploys the browser from that release, so one run of **Bump version and tag** builds, releases and deploys everything.

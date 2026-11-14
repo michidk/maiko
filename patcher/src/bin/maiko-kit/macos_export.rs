@@ -183,9 +183,11 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
     if !package_files.iter().any(|name| name == "LICENSES.txt") {
         return Err("Runtime needs complete licence notices".into());
     }
-    let source_name = "redguard-macos-renderer-source.zip";
-    files.insert(format!("runtime/{source_name}"), renderer_source(&report)?);
-    package_files.push(source_name.into());
+    // The kit is what we distribute, so the LGPL renderer source travels with it, not the package.
+    files.insert(
+        "source/redguard-macos-renderer-source.zip".into(),
+        renderer_source(&report)?,
+    );
     package_files.sort();
     let manifest = Manifest {
         format: maiko_patcher::kit::FORMAT,

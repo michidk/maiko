@@ -28,6 +28,8 @@ TARGETS = ['linux', 'windows', 'macos']
 MACOS_TOOLCHAIN = ROOT / '.cache/client-macos-toolchain'
 # Release assets are named by platform so a tag explains what it holds.
 ASSET = 'maiko-runtime-kit-{}.zip'
+KIT_SOURCE = ('corresponding source and build files are in the source/ folder of the runtime kit this '
+              'package was built from, published with every release at https://github.com/michidk/maiko/releases.')
 RELEASE = 'https://github.com/michidk/maiko/releases/latest/download'
 
 
@@ -61,18 +63,27 @@ def fetch_seed(target):
     return zipfile.ZipFile(io.BytesIO(data))
 
 
-def runtime_directory(target, glide, source_tarball, destination):
+def notices(text):
+    """Point the renderer's source notice at the kit, which carries the source; the package does not."""
+    # shortcut: rewrites the notices carried forward from the release; drop once a release has the new text.
+    for old in ['corresponding source and build scripts accompany this package.',
+                'corresponding source and build files\nare in redguard-macos-renderer-source.zip inside this package.']:
+        text = text.replace(old, KIT_SOURCE)
+    return text
+
+
+def runtime_directory(target, glide, destination):
     destination.mkdir(parents=True)
     with fetch_seed(target) as seed:
         for name in seed.namelist():
             if name.startswith('runtime/') and not name.endswith('/'):
                 leaf = name.removeprefix('runtime/')
-                if leaf.startswith('RUN'):
+                if leaf.startswith('RUN') or leaf.endswith('.tar.gz'):
                     continue
-                (destination / leaf).write_bytes(seed.read(name))
-    # The renderer and its corresponding source are the parts that change per release.
+                data = seed.read(name)
+                (destination / leaf).write_bytes(notices(data.decode()).encode() if leaf == 'LICENSES.txt' else data)
+    # The renderer is the part that changes per release.
     shutil.copyfile(glide, destination / glide.name)
-    shutil.copyfile(source_tarball, destination / 'openglide-source.tar.gz')
 
 
 def source_tarball(destination):
@@ -121,7 +132,7 @@ def macos_kit(scratch, revision, kit_tool, output):
     backend = last_folder([sys.executable, '-m', 'tools.check_macos_backend', '--kit'])
     runtime = backend / 'runtime'
     with fetch_seed('macos') as seed:
-        (runtime / 'LICENSES.txt').write_bytes(seed.read('runtime/LICENSES.txt'))
+        (runtime / 'LICENSES.txt').write_text(notices(seed.read('runtime/LICENSES.txt').decode()))
     sh([kit_tool, 'export-macos', backend, runtime, revision, output])
     return backend
 
@@ -156,8 +167,8 @@ def main():
         inputs = scratch / f'inputs-{target}'
         sh([sys.executable, '-m', 'tools.build_link_inputs', '--target', target, '--output', inputs])
         runtime = scratch / f'runtime-{target}'
-        runtime_directory(target, inputs / 'runtime' / renderer, tarball, runtime)
-        sh([kit_tool, 'export', target, inputs / 'link', runtime, revision, args.output / ASSET.format(target)])
+        runtime_directory(target, inputs / 'runtime' / renderer, runtime)
+        sh([kit_tool, 'export', target, inputs / 'link', runtime, tarball, revision, args.output / ASSET.format(target)])
     backend = macos_kit(scratch, revision, kit_tool, args.output / ASSET.format('macos'))
     shutil.rmtree(backend, ignore_errors=True)
     if args.exe:

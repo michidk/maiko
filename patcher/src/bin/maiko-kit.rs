@@ -114,6 +114,7 @@ fn export(
     target: Target,
     link: &Path,
     runtime: &Path,
+    source: &Path,
     revision: &str,
     output: &Path,
 ) -> Result<()> {
@@ -179,8 +180,7 @@ fn export(
             || !(name.ends_with(".dll")
                 || name.ends_with(".so")
                 || name.contains(".so.")
-                || name.ends_with(".txt")
-                || name.ends_with(".tar.gz"))
+                || name.ends_with(".txt"))
         {
             return Err(format!("Unexpected curated runtime file: {name}").into());
         }
@@ -191,6 +191,11 @@ fn export(
         package_files.push(name.to_owned());
     }
     package_files.sort();
+    // The kit is what we distribute, so the LGPL renderer source travels with it, not the package.
+    files.insert(
+        "source/openglide-source.tar.gz".into(),
+        read_limited(source, 128 * 1024 * 1024)?,
+    );
     let manifest = Manifest {
         format: FORMAT,
         target,
@@ -236,7 +241,7 @@ fn main() -> Result<()> {
         Some("tools-macos") if args.len() == 2 => macos_tools::build(),
         Some("web-tools") if args.len() == 4 => web_tools(Path::new(&args[2]), Path::new(&args[3])),
         Some("export-macos") if args.len() == 6 => macos_export::export(Path::new(&args[2]), Path::new(&args[3]), &args[4], Path::new(&args[5])),
-        Some("export") if args.len() == 7 => export(Target::parse(&args[2])?, Path::new(&args[3]), Path::new(&args[4]), &args[5], Path::new(&args[6])),
-        _ => Err("Usage: maiko-kit tools | tools-macos | web-tools MACOS_KIT DIST_DIRECTORY | export linux|windows LINK_INPUTS CURATED_RUNTIME REVISION OUTPUT.zip | export-macos CHECKED_BUILD CURATED_RUNTIME REVISION OUTPUT.zip".into()),
+        Some("export") if args.len() == 8 => export(Target::parse(&args[2])?, Path::new(&args[3]), Path::new(&args[4]), Path::new(&args[5]), &args[6], Path::new(&args[7])),
+        _ => Err("Usage: maiko-kit tools | tools-macos | web-tools MACOS_KIT DIST_DIRECTORY | export linux|windows LINK_INPUTS CURATED_RUNTIME RENDERER_SOURCE.tar.gz REVISION OUTPUT.zip | export-macos CHECKED_BUILD CURATED_RUNTIME REVISION OUTPUT.zip".into()),
     }
 }
