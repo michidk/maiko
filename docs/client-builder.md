@@ -63,41 +63,35 @@ MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
 `.github/workflows/pages.yml` calls the reusable source-check and browser-build workflows and deploys on main or manual dispatch. Set **Settings → Pages → Source → GitHub Actions** before deploying. The managed GitHub App needs Pages write permission to enable that setting through the API.
 
 
-## Rebuild the Mac compiler kit
+## Build the runtime kits
 
-On a Linux build host, install Bun, Rust, Git, curl, patch, tar, gzip, CMake,
-Ninja and a native C++ compiler. Keep at least 60 GB free and run one build at a
-time. The first compiler build is substantial; its source and object caches stay
-under `.cache/client-macos-toolchain`.
+One command builds the Linux, Windows and macOS kits from an owned `RGFX.EXE`, with the same arguments and outputs for every system:
 
 ```sh
-cargo run --locked --release -p maiko-patcher --bin maiko-kit -- tools-macos
+python3 -m tools.build_kits --exe /path/to/RGFX.EXE --output kits --tag client-runtime-YYYYMMDD
 ```
 
-This downloads checksum-pinned LLVM 19.1.0, WASI SDK 29 and browser-d sources,
-applies the documented patches and builds SR/LLasm, `opt`, `llc` and Mach-O LLD
-for WebAssembly. LLVM includes X86 and AArch64 backends. The D compiler and
-runtime notices accompany the tools. No game input is read by this command.
+Inputs: the accepted original executable (the SHA-256 is checked), a new `--output` folder, the release tag the kits will be published under, and `wasmtime` on `PATH` (or `--wasmtime`). The build host needs Docker, Bun, Rust with `rustup`, `wasm-bindgen-cli` 0.2.129, Git, curl, patch, tar, CMake, Ninja and a native C++ compiler. Keep at least 60 GB free, run one build at a time and expect a long run: the Mac backend check alone takes about 10 minutes and 9 GB of memory. The first run also builds the Windows/Linux tools and, if `.cache/client-macos-toolchain` is missing, the Mac compilers (`maiko-kit tools-macos`: checksum-pinned LLVM 19.1.0, WASI SDK 29 and browser-d sources, SR/LLasm, `opt`, `llc` and Mach-O LLD for WebAssembly), which is the slowest step.
 
-Run the [Mac backend check](../platforms/macos/README.md) with an owned
-translation to obtain the source/runtime objects and build report. Add complete
-runtime notices as described there. Verify a universal executable produced by
-the browser toolchain, then export its kit:
+Outputs in `--output`:
+
+- `linux.zip`, `windows.zip` and `macos.zip`.
+- `kits.json`: pins in the format of `web/kits.json`, pointing at the release assets `maiko-runtime-kit-<target>.zip` under the tag, with each ZIP's SHA-256. The script also prints it.
+
+Each kit is proven by building a package from it. Linux and Windows run the real `maiko-patcher build` on the executable. macOS runs the website's real `web/worker.js` under Bun (`tools/browser_build.mjs`) because the Mac kit pins the hash of a universal executable that only the browser toolchain produces. The script therefore exports a bootstrap Mac kit with a placeholder hash, lets the worker build the universal executable (it ends with "Compiled executable differs from the accepted build" by design), exports the final kit with that executable's hash and runs the worker again. It requires the identical executable and a passing package gate. Generated game code and executables stay in work folders that are removed after success, and a failed build keeps them for diagnosis; delete them yourself afterwards.
+
+The SDL, GL and notice files that have no source in the repository come from the pinned seed kits in `platforms/kit-seed.json`; the Mac notices (`LICENSES.txt`) come from the seed Mac kit. Update the seed pins when a kit is deliberately published with new support libraries or notices.
+
+To publish, create the release `client-runtime-YYYYMMDD` and upload the three ZIPs under their asset names, then copy the pins:
 
 ```sh
-cargo run --locked --release -p maiko-patcher --bin maiko-kit -- export-macos \
-  artifacts/<timestamp>-macos-backend \
-  artifacts/<timestamp>-macos-backend/runtime \
-  /path/to/accepted-universal-executable REVISION macos.zip
+for target in linux windows macos; do cp kits/$target.zip kits/maiko-runtime-kit-$target.zip; done
+gh release create client-runtime-YYYYMMDD --repo michidk/maiko --title client-runtime-YYYYMMDD \
+  kits/maiko-runtime-kit-linux.zip kits/maiko-runtime-kit-windows.zip kits/maiko-runtime-kit-macos.zip
+cp kits/kits.json web/kits.json
 ```
 
-Export checks the native build's source and artifact hashes, selects only the
-fixed runtime object inventory and derives system-library stubs from the native
-executables. It never copies either translated engine into the kit. The
-accepted universal executable supplies only the expected output hash. Confirm a
-fresh build through the real browser worker reproduces that executable before
-publishing the kit and updating `web/kits.json`. A changed executable fails the
-package gate. Keep generated playable packages private.
+Commit the new `web/kits.json` on `main`. Keep generated playable packages private.
 
 ## Versioned releases
 
