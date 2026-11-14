@@ -18,6 +18,8 @@ pub struct Settings {
     pub window_size: String,
     pub skip_intro: bool,
     pub skip_outro: bool,
+    /// `--texture-filter` value; empty for the game's own choice.
+    pub texture_filter: String,
     /// A disc image (cue sheet) for CD music when the game folder has none beside it.
     pub cd_image: Option<PathBuf>,
 }
@@ -67,6 +69,12 @@ impl Settings {
         }
         if self.skip_outro {
             args.push("--skip-outro".into());
+        }
+        if matches!(self.texture_filter.as_str(), "smooth" | "sharp") {
+            args.extend([
+                "--texture-filter".into(),
+                self.texture_filter.clone().into(),
+            ]);
         }
         if let Some(image) = &self.cd_image {
             args.extend(["--cd-image".into(), image.into()]);
@@ -146,6 +154,8 @@ mod tests {
             args(&settings),
             "--game-dir /g --user-dir /u --fullscreen --skip-intro"
         );
+        settings.texture_filter = "sharp".into();
+        assert!(args(&settings).ends_with("--skip-intro --texture-filter sharp"));
     }
 
     #[test]

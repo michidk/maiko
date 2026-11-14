@@ -1,6 +1,7 @@
 //! The launcher window: the original Redguard launcher, recreated, with its artwork read from the
 //! player's `REDGUARD.EXE`. Without that file it shows plain buttons instead.
 use crate::artwork::{Artwork, BUTTON_POSITIONS, Image};
+use crate::font::Font;
 use crate::{locate, picker, settings};
 use egui::{Align2, Color32, Pos2, Rect, Sense, TextureHandle, TextureOptions, Vec2};
 use sdl2::event::{Event, WindowEvent};
@@ -75,6 +76,9 @@ struct App {
     art: Option<Artwork>,
     textures: Option<Textures>,
     sounds: HashMap<String, Chunk>,
+    /// The game's gold menu font for dialog titles, and the titles drawn with it.
+    title_font: Option<Font>,
+    titles: HashMap<&'static str, TextureHandle>,
     dialog: Dialog,
     /// The button under the mouse or chosen with the arrow keys.
     focus: Option<usize>,
@@ -117,6 +121,8 @@ impl App {
             art: None,
             textures: None,
             sounds: HashMap::new(),
+            title_font: None,
+            titles: HashMap::new(),
             dialog: Dialog::None,
             // The original dialog opens with Play Redguard focused, so Enter starts the game.
             focus: Some(0),
@@ -137,6 +143,8 @@ impl App {
 
     fn use_game(&mut self, game: PathBuf) {
         self.art = Artwork::load(&game);
+        self.title_font = Font::load(&game, "FONTSEL.FNT");
+        self.titles.clear();
         self.textures = None;
         self.sounds.clear();
         if let Some(art) = &self.art {
@@ -327,12 +335,29 @@ impl App {
     }
 
     fn dialogs(&mut self, context: &egui::Context) {
+        let name = match self.dialog {
+            Dialog::None => return,
+            Dialog::ChooseGame { .. } => "Find Redguard",
+            Dialog::Options(_) => "Game Options",
+            Dialog::Support => "Technical Support",
+            Dialog::Error(_) => "Something went wrong",
+        };
+        if let Some(font) = &self.title_font
+            && !self.titles.contains_key(name)
+        {
+            self.titles
+                .insert(name, texture(context, name, &font.render(name)));
+        }
+        let title = Title {
+            text: name,
+            texture: self.titles.get(name).cloned(),
+        };
         let mut close = false;
         let mut choose = None;
         match &mut self.dialog {
             Dialog::None => {}
             Dialog::ChooseGame { typed, error } => {
-                dialog(context, "Find Redguard", |ui| {
+                dialog(context, &title, |ui| {
                     ui.label("Maiko could not find your Redguard installation. Choose the folder that contains RGFX.EXE, or the GOG folder around it.");
                     ui.add_space(12.0);
                     if primary(ui, "Browse…").clicked()
@@ -367,7 +392,7 @@ impl App {
             }
             Dialog::Options(draft) => {
                 let mut save = false;
-                dialog(context, "Game Options", |ui| {
+                dialog(context, &title, |ui| {
                     section(ui, "Display");
                     row(
                         ui,
@@ -379,9 +404,22 @@ impl App {
                     );
                     row(ui, "Window size", "Used when not in fullscreen", |ui| {
                         ui.add_enabled_ui(!draft.fullscreen, |ui| {
-                            window_sizes(ui, &mut draft.window_size)
+                            choice(ui, "window size", &mut draft.window_size, &WINDOW_SIZES)
                         });
                     });
+                    row(
+                        ui,
+                        "Textures",
+                        "Original is the game's own soft, filtered look",
+                        |ui| {
+                            choice(
+                                ui,
+                                "texture filter",
+                                &mut draft.texture_filter,
+                                &TEXTURE_FILTERS,
+                            );
+                        },
+                    );
                     section(ui, "Movies");
                     row(
                         ui,
@@ -394,7 +432,7 @@ impl App {
                     row(
                         ui,
                         "Skip the outro",
-                        "The ending returns to the menu at once",
+                        "Quit closes the book without its animation",
                         |ui| {
                             toggle(ui, &mut draft.skip_outro);
                         },
@@ -456,7 +494,7 @@ impl App {
                     .map(PathBuf::from)
                     .map_or_else(settings::log_directory, Ok)
                     .ok();
-                dialog(context, "Technical Support", |ui| {
+                dialog(context, &title, |ui| {
                     ui.label("Every start of the game writes a log. If something goes wrong, open an issue and attach the newest log.");
                     if let Some(logs) = &logs {
                         ui.add_space(8.0);
@@ -483,7 +521,7 @@ impl App {
                 });
             }
             Dialog::Error(text) => {
-                dialog(context, "Something went wrong", |ui| {
+                dialog(context, &title, |ui| {
                     ui.label(text.as_str());
                     footer(ui, |ui| {
                         if primary(ui, "OK").clicked() {
@@ -577,9 +615,15 @@ fn muted(text: &str) -> egui::RichText {
     egui::RichText::new(text).color(MUTED).size(12.5)
 }
 
+/// A dialog's title: drawn in the game's menu font when the installation has it.
+struct Title {
+    text: &'static str,
+    texture: Option<TextureHandle>,
+}
+
 /// A centred dialog with a gold title and rule; the main screen is dimmed behind it.
-fn dialog(context: &egui::Context, title: &str, contents: impl FnOnce(&mut egui::Ui)) {
-    egui::Window::new(title)
+fn dialog(context: &egui::Context, title: &Title, contents: impl FnOnce(&mut egui::Ui)) {
+    egui::Window::new(title.text)
         .title_bar(false)
         .collapsible(false)
         .resizable(false)
@@ -593,7 +637,14 @@ fn dialog(context: &egui::Context, title: &str, contents: impl FnOnce(&mut egui:
                 .inner_margin(egui::Margin::symmetric(20, 16)),
         )
         .show(context, |ui| {
-            ui.label(egui::RichText::new(title).size(22.0).color(GOLD));
+            match &title.texture {
+                Some(texture) => {
+                    ui.add(egui::Image::new(texture).fit_to_original_size(1.0));
+                }
+                None => {
+                    ui.label(egui::RichText::new(title.text).size(22.0).color(GOLD));
+                }
+            }
             ui.add_space(2.0);
             let line = ui.available_rect_before_wrap();
             ui.painter()
@@ -704,20 +755,27 @@ const WINDOW_SIZES: [(&str, &str); 6] = [
     ("2560x1920", "2560 × 1920"),
 ];
 
-fn window_sizes(ui: &mut egui::Ui, size: &mut String) {
-    let current = WINDOW_SIZES
+const TEXTURE_FILTERS: [(&str, &str); 3] = [
+    ("", "Original"),
+    ("smooth", "Always smooth"),
+    ("sharp", "Sharp pixels"),
+];
+
+/// A drop-down of `(setting value, label)` choices; an unknown stored value is shown as itself.
+fn choice(ui: &mut egui::Ui, id: &str, value: &mut String, choices: &[(&str, &str)]) {
+    let current = choices
         .iter()
-        .find(|(value, _)| value == size)
+        .find(|(choice, _)| choice == value)
         .map_or_else(
-            || size.replace('x', " × "),
+            || value.replace('x', " × "),
             |(_, label)| (*label).to_owned(),
         );
-    egui::ComboBox::from_id_salt("window size")
+    egui::ComboBox::from_id_salt(id)
         .selected_text(current)
         .width(170.0)
         .show_ui(ui, |ui| {
-            for (value, label) in WINDOW_SIZES {
-                ui.selectable_value(size, value.to_owned(), label);
+            for (choice, label) in choices {
+                ui.selectable_value(value, (*choice).to_owned(), *label);
             }
         });
 }

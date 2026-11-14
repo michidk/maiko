@@ -6,6 +6,7 @@
 #[cfg(feature = "app")]
 pub mod app;
 pub mod artwork;
+pub mod font;
 pub mod locate;
 pub mod picker;
 pub mod settings;
