@@ -184,7 +184,23 @@ impl Input {
         if self.window.is_none() {
             sdl2::hint::set("SDL_NO_SIGNAL_HANDLERS", "1");
             let sdl = sdl2::init()?;
-            let video = sdl.video()?;
+            let video = sdl.video().or_else(|error| {
+                let driver = std::env::var("SDL_VIDEODRIVER").unwrap_or_default();
+                if !x11_fallback(cfg!(target_os = "linux"), &driver) {
+                    return Err(error);
+                }
+                // The Linux package's SDL has only X11; a desktop-wide SDL_VIDEODRIVER=wayland
+                // would otherwise stop the game although XWayland is running.
+                rg_log!(
+                    "SDL video driver {driver:?} failed ({error}); using X11 (XWayland) instead"
+                );
+                sdl2::hint::set_with_priority(
+                    "SDL_VIDEODRIVER",
+                    "x11",
+                    &sdl2::hint::Hint::Override,
+                );
+                sdl.video()
+            })?;
             let gl = video.gl_attr();
             gl.set_context_profile(GLProfile::Compatibility);
             gl.set_context_version(2, 1);
@@ -405,6 +421,11 @@ fn window_failed(error: &str) -> ! {
     crate::host::exit_cleanly(1)
 }
 
+/// Whether a failed video start under the requested `SDL_VIDEODRIVER` is retried with X11.
+fn x11_fallback(linux: bool, driver: &str) -> bool {
+    linux && !driver.is_empty() && !driver.eq_ignore_ascii_case("x11")
+}
+
 /// The Linux package's SDL has only the X11 video driver (XWayland covers Wayland desktops).
 fn window_hint(linux: bool, display: bool, wayland: bool) -> &'static str {
     match (linux, display, wayland) {
@@ -532,6 +553,15 @@ mod tests {
         assert!(window_hint(true, false, true).contains("XWayland in your compositor"));
         assert!(window_hint(true, false, false).contains("DISPLAY is not set"));
         assert!(window_hint(true, true, true).contains("OpenGL"));
+    }
+
+    #[test]
+    fn a_requested_driver_other_than_x11_falls_back_to_x11_on_linux() {
+        assert!(x11_fallback(true, "wayland"));
+        assert!(x11_fallback(true, "wayland,x11"));
+        assert!(!x11_fallback(true, ""));
+        assert!(!x11_fallback(true, "X11"));
+        assert!(!x11_fallback(false, "wayland"));
     }
 
     #[test]
