@@ -10,6 +10,7 @@ use maiko_runtime::{
 use std::cell::RefCell;
 use std::ffi::{c_int, c_void};
 use std::io::Write;
+use std::time::{Duration, Instant};
 #[repr(C)]
 struct Texture {
     small: i32,
@@ -53,6 +54,27 @@ struct Bridge {
     frame: u32,
     swaps: u32,
     was_flat: bool,
+    last_swap: Option<Instant>,
+}
+impl Bridge {
+    /// The original waited for a 60 Hz retrace on every swap, and several animations (flames, the
+    /// free-look camera) advance once per drawn frame. Faster displays or disabled vsync would run
+    /// them too fast, so never swap more often than 60 times per second.
+    fn pace_swap(&mut self) {
+        const FRAME: Duration = Duration::from_micros(16_667);
+        if let Some(last) = self.last_swap {
+            let target = last + FRAME;
+            if let Some(wait) = target.checked_duration_since(Instant::now()) {
+                if wait > Duration::from_millis(2) {
+                    std::thread::sleep(wait - Duration::from_millis(1));
+                }
+                while Instant::now() < target {
+                    std::hint::spin_loop();
+                }
+            }
+        }
+        self.last_swap = Some(Instant::now());
+    }
 }
 impl Default for Bridge {
     fn default() -> Self {
@@ -64,6 +86,7 @@ impl Default for Bridge {
             frame: 0,
             swaps: 0,
             was_flat: false,
+            last_swap: None,
         }
     }
 }
@@ -318,6 +341,7 @@ impl Bridge {
                         draw_overlay();
                     }
                     grBufferSwap(a[0]);
+                    self.pace_swap();
                 }
                 94 => {
                     let info = texture(a[3]);

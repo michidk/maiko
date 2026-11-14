@@ -441,8 +441,12 @@ impl Audio {
                         {
                             return false;
                         }
-                        sample.length = a[3];
-                        Game_AIL_set_sample_address(handle, guest_ptr::<c_void>(a[2]), a[3]);
+                        // With fidelity=1 the game tags 8-bit data as 16-bit; Miles drops the odd trailing byte.
+                        let stride = (if sample.format & 1 != 0 { 2 } else { 1 })
+                            * (if sample.format & 2 != 0 { 2 } else { 1 });
+                        let length = a[3] - a[3] % stride;
+                        sample.length = length;
+                        Game_AIL_set_sample_address(handle, guest_ptr::<c_void>(a[2]), length);
                     }
                     5 => {
                         if !(512..=44000).contains(&a[2]) || Game_AIL_sample_status(handle) == 4 {
