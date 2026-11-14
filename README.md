@@ -109,6 +109,7 @@ The right stick, triggers, vibration and controller-specific remapping are not i
 redguard-native [--game-dir FOLDER | --choose-game-dir] [--user-dir FOLDER] [--cd-image PATH]
                 [--fullscreen | --window-size WIDTHxHEIGHT]
                 [--skip-intro] [--skip-outro] [--load-save N]
+                [--texture-filter original|smooth|sharp]
 ```
 
 These are the options of the game itself, `redguard-native`, which the launcher starts with the settings from Game Options. You can also start it directly. Every option is optional. With none, the program finds the game and starts the original book menu. An unknown option, or a missing or invalid value, makes the program print this usage line and exit with code 1. On Windows, to use options without a terminal, make a shortcut to `redguard-native.exe` and add them after the path in the shortcut's **Target**; from a terminal, add them to the command, for example:
@@ -127,6 +128,7 @@ redguard-native.exe --fullscreen --skip-intro --load-save 1
 | `--window-size WIDTHxHEIGHT` | A window of this size, from 320x240 to 8192x8192, for example `--window-size 1600x1200`. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. Without either window option the window has the game's own size. |
 | `--skip-intro` | New Game starts on the ship without the intro movie. |
 | `--skip-outro` | Quitting from the book skips the book-closing animation. |
+| `--texture-filter MODE` | How textures are filtered. `original` (the default) does what the game asks: bilinear filtering, the soft look of the 3dfx original, with point sampling where the game requests it. `smooth` filters every texture bilinearly; `sharp` point-samples every texture for crisp pixels. The launcher offers the same choice under **Textures**. |
 | `--load-save N` | Load save slot `N` (0 to 999; the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message if that save does not exist. |
 
 Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.

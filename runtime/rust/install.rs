@@ -25,6 +25,14 @@ const ALTERNATE: &str = "06d7a399cf01eec6bca3be39aaab1a39c42dc88116b6b74ae6f5f05
 /// instructions, so it runs as variant 0.
 const BUILD5: &str = "900cbfe2d586a7d80796763b1449ba050f8517b7fc7cc4742710c11e46455a31";
 
+/// `--texture-filter`: the game's own per-draw choice (the default), always bilinear, or always
+/// point-sampled. Read by the Glide bridge for every grTexFilterMode.
+pub static TEXTURE_FILTER: std::sync::atomic::AtomicU8 =
+    std::sync::atomic::AtomicU8::new(TEXTURE_ORIGINAL);
+pub const TEXTURE_ORIGINAL: u8 = 0;
+pub const TEXTURE_SMOOTH: u8 = 1;
+pub const TEXTURE_SHARP: u8 = 2;
+
 #[derive(Default)]
 struct Selection {
     game: Option<PathBuf>,
@@ -34,6 +42,7 @@ struct Selection {
     skip_intro: bool,
     skip_outro: bool,
     load_save: Option<u16>,
+    texture_filter: Option<u8>,
 }
 impl Selection {
     fn parse(args: impl IntoIterator<Item = OsString>) -> io::Result<Self> {
@@ -68,6 +77,16 @@ impl Selection {
                 }
                 "--skip-outro" if !result.skip_outro => {
                     result.skip_outro = true;
+                    continue;
+                }
+                "--texture-filter" if result.texture_filter.is_none() => {
+                    let filter = match args.next().as_deref().and_then(|a| a.to_str()) {
+                        Some("original") => TEXTURE_ORIGINAL,
+                        Some("smooth") => TEXTURE_SMOOTH,
+                        Some("sharp") => TEXTURE_SHARP,
+                        _ => return Err(storage::denied()),
+                    };
+                    result.texture_filter = Some(filter);
                     continue;
                 }
                 "--load-save" if result.load_save.is_none() => {
@@ -243,6 +262,9 @@ fn select(selection: Selection) -> io::Result<()> {
         rg_skip_outro = u32::from(selection.skip_outro || rg_exe_variant == 1);
         rg_load_save = selection.load_save.map_or(-1, i32::from);
     }
+    if let Some(filter) = selection.texture_filter {
+        TEXTURE_FILTER.store(filter, std::sync::atomic::Ordering::Relaxed);
+    }
     // The installer writes the CD drive letter into SYSTEM.INI; the saves folder holds the copy in use.
     let system_ini = storage::STORAGE
         .lock()
@@ -281,7 +303,7 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
                 unsafe { storage::path_from_c(arg) }.map(PathBuf::into_os_string)
             })
             .collect::<io::Result<Vec<_>>>()?;
-        let selection=Selection::parse(args).inspect_err(|_| rg_log!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image DISC_IMAGE_CUE_OR_FOLDER] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
+        let selection=Selection::parse(args).inspect_err(|_| rg_log!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image DISC_IMAGE_CUE_OR_FOLDER] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT] [--texture-filter original|smooth|sharp]"))?;
         select(selection)
     })();
     if let Err(e) = &result {
@@ -329,6 +351,8 @@ mod tests {
             vec!["--load-save", "1000"],
             vec!["--load-save", "-1"],
             vec!["--load-save", "1", "--load-save", "2"],
+            vec!["--texture-filter", "blurry"],
+            vec!["--texture-filter", "sharp", "--texture-filter", "smooth"],
         ] {
             assert!(Selection::parse(args.into_iter().map(OsString::from)).is_err());
         }
@@ -341,6 +365,8 @@ mod tests {
         )
         .unwrap();
         assert!(selected.skip_intro && selected.skip_outro);
+        let selected = Selection::parse(["--texture-filter", "sharp"].map(OsString::from)).unwrap();
+        assert_eq!(selected.texture_filter, Some(TEXTURE_SHARP));
         assert_eq!(selected.load_save, Some(7));
     }
 

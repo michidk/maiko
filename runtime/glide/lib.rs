@@ -311,7 +311,17 @@ impl Bridge {
                 23 => grDepthBufferFunction(a[0]),
                 25 => grDepthMask(a[0]),
                 22 => grDepthBiasLevel(a[0]),
-                86 => grTexFilterMode(a[0], a[1], a[2]),
+                86 => {
+                    // --texture-filter: the game's choice, or always bilinear (1) or point (0).
+                    use maiko_runtime::install::{TEXTURE_FILTER, TEXTURE_SHARP, TEXTURE_SMOOTH};
+                    let (min, mag) = match TEXTURE_FILTER.load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        TEXTURE_SMOOTH => (1, 1),
+                        TEXTURE_SHARP => (0, 0),
+                        _ => (a[1], a[2]),
+                    };
+                    grTexFilterMode(a[0], min, mag);
+                }
                 77 => {
                     self.clamp = [a[0], a[1], a[2]];
                     self.apply_clamp();
