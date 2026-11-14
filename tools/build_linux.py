@@ -22,7 +22,8 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('translation',type=Path)
     p.add_argument('--install',type=Path,required=True)
-    p.add_argument('--menu-autosave',type=Path,required=True)
+    p.add_argument('--menu-autosave',type=Path)
+    p.add_argument('--link-only',action='store_true',help='Stop after the tested build; skip the game scenarios (needs only RGFX.EXE in --install)')
     p.add_argument('--test-image',type=Path,help='Use either recognized original image in the disposable scenario')
     p.add_argument('--cd-image',type=Path,help='Owned ISO or MODE1/2352 image for the original movie regression')
     p.add_argument('--installed-gog',action='store_true',help='Test automatic movies from the installed GOG layout without a runtime media argument')
@@ -38,6 +39,7 @@ def main():
     p.add_argument('--keep-container',action='store_true',help='Retain the bounded development container for follow-up diagnosis')
     p.add_argument('--save-roundtrip',action='store_true',help='Verify original autosave/reload with the supplied stable noncombat save')
     a=p.parse_args()
+    if not a.link_only and not a.menu_autosave:p.error('--menu-autosave is required unless --link-only')
     if a.installed_gog and a.cd_image:p.error('Choose installed GOG or explicit media')
     if a.installed_gog and not a.movie_skip:p.error('--installed-gog requires --movie-skip')
     if a.movie_skip and not (a.cd_image or a.installed_gog):p.error('--movie-skip requires --installed-gog or --cd-image')
@@ -81,7 +83,7 @@ def main():
         rust_runtime=build_rust_runtime('x86_64-unknown-linux-gnu')
         rust_host=build_rust_runtime('x86_64-unknown-linux-gnu',component='host')
         run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
-             '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','1800' if a.keep_container else '480'])
+             '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '1800' if a.keep_container else '480'])
         if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
         run(['docker','exec',name,'mkdir','/src'])
         subprocess.run(['docker','exec','-i',name,'tar','-x','-C','/src'],input=archive,check=True)
@@ -99,13 +101,16 @@ def main():
         report['sr_audio']=stage_sr_audio(name)
         setup=time.monotonic()
         with (output/'build.log').open('w') as log:
-            run(['docker','exec',name,'timeout','240','sh','-c','sh /linux/build_backend.sh && sh /linux/build_runtime.sh'],stdout=log,stderr=subprocess.STDOUT)
+            run(['docker','exec',name,'timeout','1800' if a.link_only else '240','sh','-c',('export MAIKO_LINK_ONLY=1; ' if a.link_only else '')+'sh /linux/build_backend.sh && sh /linux/build_runtime.sh'],stdout=log,stderr=subprocess.STDOUT)
         report['build_test_seconds']=round(time.monotonic()-setup,3)
         report['original_function_tests_verified']=True
         for file in ['redguard-native','libredguard-glide.so','linux.map','linux-symbols.txt','linux-dependencies.txt']:
             run(['docker','cp',name+':/work/'+file,str(output/file)])
         report['exe_sha256']=hashlib.sha256((output/'redguard-native').read_bytes()).hexdigest()
         report['renderer_sha256']=hashlib.sha256((output/'libredguard-glide.so').read_bytes()).hexdigest()
+        if a.link_only:
+            report['status']='linked'
+            return
         run(['docker','cp',str(a.menu_autosave.resolve()),name+':/work/menu-autosave.sav'])
         run(['docker','exec',name,'python3','/tests/prepare_menu_scenario.py']+(['--sound'] if a.sound else [])+(['--redbook'] if a.redbook else []))
         report['scenario_sound_enabled']=a.sound

@@ -12,21 +12,23 @@ link() {
       -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -lwinpthread -luser32 -lshell32 -lole32 \
       -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp
 }
+# Checks that read a real game folder are skipped when only RGFX.EXE is available (release kit builds).
+needs_game() { [ -n "${MAIKO_LINK_ONLY:-}" ] || "$@"; }
 wine_run() { env SDL_AUDIODRIVER=dummy WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine /usr/lib/wine/wine64 "$@"; }
 $cc /tests/menu_keys.c -o menu-keys.exe
 mkdir -p 'native game files'
 link /tests/crash_reporting.c -o crash-reporting-test.exe
 python3 /tests/check_crash_reporting.py
 link /tests/game_install.c -o 'native game files/install-test.exe'
-wine_run 'native game files/install-test.exe'
+needs_game wine_run 'native game files/install-test.exe'
 link /tests/game_directory_dialog.c -o dialog-test.exe
-env WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 dialog-test.exe
+needs_game env WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 dialog-test.exe
 nasm -f win64 -I/support/ -DABI_TEST native_entry.asm -o abi.obj
 nasm -f win64 -I/support/ /tests/abi_harness.asm -o abi_test.obj
 link /tests/abi_harness.c abi.obj abi_test.obj -o abi-test.exe
 wine_run abi-test.exe
 link /tests/runtime_io.c -o io-test.exe
-(cd /game && wine_run /work/io-test.exe)
+needs_game sh -c 'cd /game && WINEPREFIX=/tmp/rg-wine WINEDEBUG=-all SDL_AUDIODRIVER=dummy /usr/lib/wine/wine64 /work/io-test.exe'
 link /tests/platform_services.c -o platform-test.exe
 wine_run platform-test.exe
 link /tests/sdl_input.c -o input-test.exe
@@ -61,6 +63,7 @@ for name in input numeric heap directory clip rob_vertex file_read animation_fla
     case "$name" in
         input) env SDL_AUDIODRIVER=dummy WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 original-$name-test.exe ;;
         close) xvfb-run -a python3 /tests/check_original_shutdown.py --wine ;;
+        file_read) needs_game wine_run original-$name-test.exe ;;
         *) wine_run original-$name-test.exe ;;
     esac
 done

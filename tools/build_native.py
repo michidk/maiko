@@ -21,6 +21,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('work', type=Path)
     p.add_argument('--install', type=Path, required=True)
+    p.add_argument('--link-only',action='store_true',help='Stop after the tested build; skip all game runs (needs only RGFX.EXE in --install)')
     p.add_argument('--menu-autosave', type=Path, help='Use a copied save as slot001 in a disposable scenario with sound/CD audio disabled')
     p.add_argument('--run-seconds',type=int,default=45,choices=range(1,181),metavar='1..180')
     p.add_argument('--cd-image',type=Path,help='Owned ISO or MODE1/2352 image for the original movie regression')
@@ -66,7 +67,7 @@ def main():
         rust_runtime=build_rust_runtime('x86_64-pc-windows-gnu')
         rust_host=build_rust_runtime('x86_64-pc-windows-gnu',component='host')
         run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
-             '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','600'])
+             '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '600'])
         for file in work.glob('*'):
             if file.suffix in ['.asm','.inc','.h']: run(['docker','cp',str(file),name+':/work/'+file.name])
         for directory,destination in [(ROOT/'runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support'),(ROOT/'glide','/work'),(ROOT/'.cache/glide/include','/glide-sdk')]:
@@ -86,9 +87,9 @@ def main():
         report['sr_heap']=stage_sr_heap(name)
         report['sr_audio']=stage_sr_audio(name)
         report['sdl_audio']=stage_windows_sdl(name)
-        commands = 'sh /work/build_runtime.sh'
+        commands = ('MAIKO_LINK_ONLY=1 ' if a.link_only else '')+'sh /work/build_runtime.sh'
         with (work/'native-build.log').open('w') as log:
-            run(['docker','exec',name,'timeout','360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
+            run(['docker','exec',name,'timeout','1800' if a.link_only else '360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
         report['native_build_status']='linked'
         report['wine_crash_dispatch_tests_verified']=True
         report['wine_translated_fault_reports_verified']=True
@@ -99,6 +100,10 @@ def main():
         for filename in ['redguard-native.exe','native.map','native-symbols.txt','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
             run(['docker','cp',name+':/work/'+filename,str(work/filename)])
         report['native_exe_sha256']=hashlib.sha256((work/'redguard-native.exe').read_bytes()).hexdigest()
+        if a.link_only:
+            report['native_build_status']='linked'
+            print(work)
+            return 0
         game_directory='Z:\\game'
         if a.menu_autosave:
             autosave=a.menu_autosave.resolve()

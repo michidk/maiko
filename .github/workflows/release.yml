@@ -46,14 +46,55 @@ jobs:
             test "$actual" = "$version"
           done
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
+  kits:
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: '1.90.0'
+          targets: x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: kits
+      - name: Install Wasmtime
+        run: |
+          archive=wasmtime-v37.0.3-x86_64-linux.tar.xz
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/bytecodealliance/wasmtime/releases/download/v37.0.3/$archive"
+          echo "0107351ed1f2c141c4069b110cff5fdb937d73cdcb29e3ecf66ed967717fdf5a  $RUNNER_TEMP/$archive" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/wasmtime-v37.0.3-x86_64-linux" >> "$GITHUB_PATH"
+      - name: Fetch the original executable
+        # RGFX_EXE_URL is a private download link for your own copy of RGFX.EXE. The build checks its SHA-256.
+        env:
+          RGFX_EXE_URL: ${{ secrets.RGFX_EXE_URL }}
+        run: |
+          [[ -n "$RGFX_EXE_URL" ]] || { echo '::error::Set the RGFX_EXE_URL secret to a private link for the original RGFX.EXE.'; exit 1; }
+          echo "::add-mask::$RGFX_EXE_URL"
+          curl -fsSL -o "$RUNNER_TEMP/RGFX.EXE" "$RGFX_EXE_URL"
+      - name: Build, export and verify the runtime kits
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: python3 -m tools.release_kits --exe "$RUNNER_TEMP/RGFX.EXE" --output "$RUNNER_TEMP/kits" --tag "$TAG"
+      - name: Remove the original executable
+        if: always()
+        run: rm -f "$RUNNER_TEMP/RGFX.EXE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kits
+          path: ${{ runner.temp }}/kits
+          if-no-files-found: error
   verify:
     needs: version
     uses: ./.github/workflows/ci.yml
   web:
-    needs: version
+    needs: [version, kits]
     uses: ./.github/workflows/web.yml
     with:
       pages_artifact: false
+      kits_artifact: kits
   native:
     needs: version
     strategy:
@@ -102,7 +143,7 @@ jobs:
           if-no-files-found: error
   publish:
     if: github.event_name == 'push' || !inputs.dry_run
-    needs: [version, verify, web, native]
+    needs: [version, verify, web, native, kits]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -162,6 +203,47 @@ jobs:
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: published-site
+  pin-kits:
+    # Later builds from main use these kits until the next release replaces them.
+    if: github.event_name == 'push' || !inputs.dry_run
+    needs: [version, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: token
+        with:
+          app-id: ${{ secrets.RELEASER_APP_ID }}
+          private-key: ${{ secrets.RELEASER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          token: ${{ steps.token.outputs.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: kits
+          path: kits
+      - name: Publish the signed kit pins
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # macOS keeps its own pin; only the kits built for this tag change.
+          jq -S . kits/kits.json > "$RUNNER_TEMP/new.json"
+          jq -S . web/kits.json > "$RUNNER_TEMP/old.json"
+          if cmp -s "$RUNNER_TEMP/new.json" "$RUNNER_TEMP/old.json"; then echo 'Pins already current.'; exit 0; fi
+          cp kits/kits.json web/kits.json
+          head=$(git rev-parse HEAD)
+          content=$(base64 -w0 web/kits.json)
+          body=$'Co-authored-by: Michael Lohr <michael@lohr.dev>\nCo-authored-by: Claude <noreply@anthropic.com>'
+          jq -n --arg repository "$GITHUB_REPOSITORY" --arg head "$head" --arg title "chore(release): pin runtime kits for $TAG" --arg body "$body" --arg contents "$content" \
+            '{query:"mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",variables:{input:{branch:{repositoryNameWithOwner:$repository,branchName:"main"},expectedHeadOid:$head,message:{headline:$title,body:$body},fileChanges:{additions:[{path:"web/kits.json",contents:$contents}]}}}}' > "$RUNNER_TEMP/commit.json"
+          oid=$(gh api graphql --input "$RUNNER_TEMP/commit.json" --jq '.data.createCommitOnBranch.commit.oid')
+          [[ "$oid" =~ ^[a-f0-9]{40}$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/commits/$oid" --jq '.commit.verification.verified' | grep -qx true
   deploy:
     needs: [publish, web]
     runs-on: ubuntu-24.04

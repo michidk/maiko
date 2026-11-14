@@ -41,7 +41,7 @@ def main():
     try:
         report['toolchain']=ensure_tool_image()
         rust_glide=build_rust_runtime('x86_64-pc-windows-gnu',component='glide')
-        run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--tmpfs','/readonly:ro','--name',name,IMAGE,'sleep','360'])
+        run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--tmpfs','/readonly:ro','--name',name,IMAGE,'sleep','1500'])
         run(['docker','exec',name,'mkdir','/src'])
         subprocess.run(['docker','exec','-i',name,'tar','-x','-C','/src'],input=archive,check=True)
         run(['docker','cp',str(ROOT/'tests/init_wine.sh'),name+':/work/init_wine.sh'])
@@ -63,7 +63,7 @@ x86_64-w64-mingw32-g++ -std=c++11 -Wall -Wextra -Werror -O2 -I/src -I/work bridg
 WINEDEBUG=-all WINEPREFIX=/tmp/glide-wine LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a /usr/lib/wine/wine64 bridge-test.exe
 '''
         with (output/'build.log').open('w') as log:
-            run(['docker','exec',name,'timeout','240','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
+            run(['docker','exec',name,'timeout','1200','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
         for file in ['redguard-glide.dll','libredguard-glide.a','libwinpthread-1.dll','backend-smoke.ppm','backend-smoke.exe','bridge-test.exe','OpenGLid.log']:
             run(['docker','cp',name+':/work/'+file,str(output/file)])
         headers=output/'include';headers.mkdir(exist_ok=True)
