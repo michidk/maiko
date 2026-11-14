@@ -53,9 +53,8 @@ Use Bun, Rust's `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.129:
 ```sh
 bun install --frozen-lockfile
 bun test web
-gh release download v0.1.0 --repo michidk/maiko \
-  --pattern 'maiko-runtime-kit-*.zip' --dir .cache/site-kits
-# Name them linux.zip and windows.zip, and add the pinned macos.zip from web/kits.json.
+gh release download client-runtime-20261113 --repo michidk/maiko \
+  --pattern linux.zip --pattern windows.zip --pattern macos.zip --dir .cache/site-kits
 MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
 ```
 
@@ -105,18 +104,6 @@ package gate. Keep generated playable packages private.
 Run **Bump version and tag** on `main` to increment all four Rust packages together. It uses the Releaser App to publish a GitHub-signed commit and a `vX.Y.Z` tag. The workflow requires `RELEASER_APP_ID` and `RELEASER_APP_PRIVATE_KEY`, distributed through the shared workflows repository. It checks the published signature and contributor trailers before creating the tag. If tagging fails after the commit succeeds, create the matching tag on that commit to resume; rerunning the bump would increment the version again.
 
 A stable `vX.Y.Z` tag starts the release workflow. Tags must point to a commit on main and match every package version. Source checks, Windows and Linux patcher tests/builds, and the browser build must all succeed before publication. Manual dispatch defaults to a dry run: it builds and tests release artifacts on main without publishing. To retry publication, dispatch on the existing tag with `dry_run=false`.
-
-### How a release is made
-
-`vX.Y.Z` releases build everything in CI, the way Cyrus does: **Bump version and tag** commits the new version and tag, and the tag starts **Release**. The release job `kits` runs `python3 -m tools.release_kits`, which
-
-1. downloads your owned `RGFX.EXE` from the private link in the `RGFX_EXE_URL` secret and checks that it is the accepted original,
-2. translates it, builds the Windows and Linux runtimes and the OpenGLide renderer (without playing the game), exports both kits and
-3. builds a package from each kit with the real patcher and checks the result, before any kit is published.
-
-The secret is a link only you can open (for example a private release asset or a pre-signed URL). The executable is deleted after the build and appears in no artifact or release. The SDL, GL and notice files that have no source in this repository come from the kit named in `platforms/kit-seed.json`; update that pin when they change.
-
-The browser build in the same run serves these kits, the release publishes them as `maiko-runtime-kit-linux.zip` and `maiko-runtime-kit-windows.zip`, and a final job commits their new hashes to `web/kits.json` so later builds from `main` use them. The macOS kit keeps its own pin until it is rebuilt.
 
 Each release contains:
 
