@@ -4,6 +4,8 @@
 #include <SDL.h>
 #endif
 #include <cstdio>
+#include <cstdlib>
+#include <utility>
 #include <cstdint>
 #include <cassert>
 #include <initializer_list>
@@ -44,15 +46,60 @@ static void check_fog_interpolation() {
         assert(red>=sample.red-8 && red<=sample.red+8);
     }
     // Fog tables can fall as well as rise. Halfway in reciprocal depth
-    // between entries 3 and 4, densities 255 and 0 must average to 127.5.
-    fog[3]=255; fog[4]=0;
+    // between entries 20 and 21, densities 255 and 0 must average to 127.5.
+    fog[20]=255; fog[21]=0;
     grFogTable(fog);
-    float midpoint=2.0f/(1.0f/guFogTableIndexToW(3)+1.0f/guFogTableIndexToW(4));
+    float midpoint=2.0f/(1.0f/guFogTableIndexToW(20)+1.0f/guFogTableIndexToW(21));
     int red=(int)fogged_white(midpoint);
     fprintf(stderr,"Fog reciprocal midpoint red=%d expected=128\n",red);
     assert(red>=120 && red<=136);
     grFogMode(GR_FOG_DISABLE);
     puts("PASS fog table interpolation at distance boundaries and reciprocal midpoint");
+}
+
+static float table_fog(const GrFog_t *fog, float w) {
+    // Glide's table: entries are linear in reciprocal depth between neighbours.
+    int i=0;
+    while (i<GR_FOG_TABLE_SIZE && guFogTableIndexToW(i)<w) ++i;
+    if (i==0) return fog[0]/255.0f;
+    if (i==GR_FOG_TABLE_SIZE) return fog[GR_FOG_TABLE_SIZE-1]/255.0f;
+    float lo=1.0f/guFogTableIndexToW(i-1), hi=1.0f/guFogTableIndexToW(i), here=1.0f/w;
+    float t=(lo-here)/(lo-hi);
+    return (fog[i-1]+t*(fog[i]-fog[i-1]))/255.0f;
+}
+
+// Fog is looked up per pixel from the pixel's own depth, not interpolated from the vertices.
+static void check_per_pixel_fog() {
+    guColorCombineFunction(GR_COLORCOMBINE_CCRGB);
+    grConstantColorValue(0xffffffff);
+    grFogColorValue(0);
+    grFogMode(GR_FOG_WITH_TABLE);
+    GrFog_t fog[GR_FOG_TABLE_SIZE];
+    for (int i=0;i<GR_FOG_TABLE_SIZE;++i) fog[i]=i<30?0:i>50?255:(i-30)*12;
+    grFogTable(fog);
+    grBufferClear(0,0,0xffff);
+    GrVertex a={},b={},c={};
+    a.x=40; a.y=40; a.oow=1.0f/200;
+    b.x=400; b.y=40; b.oow=1.0f/30000;
+    c.x=40; c.y=400; c.oow=1.0f/2000;
+    grDrawTriangle(&a,&b,&c);
+    GrLfbInfo_t info={}; info.size=sizeof info;
+    assert(grLfbLock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER,GR_LFBWRITEMODE_565,
+                     GR_ORIGIN_UPPER_LEFT,FXFALSE,&info));
+    int worst=0;
+    for (auto p:{std::pair<int,int>{80,60},{120,100},{200,60},{60,200},{150,150},{100,250}}) {
+        float lb=(p.first-40)/360.0f, lc=(p.second-40)/360.0f, la=1-lb-lc;
+        float oow=la*a.oow+lb*b.oow+lc*c.oow;
+        int expected=(int)(255*(1-table_fog(fog,1.0f/oow)));
+        auto row=(const uint16_t*)((const char*)info.lfbPtr+p.second*info.strideInBytes);
+        int red=(row[p.first]>>11)*255/31;
+        fprintf(stderr,"Pixel fog (%d,%d) red=%d expected=%d\n",p.first,p.second,red,expected);
+        if (abs(red-expected)>worst) worst=abs(red-expected);
+    }
+    assert(grLfbUnlock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER));
+    grFogMode(GR_FOG_DISABLE);
+    assert(worst<=10);
+    puts("PASS fog density follows each pixel's own depth across a triangle");
 }
 
 static void check_alpha_texture() {
@@ -171,6 +218,7 @@ int main(int argc,char **) {
     assert(grLfbUnlock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER));
     grBufferSwap(0);
     check_fog_interpolation();
+    check_per_pixel_fog();
     check_alpha_texture();
     grGlideShutdown();
     puts("PASS native x64 Glide textured triangle, framebuffer readback and swap");
