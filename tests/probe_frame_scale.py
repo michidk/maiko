@@ -124,6 +124,6 @@ with (root / (a.label + '.log')).open('w') as log:
     finally:
         stop.set()
         proc.terminate()
-        report['timing_resets'] = [l.split('event=timing-reset ')[1] for l in (root / (a.label + '.log')).read_text(errors='replace').splitlines() if 'event=timing-reset' in l]
+        report['frame_timing_log'] = [l.split('event=frame-timing ')[1] for l in (root / (a.label + '.log')).read_text(errors='replace').splitlines() if 'event=frame-timing' in l]
         (root / (a.label + '.json')).write_text(json.dumps(report, indent=1))
         print(json.dumps(report))

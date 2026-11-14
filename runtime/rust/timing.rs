@@ -90,106 +90,63 @@ pub struct GuestTiming {
 }
 
 const STALL_MS: u32 = 250;
-const SETTLED_FRAMES: u32 = 60;
-const CALIBRATION_FRAMES: usize = 5;
-const CALIBRATION_GIVE_UP: u32 = 60;
-const MIN_FPS: u32 = 6;
-const MAX_FPS: u32 = 300;
+/// Calls closer together than this belong to one frame (the clock counts whole milliseconds).
+const SAME_FRAME_MS: u32 = 3;
+/// One frame never counts for more than this: the original's lowest frame rate (`min_frame_rate`).
+const LONGEST_FRAME_MS: u32 = 125;
+const MIN_FPS: i32 = 6;
+const MAX_FPS: i32 = 300;
+/// Fixed point for averaged frame times: 1/16 ms.
+const SUBMS: u32 = 16;
 
-/// A load or a menu stalls the game for seconds. The original's one-second window then holds a
-/// handful of frames over a long time, so it measures a tiny FPS and every movement runs several times
-/// too fast until the window refreshes. After the warm-up that follows each load the window also still
-/// holds 12 Hz frames. Both are corrected here: when a stall or a warm-up ends, the last measurement from
-/// steady play stands in at once (if there is one), then the median of the next few real frame times
-/// replaces it, and the game's own window starts clean.
+/// The game derives how far everything moves in an update from an FPS measured over one-second windows
+/// and then smoothed, so it lags real frame times: after a load or a menu it runs several times too fast
+/// (a stall leaves a tiny measured FPS) or too slow (the smoothed scale climbs back only a few units per
+/// update). Instead this feeds it the frame rate of the last few real frames on every update: a short
+/// average of real frame times, with stalls and the 12 Hz warm-up left out, written into the measured and
+/// smoothed FPS together with the matching scale, and the game's own measurement window is kept empty so
+/// it never replaces them.
 #[derive(Default)]
 pub struct FrameGuard {
     last_ms: Option<u32>,
     was_warm: bool,
-    settled: u32,
-    steady_since: u32,
-    last_good: Option<GuestTiming>,
-    calibrating: Option<Calibration>,
-}
-
-struct Calibration {
-    intervals: Vec<u32>,
-    previous: u32,
-    calls: u32,
+    average: Option<u32>,
 }
 
 impl FrameGuard {
     /// Called once per game update, before the game measures it. Returns the timing to write back.
-    pub fn step(
-        &mut self,
-        warm: bool,
-        now_ms: u32,
-        ticks: u32,
-        now: GuestTiming,
-    ) -> Option<GuestTiming> {
+    pub fn step(&mut self, warm: bool, now_ms: u32, ticks: u32) -> Option<GuestTiming> {
         let gap = self.last_ms.map_or(0, |last| now_ms.wrapping_sub(last));
+        let first = self.last_ms.is_none();
+        if !warm && !first && gap < SAME_FRAME_MS {
+            // A second call within the same frame: not a frame time of its own.
+            return self.average.map(|average| Self::timing(average, ticks));
+        }
         self.last_ms = Some(now_ms);
-        let clean = |timing: GuestTiming| GuestTiming {
-            baseline: ticks,
-            remainder: 0,
-            frames: 0,
-            ..timing
-        };
         if warm {
             self.was_warm = true;
-            self.settled = 0;
-            self.calibrating = None;
             return None;
         }
-        let restarted = std::mem::take(&mut self.was_warm) || gap >= STALL_MS;
-        if restarted {
-            self.settled = 0;
-            self.calibrating = Some(Calibration {
-                intervals: Vec::new(),
-                previous: now_ms,
-                calls: 0,
-            });
-            return self.last_good.map(clean);
+        // The interval that spans a warm-up or a stall says nothing about the frame rate.
+        if first || std::mem::take(&mut self.was_warm) || gap >= STALL_MS {
+            return self.average.map(|average| Self::timing(average, ticks));
         }
-        if let Some(calibration) = self.calibrating.as_mut() {
-            calibration.calls += 1;
-            let interval = now_ms.wrapping_sub(calibration.previous);
-            calibration.previous = now_ms;
-            if interval < STALL_MS {
-                calibration.intervals.push(interval);
-            }
-            if calibration.intervals.len() < CALIBRATION_FRAMES {
-                if calibration.calls >= CALIBRATION_GIVE_UP {
-                    // shortcut: a machine under 4 fps keeps the game's own measurement.
-                    self.calibrating = None;
-                }
-                return None;
-            }
-            calibration.intervals.sort_unstable();
-            let median = calibration.intervals[calibration.intervals.len() / 2].max(1);
-            let fps = (1000 / median).clamp(MIN_FPS, MAX_FPS) as i32;
-            self.calibrating = None;
-            return Some(clean(GuestTiming {
-                smoothed: fps,
-                measured: fps,
-                ..now
-            }));
+        let frame = gap.clamp(1, LONGEST_FRAME_MS) * SUBMS;
+        let average = self.average.map_or(frame, |average| (average + frame) / 2);
+        self.average = Some(average);
+        Some(Self::timing(average, ticks))
+    }
+
+    fn timing(average: u32, ticks: u32) -> GuestTiming {
+        let fps = ((1000 * SUBMS / average.max(1)) as i32).clamp(MIN_FPS, MAX_FPS);
+        GuestTiming {
+            smoothed: fps,
+            measured: fps,
+            frames: 0,
+            baseline: ticks,
+            remainder: 0,
+            scale: 3072 / fps,
         }
-        if self.settled == 0 {
-            self.steady_since = now_ms;
-        }
-        self.settled += 1;
-        if self.settled >= SETTLED_FRAMES {
-            // Only a measurement that matches the frame rate seen here is worth restoring: the game
-            // also measures slow phases (movies, the menu book) that say nothing about play.
-            let real = i64::from(self.settled) * 1000
-                / i64::from(now_ms.wrapping_sub(self.steady_since).max(1));
-            let guest = i64::from(now.smoothed.min(now.measured));
-            if guest * 2 >= real && guest <= real * 2 {
-                self.last_good = Some(now);
-            }
-        }
-        None
     }
 }
 
@@ -286,110 +243,73 @@ pub extern "C" fn rg_clock_milliseconds() -> u32 {
 mod tests {
     use super::*;
 
-    fn timing(fps: i32) -> GuestTiming {
-        GuestTiming {
-            smoothed: fps,
-            measured: fps,
-            frames: 7,
-            baseline: 1,
-            remainder: 3,
-            scale: 3072 / fps,
-        }
-    }
-
-    fn steady(guard: &mut FrameGuard, ms: &mut u32, fps: i32) {
-        for _ in 0..SETTLED_FRAMES {
-            *ms += 16;
-            assert_eq!(guard.step(false, *ms, 0, timing(fps)), None);
-        }
-    }
-
-    fn run_frames(
-        guard: &mut FrameGuard,
-        ms: &mut u32,
-        every: u32,
-        count: usize,
-    ) -> Option<GuestTiming> {
+    fn run(guard: &mut FrameGuard, ms: &mut u32, every: u32, count: usize) -> Option<GuestTiming> {
         let mut result = None;
         for _ in 0..count {
             *ms += every;
-            result = result.or(guard.step(false, *ms, 40, timing(6)));
+            result = guard.step(false, *ms, 7);
         }
         result
     }
 
     #[test]
-    fn a_stall_stands_in_with_the_old_measurement_then_measures_the_new_scene() {
+    fn steady_frames_give_their_own_rate_and_a_clean_window() {
         let mut guard = FrameGuard::default();
         let mut ms = 0;
-        steady(&mut guard, &mut ms, 60);
-        ms += 3_000; // a menu
-        let stand_in = guard.step(false, ms, 55, timing(6)).unwrap();
-        assert_eq!(
-            (stand_in.smoothed, stand_in.measured, stand_in.scale),
-            (60, 60, 51)
-        );
-        assert_eq!(
-            (stand_in.frames, stand_in.remainder, stand_in.baseline),
-            (0, 0, 55)
-        );
-        // the new scene runs at 25 fps: the median of the next frames replaces the stand-in
-        let measured = run_frames(&mut guard, &mut ms, 40, CALIBRATION_FRAMES).unwrap();
-        assert_eq!((measured.smoothed, measured.measured), (25, 25));
-        assert_eq!(run_frames(&mut guard, &mut ms, 40, 3), None);
+        let t = run(&mut guard, &mut ms, 20, 10).unwrap();
+        assert_eq!((t.measured, t.smoothed, t.scale), (50, 50, 61));
+        assert_eq!((t.frames, t.remainder, t.baseline), (0, 0, 7));
     }
 
     #[test]
-    fn one_slow_frame_does_not_spoil_the_measurement() {
+    fn calls_within_one_frame_are_not_frames() {
         let mut guard = FrameGuard::default();
         let mut ms = 0;
-        steady(&mut guard, &mut ms, 60);
-        ms += 3_000;
-        guard.step(false, ms, 0, timing(6));
-        let mut result = None;
-        for every in [10, 10, 200, 10, 10, 10] {
-            ms += every;
-            result = result.or(guard.step(false, ms, 0, timing(6)));
+        run(&mut guard, &mut ms, 20, 10);
+        for _ in 0..30 {
+            assert_eq!(guard.step(false, ms + 1, 7).unwrap().measured, 50);
         }
-        assert_eq!(result.unwrap().measured, 100);
     }
 
     #[test]
-    fn the_first_load_has_no_stand_in_and_measures_the_real_frame_rate() {
+    fn a_stall_changes_nothing() {
+        let mut guard = FrameGuard::default();
+        let mut ms = 0;
+        run(&mut guard, &mut ms, 16, 20);
+        ms += 3_000; // a menu or a load
+        let t = guard.step(false, ms, 9).unwrap();
+        assert_eq!(t.measured, 62);
+    }
+
+    #[test]
+    fn slow_frames_after_a_load_follow_real_time_without_bursting() {
+        let mut guard = FrameGuard::default();
+        let mut ms = 0;
+        run(&mut guard, &mut ms, 16, 20);
+        ms += 3_000;
+        guard.step(false, ms, 0);
+        // the new scene renders at 8 fps for a while: the scale is what 8 fps calls for
+        let t = run(&mut guard, &mut ms, 125, 6).unwrap();
+        assert_eq!((t.measured, t.scale), (8, 384));
+    }
+
+    #[test]
+    fn the_warmup_is_left_out() {
         let mut guard = FrameGuard::default();
         for n in 0..12 {
-            assert_eq!(guard.step(true, n * 83, 0, timing(12)), None);
+            assert_eq!(guard.step(true, n * 83, 0), None);
         }
         let mut ms = 1000;
-        assert_eq!(guard.step(false, ms, 20, timing(12)), None);
-        let measured = run_frames(&mut guard, &mut ms, 10, CALIBRATION_FRAMES).unwrap();
-        assert_eq!(measured.smoothed, 100);
+        assert_eq!(guard.step(false, ms, 0), None);
+        assert_eq!(run(&mut guard, &mut ms, 10, 6).unwrap().measured, 100);
     }
 
     #[test]
-    fn a_measurement_far_from_the_real_frame_rate_is_not_kept() {
+    fn rates_are_clamped_like_the_originals_limits() {
         let mut guard = FrameGuard::default();
         let mut ms = 0;
-        steady(&mut guard, &mut ms, 2); // the game's own measurement said 2 fps while frames took 16 ms
-        ms += 12 * 83;
-        for n in 0..12 {
-            assert_eq!(guard.step(true, n * 83, 0, timing(12)), None);
-        }
-        ms += 16;
-        assert_eq!(guard.step(false, ms, 9, timing(12)), None); // no stand-in: it measures instead
-    }
-
-    #[test]
-    fn a_later_warmup_stands_in_with_the_earlier_measurement() {
-        let mut guard = FrameGuard::default();
-        let mut ms = 0;
-        steady(&mut guard, &mut ms, 60);
-        for _ in 0..12 {
-            ms += 83;
-            assert_eq!(guard.step(true, ms, 0, timing(12)), None);
-        }
-        ms += 16;
-        assert_eq!(guard.step(false, ms, 9, timing(12)).unwrap().measured, 60);
+        assert_eq!(run(&mut guard, &mut ms, 1, 10).unwrap().measured, 300);
+        assert_eq!(run(&mut guard, &mut ms, 240, 10).unwrap().measured, 8);
     }
 
     #[test]

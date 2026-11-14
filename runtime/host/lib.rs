@@ -259,35 +259,31 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             27 => {
                 let remaining = read32(&raw const loc_1A4624);
                 pace_startup_clock(remaining);
-                // Keep the game's FPS measurement from being fouled by loads, menus and the 12 Hz warm-up.
-                let measured = maiko_runtime::timing::GuestTiming {
-                    smoothed: read32(&raw const loc_1EEC58) as i32,
-                    measured: read32(&raw const loc_1EEC5C) as i32,
-                    frames: read32(&raw const loc_1EEC60) as i32,
-                    baseline: read32(&raw const loc_1EEC64),
-                    remainder: read32(&raw const loc_1EEC68) as i32,
-                    scale: read32(&raw const loc_1EEC50) as i32,
-                };
+                // Feed the game the frame rate of the last real frames instead of its lagging one-second
+                // measurement, which loads, menus and the 12 Hz warm-up foul (see `FrameGuard`).
                 let ticks =
                     maiko_runtime::timing::rg_bios_ticks.load(std::sync::atomic::Ordering::Relaxed);
-                let fixed = maiko_runtime::timing::FRAME_GUARD.with(|guard| {
-                    guard.borrow_mut().step(
-                        remaining != 0,
-                        rg_clock_milliseconds(),
-                        ticks,
-                        measured,
-                    )
-                });
+                let now_ms = rg_clock_milliseconds();
+                let fixed = maiko_runtime::timing::FRAME_GUARD
+                    .with(|guard| guard.borrow_mut().step(remaining != 0, now_ms, ticks));
+                static CALLS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 if let Some(t) = fixed {
-                    maiko_runtime::rg_log!(
-                        "event=timing-reset measured_fps={} smoothed_fps={} scale={} (was measured {} smoothed {} scale {})",
-                        t.measured,
-                        t.smoothed,
-                        t.scale,
-                        measured.measured,
-                        measured.smoothed,
-                        measured.scale
-                    );
+                    static LAST_LOG: std::sync::atomic::AtomicU32 =
+                        std::sync::atomic::AtomicU32::new(0);
+                    let last = LAST_LOG.load(std::sync::atomic::Ordering::Relaxed);
+                    if now_ms.wrapping_sub(last) >= 2000 {
+                        LAST_LOG.store(now_ms, std::sync::atomic::Ordering::Relaxed);
+                        maiko_runtime::rg_log!(
+                            "event=frame-timing fps={} scale={} calls={} (game had measured {} smoothed {} scale {})",
+                            t.measured,
+                            t.scale,
+                            CALLS.swap(0, std::sync::atomic::Ordering::Relaxed),
+                            read32(&raw const loc_1EEC5C) as i32,
+                            read32(&raw const loc_1EEC58) as i32,
+                            read32(&raw const loc_1EEC50) as i32
+                        );
+                    }
                     let put = |p: *mut u8, v: u32| (p).cast::<u32>().write_unaligned(v);
                     put(&raw mut loc_1EEC58, t.smoothed as u32);
                     put(&raw mut loc_1EEC5C, t.measured as u32);
