@@ -133,8 +133,9 @@ build.addEventListener('click', async () => {
         download.download = target === 'macos' ? 'maiko-macos-universal.zip' : `maiko-${target}-x64.zip`;
         download.hidden = false;
         stop();
-        progressLine('Your package is ready.');
+        progressLine('Your package is ready. The download starts now; use the link if it does not.');
         download.focus();
+        download.click();
       }
     };
     const buffer = await input.arrayBuffer();

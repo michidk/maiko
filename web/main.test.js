@@ -15,6 +15,8 @@ test('Mac detection builds locally, supports cancellation and downloads a univer
     classList = { toggle() {}, add() {}, remove() {} };
     removeAttribute() {}
     focus() {}
+    clicks = 0;
+    click() { this.clicks++; }
   }
   const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(match => `#${match[1]}`));
@@ -74,7 +76,8 @@ test('Mac detection builds locally, supports cancellation and downloads a univer
     workers[1].onmessage({ data: { kind: 'complete', buffer: new ArrayBuffer(4) } });
     expect(element('#download').hidden).toBe(false);
     expect(element('#download').download).toBe('maiko-macos-universal.zip');
-    expect(element('#status').textContent).toBe('Your package is ready.');
+    expect(element('#download').clicks).toBe(1);
+    expect(element('#status').textContent).toContain('Your package is ready.');
     for (const radio of radios) radio.checked = radio.value === 'windows';
     element('#platforms').dispatchEvent(new Event('change'));
     expect(element('#download').hidden).toBe(true);
