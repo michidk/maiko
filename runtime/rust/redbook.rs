@@ -1,7 +1,7 @@
 //! CD music. The original plays its music from the audio tracks of the game disc through the Miles
 //! `AIL_redbook_*` calls. Here those calls are services (see `native-metadata/external_procedures.sci`)
-//! that read the audio tracks of a disc image with its cue sheet (the GOG `game.gog` with `game.ins`,
-//! or a rip of the CD given with `--cd-image`, chosen in `installed_media.rs`) and mix them into the
+//! that read the audio tracks of a disc image through its cue sheet (the GOG `game.ins` for
+//! `game.gog`, or a rip of the CD, chosen in `installed_media.rs`) and mix them into the
 //! game's audio output. Without that image the open call fails and the game goes on without music, as
 //! it does on a PC with no CD in the drive.
 //!
@@ -29,53 +29,52 @@ const STOPPED: u32 = 3;
 /// Opaque non-zero handle; the original only passes it back.
 const HANDLE: u32 = 0x5244_4231;
 
-/// The one image file a cue sheet names. Rips with a file per track are refused: their `INDEX`
-/// times count from the start of each file, not of the disc.
-pub(crate) fn cue_file(text: &str) -> Option<&str> {
-    let mut files = text.lines().map(str::trim).filter_map(|line| {
-        let (keyword, rest) = line.split_once(char::is_whitespace)?;
-        keyword.eq_ignore_ascii_case("FILE").then_some(rest.trim())
-    });
-    let file = files.next()?;
-    if files.next().is_some() {
-        return None;
-    }
-    let name = match file.strip_prefix('"') {
-        Some(quoted) => &quoted[..quoted.find('"')?],
-        None => file.split_whitespace().next()?,
-    };
-    (!name.is_empty()).then_some(name)
-}
-
-/// Track start sectors from a cue sheet; entry 0 is track 1. Only `INDEX 01` lines count.
-fn parse_cue(text: &str) -> Option<Vec<u64>> {
-    cue_file(text)?;
-    let mut starts = Vec::new();
-    let mut track = 0;
+/// The image files a cue sheet names, in order, each with the start (`INDEX 01`) of its tracks in
+/// sectors from the start of that file. A single image for the whole disc (GOG `game.ins`) and a rip
+/// with a file per track (Redump) are both one list of files. Tracks are numbered 1, 2, ... in order.
+pub(crate) fn parse_cue(text: &str) -> Option<Vec<(String, Vec<u64>)>> {
+    let mut files: Vec<(String, Vec<u64>)> = Vec::new();
+    let (mut track, mut tracks) = (0, 0);
     for line in text.lines().map(str::trim) {
-        let mut words = line.split_whitespace();
-        match (words.next(), words.next(), words.next()) {
-            (Some(k), Some(n), _) if k.eq_ignore_ascii_case("TRACK") => track = n.parse().ok()?,
-            (Some(k), Some("01"), Some(time)) if k.eq_ignore_ascii_case("INDEX") && track != 0 => {
-                let mut parts = time.split(':').map(|p| p.parse::<u64>());
-                let (m, s, f) = (
-                    parts.next()?.ok()?,
-                    parts.next()?.ok()?,
-                    parts.next()?.ok()?,
-                );
-                if parts.next().is_some()
-                    || s >= 60
-                    || f >= 75
-                    || track as usize != starts.len() + 1
-                {
-                    return None;
-                }
-                starts.push((m * 60 + s) * SECTORS_PER_SECOND + f);
+        let (keyword, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
+        let rest = rest.trim();
+        if keyword.eq_ignore_ascii_case("FILE") {
+            let name = match rest.strip_prefix('"') {
+                Some(quoted) => &quoted[..quoted.find('"')?],
+                None => rest.split_whitespace().next()?,
+            };
+            if name.is_empty() || files.last().is_some_and(|(_, starts)| starts.is_empty()) {
+                return None;
             }
-            _ => {}
+            files.push((name.to_string(), Vec::new()));
+        } else if keyword.eq_ignore_ascii_case("TRACK") {
+            track = rest.split_whitespace().next()?.parse().ok()?;
+        } else if keyword.eq_ignore_ascii_case("INDEX") && track != 0 {
+            let mut words = rest.split_whitespace();
+            if words.next() != Some("01") {
+                continue;
+            }
+            let mut parts = words.next()?.split(':').map(|p| p.parse::<u64>());
+            let (m, s, f) = (
+                parts.next()?.ok()?,
+                parts.next()?.ok()?,
+                parts.next()?.ok()?,
+            );
+            let (_, starts) = files.last_mut()?;
+            let start = (m * 60 + s) * SECTORS_PER_SECOND + f;
+            if parts.next().is_some()
+                || s >= 60
+                || f >= 75
+                || track != tracks + 1
+                || starts.last().is_some_and(|&last| last >= start)
+            {
+                return None;
+            }
+            starts.push(start);
+            tracks += 1;
         }
     }
-    (!starts.is_empty() && starts.windows(2).all(|w| w[0] < w[1])).then_some(starts)
+    (tracks > 0 && files.iter().all(|(_, starts)| !starts.is_empty())).then_some(files)
 }
 
 fn ms_to_sector(ms: u32) -> u64 {
@@ -99,26 +98,49 @@ fn mix_into(output: &mut [u8], source: &[u8], volume: u32) {
 use crate::os::read_at;
 
 struct Disc {
-    image: File,
+    /// Each image file with the disc sectors it holds, from first to before end.
+    files: Vec<(File, u64, u64)>,
     /// Start sector of every track, then the sector after the last one.
     bounds: Vec<u64>,
 }
 
 impl Disc {
-    fn open(image: &Path, cue: &Path) -> io::Result<Self> {
-        let starts = parse_cue(&std::fs::read_to_string(cue)?)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "unusable cue sheet"))?;
-        let image = File::open(image)?;
-        let end = image.metadata()?.len() / SECTOR;
-        if *starts.last().unwrap() >= end {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "cue sheet is longer than the image",
-            ));
+    /// The disc a cue sheet describes, its image files looked up beside it ignoring case.
+    fn open(cue: &Path) -> io::Result<Self> {
+        let invalid = |message: String| io::Error::new(io::ErrorKind::InvalidData, message);
+        let parsed = parse_cue(&std::fs::read_to_string(cue)?)
+            .ok_or_else(|| invalid("unusable cue sheet".into()))?;
+        let directory = cue.parent().unwrap_or(Path::new("."));
+        let (mut files, mut bounds, mut base) = (Vec::new(), Vec::new(), 0);
+        for (name, starts) in parsed {
+            let path = crate::installed_media::named(directory, &[&name]).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("the cue sheet names {name}, which is not beside it"),
+                )
+            })?;
+            let file = File::open(path)?;
+            let sectors = file.metadata()?.len() / SECTOR;
+            if *starts.last().unwrap() >= sectors {
+                return Err(invalid(format!("cue sheet is longer than {name}")));
+            }
+            bounds.extend(starts.iter().map(|start| base + start));
+            files.push((file, base, base + sectors));
+            base += sectors;
         }
-        let mut bounds = starts;
-        bounds.push(end);
-        Ok(Self { image, bounds })
+        bounds.push(base);
+        Ok(Self { files, bounds })
+    }
+
+    /// Read whole sectors from `sector` on, within one image file; returns the bytes read.
+    fn read(&self, sector: u64, buffer: &mut [u8]) -> io::Result<usize> {
+        let (file, first, end) = self
+            .files
+            .iter()
+            .find(|(_, first, end)| (*first..*end).contains(&sector))
+            .ok_or_else(|| io::Error::from(io::ErrorKind::UnexpectedEof))?;
+        let length = (buffer.len() as u64).min((end - sector) * SECTOR) as usize;
+        read_at(file, &mut buffer[..length], (sector - first) * SECTOR)
     }
 
     fn tracks(&self) -> u32 {
@@ -215,14 +237,16 @@ impl Player {
                 }
                 let sectors = ((CHUNK as u64) / SECTOR).min(playing.end - playing.next);
                 playing.chunk.resize((sectors * SECTOR) as usize, 0);
-                match read_at(&disc.image, &mut playing.chunk, playing.next * SECTOR) {
-                    Ok(n) if n > 0 => playing.chunk.truncate(n / 4 * 4),
+                match disc.read(playing.next, &mut playing.chunk) {
+                    Ok(n) if n > 0 => {
+                        playing.chunk.truncate(n / 4 * 4);
+                        playing.next += (n as u64).div_ceil(SECTOR);
+                    }
                     _ => {
                         self.state = None;
                         return;
                     }
                 }
-                playing.next += sectors;
                 playing.chunk_at = 0;
             }
             let count = (output.len() - done).min(playing.chunk.len() - playing.chunk_at);
@@ -283,7 +307,7 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
         // open_drive(drive letter): succeeds only when a disc image with its cue sheet was found.
         0 => {
             if player.disc.is_none() {
-                match crate::installed_media::audio().map(|(image, cue)| Disc::open(&image, &cue)) {
+                match crate::installed_media::audio().map(|cue| Disc::open(&cue)) {
                     Some(Ok(disc)) => {
                         rg_log!("CD music: {} tracks on the disc image", disc.tracks());
                         player.disc = Some(disc);
@@ -381,33 +405,40 @@ mod tests {
     fn cue_sheet_gives_start_sectors() {
         assert_eq!(
             parse_cue(CUE),
-            Some(vec![0, (51 * 60 + 59) * 75 + 71, 57 * 60 * 75 + 45 * 75])
+            Some(vec![(
+                "game.gog".into(),
+                vec![0, (51 * 60 + 59) * 75 + 71, 57 * 60 * 75 + 45 * 75]
+            )])
         );
     }
 
     #[test]
-    fn cue_sheets_name_one_image_file() {
-        assert_eq!(cue_file(CUE), Some("game.gog"));
-        assert_eq!(cue_file("file Redguard.bin BINARY\n"), Some("Redguard.bin"));
-        assert_eq!(cue_file("FILE \"a b.bin\" BINARY\n"), Some("a b.bin"));
-        let per_track = "FILE \"t1.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"t2.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n";
-        assert_eq!(cue_file(per_track), None);
-        assert_eq!(parse_cue(per_track), None);
-        assert_eq!(cue_file("TRACK 01 AUDIO\n"), None);
+    fn a_rip_with_a_file_per_track_lists_each_file() {
+        // The Redump layout: pregap as INDEX 00, track start as INDEX 01, times per file.
+        let per_track = "FILE \"Redguard (Track 1).bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nfile t2.bin BINARY\n  TRACK 02 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:02:00\n";
+        assert_eq!(
+            parse_cue(per_track),
+            Some(vec![
+                ("Redguard (Track 1).bin".into(), vec![0]),
+                ("t2.bin".into(), vec![150]),
+            ])
+        );
     }
 
     #[test]
     fn malformed_cue_sheets_are_refused() {
         for bad in [
             "",
-            "TRACK 02 AUDIO\nINDEX 01 00:00:00\n",
-            "TRACK 01 AUDIO\nINDEX 01 00:61:00\n",
-            "TRACK 01 AUDIO\nINDEX 01 00:00:80\n",
-            "TRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n",
-            "TRACK 01 AUDIO\nINDEX 01 xx:00:00\n",
+            "TRACK 01 AUDIO\nINDEX 01 00:00:00\n",
+            "FILE a BINARY\nFILE b BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\n",
+            "FILE a BINARY\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n",
+            "FILE a BINARY\nTRACK 01 AUDIO\nINDEX 01 00:61:00\n",
+            "FILE a BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:80\n",
+            "FILE a BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n",
+            "FILE a BINARY\nTRACK 01 AUDIO\nINDEX 01 xx:00:00\n",
+            "FILE \"\" BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\n",
         ] {
-            let bad = format!("FILE game.gog BINARY\n{bad}");
-            assert_eq!(parse_cue(&bad), None, "{bad:?}");
+            assert_eq!(parse_cue(bad), None, "{bad:?}");
         }
     }
 
@@ -453,7 +484,7 @@ mod tests {
             }))
             .collect();
         std::fs::write(dir.path().join("game.ins"), cue).unwrap();
-        let disc = Disc::open(&dir.path().join("game.gog"), &dir.path().join("game.ins")).unwrap();
+        let disc = Disc::open(&dir.path().join("game.ins")).unwrap();
         (dir, disc)
     }
 
@@ -508,6 +539,39 @@ mod tests {
             "FILE game.gog BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 00:05:00\n",
         )
         .unwrap();
-        assert!(Disc::open(&dir.path().join("game.gog"), &dir.path().join("game.ins")).is_err());
+        assert!(Disc::open(&dir.path().join("game.ins")).is_err());
+    }
+
+    #[test]
+    fn a_disc_split_into_files_plays_across_them_in_disc_sectors() {
+        let dir = tempfile::tempdir().unwrap();
+        let sectors = |count: usize, value: u8| vec![value; count * SECTOR as usize];
+        std::fs::write(dir.path().join("Track 1.bin"), sectors(4, 1)).unwrap();
+        std::fs::write(dir.path().join("TRACK 2.BIN"), sectors(3, 2)).unwrap();
+        std::fs::write(dir.path().join("track 3.bin"), sectors(5, 3)).unwrap();
+        std::fs::write(
+            dir.path().join("disc.cue"),
+            "FILE \"Track 1.bin\" BINARY\n TRACK 01 MODE1/2352\n  INDEX 01 00:00:00\nFILE \"Track 2.bin\" BINARY\n TRACK 02 AUDIO\n  INDEX 00 00:00:00\n  INDEX 01 00:00:01\nFILE \"Track 3.bin\" BINARY\n TRACK 03 AUDIO\n  INDEX 01 00:00:00\n",
+        )
+        .unwrap();
+        let disc = Disc::open(&dir.path().join("disc.cue")).unwrap();
+        assert_eq!(disc.bounds, [0, 5, 7, 12]);
+        assert_eq!(disc.track_at(6), 2);
+        let mut player = Player {
+            disc: Some(disc),
+            state: None,
+            volume: 127,
+        };
+        // Track 2 runs into track 3's file; the whole range is mixed, then playback stops.
+        assert_eq!(player.play(sector_to_ms(5), sector_to_ms(12)), PLAYING);
+        let mut out = vec![0u8; 7 * SECTOR as usize];
+        player.mix(&mut out);
+        assert!(out[..2 * SECTOR as usize].iter().all(|&b| b == 2));
+        assert!(out[2 * SECTOR as usize..].iter().all(|&b| b == 3));
+        player.mix(&mut [0u8; 4]);
+        assert_eq!(player.status(), STOPPED);
+        // A file the cue sheet names but that is missing is reported.
+        std::fs::remove_file(dir.path().join("track 3.bin")).unwrap();
+        assert!(Disc::open(&dir.path().join("disc.cue")).is_err());
     }
 }
