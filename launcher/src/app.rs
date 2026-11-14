@@ -57,10 +57,7 @@ enum Dialog {
         typed: String,
         error: Option<String>,
     },
-    Options {
-        draft: Settings,
-        size_error: bool,
-    },
+    Options(Settings),
     Support,
     Error(String),
 }
@@ -194,12 +191,7 @@ impl App {
     fn activate(&mut self, action: Action) {
         match action {
             Action::Play => self.play(),
-            Action::Options => {
-                self.dialog = Dialog::Options {
-                    draft: self.settings.clone(),
-                    size_error: false,
-                }
-            }
+            Action::Options => self.dialog = Dialog::Options(self.settings.clone()),
             Action::Support => self.dialog = Dialog::Support,
             Action::Website => {
                 let _ = open(BETHESDA.as_ref());
@@ -321,6 +313,9 @@ impl App {
                         }
                     });
                 }
+                if modal {
+                    ui.painter().rect_filled(ui.max_rect(), 0.0, Color32::from_black_alpha(150));
+                }
                 if hovered.is_some() {
                     self.set_focus(hovered);
                 }
@@ -332,106 +327,128 @@ impl App {
     }
 
     fn dialogs(&mut self, context: &egui::Context) {
-        let window = |title: &str| {
-            egui::Window::new(title.to_owned())
-                .collapsible(false)
-                .resizable(false)
-                .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-        };
         let mut close = false;
         let mut choose = None;
         match &mut self.dialog {
             Dialog::None => {}
             Dialog::ChooseGame { typed, error } => {
-                window("Find Redguard").show(context, |ui| {
-                    ui.set_max_width(440.0);
-                    ui.label("Maiko could not find your Redguard installation. Choose the Redguard folder: the one that contains RGFX.EXE, or the GOG folder around it.");
-                    ui.add_space(8.0);
-                    if ui.button("Browse…").clicked()
-                        && let Some(folder) = picker::choose_folder() {
-                            choose = Some(folder);
-                        }
+                dialog(context, "Find Redguard", |ui| {
+                    ui.label("Maiko could not find your Redguard installation. Choose the folder that contains RGFX.EXE, or the GOG folder around it.");
+                    ui.add_space(12.0);
+                    if primary(ui, "Browse…").clicked()
+                        && let Some(folder) = picker::choose_folder()
+                    {
+                        choose = Some(folder);
+                    }
+                    ui.add_space(12.0);
+                    ui.label(muted("Or enter its path:"));
                     ui.horizontal(|ui| {
-                        ui.label("Folder:");
-                        let entered = ui.text_edit_singleline(typed).lost_focus()
+                        let field = ui.add(
+                            egui::TextEdit::singleline(typed)
+                                .hint_text("/path/to/Redguard")
+                                .desired_width(ui.available_width() - 70.0),
+                        );
+                        let entered = field.lost_focus()
                             && ui.input(|input| input.key_pressed(egui::Key::Enter));
-                        if (ui.button("Use").clicked() || entered) && !typed.trim().is_empty() {
+                        if (secondary(ui, "Use").clicked() || entered) && !typed.trim().is_empty() {
                             choose = Some(PathBuf::from(typed.trim()));
                         }
                     });
                     if let Some(error) = error {
-                        ui.colored_label(Color32::from_rgb(220, 80, 60), error.as_str());
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new(error.as_str()).color(ERROR));
                     }
-                    ui.add_space(8.0);
-                    if ui.button("Quit").clicked() {
-                        self.quit = true;
-                    }
+                    footer(ui, |ui| {
+                        if secondary(ui, "Quit").clicked() {
+                            self.quit = true;
+                        }
+                    });
                 });
             }
-            Dialog::Options { draft, size_error } => {
+            Dialog::Options(draft) => {
                 let mut save = false;
-                window("Redguard Options").show(context, |ui| {
-                    ui.set_max_width(420.0);
-                    ui.group(|ui| {
-                        ui.label("Game folder");
-                        ui.monospace(self.game.as_deref().map_or("(none)".into(), |game| game.display().to_string()));
-                        if ui.button("Change…").clicked()
-                            && let Some(folder) = picker::choose_folder() {
-                                choose = Some(folder);
-                            }
-                    });
-                    ui.group(|ui| {
-                        ui.label("Display");
-                        ui.checkbox(&mut draft.fullscreen, "Fullscreen");
+                dialog(context, "Game Options", |ui| {
+                    section(ui, "Display");
+                    row(
+                        ui,
+                        "Fullscreen",
+                        "Borderless, at your desktop's resolution",
+                        |ui| {
+                            toggle(ui, &mut draft.fullscreen);
+                        },
+                    );
+                    row(ui, "Window size", "Used when not in fullscreen", |ui| {
                         ui.add_enabled_ui(!draft.fullscreen, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label("Window size");
-                                ui.add(egui::TextEdit::singleline(&mut draft.window_size).hint_text("1280x960").desired_width(100.0));
-                            });
+                            window_sizes(ui, &mut draft.window_size)
                         });
-                        if *size_error {
-                            ui.colored_label(Color32::from_rgb(220, 80, 60), "Enter the size as WIDTHxHEIGHT, at least 320x240, or leave it empty.");
+                    });
+                    section(ui, "Movies");
+                    row(
+                        ui,
+                        "Skip the intro",
+                        "New Game goes straight to the ship",
+                        |ui| {
+                            toggle(ui, &mut draft.skip_intro);
+                        },
+                    );
+                    row(
+                        ui,
+                        "Skip the outro",
+                        "The ending returns to the menu at once",
+                        |ui| {
+                            toggle(ui, &mut draft.skip_outro);
+                        },
+                    );
+                    section(ui, "Game files");
+                    let game = self
+                        .game
+                        .as_deref()
+                        .map_or("Not chosen".into(), |game| game.display().to_string());
+                    row(ui, "Redguard folder", &game, |ui| {
+                        if secondary(ui, "Change…").clicked()
+                            && let Some(folder) = picker::choose_folder()
+                        {
+                            choose = Some(folder);
                         }
                     });
-                    ui.group(|ui| {
-                        ui.label("Movies");
-                        ui.checkbox(&mut draft.skip_intro, "Skip the intro when starting a new game");
-                        ui.checkbox(&mut draft.skip_outro, "Skip the outro");
-                    });
-                    ui.group(|ui| {
-                        ui.label("CD music");
-                        ui.monospace(draft.cd_image.as_deref().map_or("From the game folder".into(), |image| image.display().to_string()));
-                        ui.horizontal(|ui| {
-                            if ui.button("Disc image folder…").clicked()
-                                && let Some(folder) = picker::choose_folder() {
-                                    draft.cd_image = Some(folder);
-                                }
-                            if draft.cd_image.is_some() && ui.button("Use the game folder").clicked() {
-                                draft.cd_image = None;
-                            }
+                    let music = draft
+                        .cd_image
+                        .as_deref()
+                        .map_or("From the game folder's disc image".into(), |image| {
+                            image.display().to_string()
                         });
+                    row(ui, "CD music", &music, |ui| {
+                        if draft.cd_image.is_some() && secondary(ui, "Reset").clicked() {
+                            draft.cd_image = None;
+                        }
+                        if secondary(ui, "Choose…").clicked()
+                            && let Some(folder) = picker::choose_folder()
+                        {
+                            draft.cd_image = Some(folder);
+                        }
                     });
-                    ui.weak("Subtitles, sound and controls are set in the game's own Options menu.");
-                    ui.horizontal(|ui| {
-                        if ui.button("OK").clicked() {
+                    ui.add_space(6.0);
+                    ui.label(muted(
+                        "Subtitles, sound and controls are in the game's own Options menu.",
+                    ));
+                    footer(ui, |ui| {
+                        if primary(ui, "Save").clicked() {
                             save = true;
                         }
-                        if ui.button("Default").clicked() {
-                            *draft = Settings::default();
-                        }
-                        if ui.button("Cancel").clicked() {
+                        if secondary(ui, "Cancel").clicked() {
                             close = true;
                         }
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            if ui.link("Restore defaults").clicked() {
+                                *draft = Settings::default();
+                            }
+                        });
                     });
                 });
                 if save {
-                    if draft.window_size_valid() {
-                        self.settings = draft.clone();
-                        let _ = self.settings.save();
-                        close = true;
-                    } else {
-                        *size_error = true;
-                    }
+                    self.settings = draft.clone();
+                    let _ = self.settings.save();
+                    close = true;
                 }
             }
             Dialog::Support => {
@@ -439,33 +456,40 @@ impl App {
                     .map(PathBuf::from)
                     .map_or_else(settings::log_directory, Ok)
                     .ok();
-                window("Technical Support").show(context, |ui| {
-                    ui.set_max_width(420.0);
-                    ui.label("Every start of the game writes a log. If something goes wrong, attach the newest one to an issue.");
+                dialog(context, "Technical Support", |ui| {
+                    ui.label("Every start of the game writes a log. If something goes wrong, open an issue and attach the newest log.");
                     if let Some(logs) = &logs {
-                        ui.monospace(logs.display().to_string());
+                        ui.add_space(8.0);
+                        path(ui, &logs.display().to_string());
                     }
-                    ui.horizontal(|ui| {
-                        if let Some(logs) = &logs
-                            && ui.add_enabled(logs.is_dir(), egui::Button::new("Open log folder")).clicked() {
-                                let _ = open(logs.as_os_str());
-                            }
-                        if ui.button("Report an issue").clicked() {
+                    footer(ui, |ui| {
+                        if secondary(ui, "Close").clicked() {
+                            close = true;
+                        }
+                        if primary(ui, "Report an issue").clicked() {
                             let _ = open(ISSUES.as_ref());
                         }
-                        if ui.button("OK").clicked() {
-                            close = true;
+                        if let Some(logs) = &logs
+                            && ui
+                                .add_enabled_ui(logs.is_dir(), |ui| {
+                                    secondary(ui, "Open log folder")
+                                })
+                                .inner
+                                .clicked()
+                        {
+                            let _ = open(logs.as_os_str());
                         }
                     });
                 });
             }
             Dialog::Error(text) => {
-                window("Redguard").show(context, |ui| {
-                    ui.set_max_width(420.0);
+                dialog(context, "Something went wrong", |ui| {
                     ui.label(text.as_str());
-                    if ui.button("OK").clicked() {
-                        close = true;
-                    }
+                    footer(ui, |ui| {
+                        if primary(ui, "OK").clicked() {
+                            close = true;
+                        }
+                    });
                 });
             }
         }
@@ -538,31 +562,210 @@ fn egui_key(key: Keycode) -> Option<egui::Key> {
     })
 }
 
-/// The grey, square look of the original's Windows 98 dialogs.
-fn classic_style(context: &egui::Context) {
-    let grey = Color32::from_rgb(192, 192, 192);
-    let mut visuals = egui::Visuals::light();
-    visuals.window_fill = grey;
-    visuals.panel_fill = grey;
-    visuals.window_corner_radius = egui::CornerRadius::ZERO;
-    visuals.window_shadow = egui::Shadow::NONE;
-    visuals.window_stroke = egui::Stroke::new(2.0, Color32::from_rgb(64, 64, 64));
-    visuals.override_text_color = Some(Color32::BLACK);
-    visuals.extreme_bg_color = Color32::WHITE;
-    visuals.selection.bg_fill = Color32::from_rgb(0, 0, 128);
-    for widget in [
-        &mut visuals.widgets.inactive,
-        &mut visuals.widgets.hovered,
-        &mut visuals.widgets.active,
-        &mut visuals.widgets.noninteractive,
-        &mut visuals.widgets.open,
-    ] {
-        widget.corner_radius = egui::CornerRadius::ZERO;
+// The dialogs' palette, taken from the launcher art: dark leather, gold trim, parchment text.
+const INK: Color32 = Color32::from_rgb(26, 18, 12);
+const LEATHER: Color32 = Color32::from_rgb(56, 40, 26);
+const GOLD: Color32 = Color32::from_rgb(207, 168, 96);
+const GOLD_DIM: Color32 = Color32::from_rgb(122, 96, 56);
+const PARCHMENT: Color32 = Color32::from_rgb(238, 224, 192);
+const MUTED: Color32 = Color32::from_rgb(170, 150, 118);
+const RED: Color32 = Color32::from_rgb(148, 30, 20);
+const ERROR: Color32 = Color32::from_rgb(232, 112, 92);
+const DIALOG_WIDTH: f32 = 470.0;
+
+fn muted(text: &str) -> egui::RichText {
+    egui::RichText::new(text).color(MUTED).size(12.5)
+}
+
+/// A centred dialog with a gold title and rule; the main screen is dimmed behind it.
+fn dialog(context: &egui::Context, title: &str, contents: impl FnOnce(&mut egui::Ui)) {
+    egui::Window::new(title)
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .fixed_size([DIALOG_WIDTH, 0.0])
+        .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+        .frame(
+            egui::Frame::window(&context.style())
+                .fill(INK)
+                .stroke(egui::Stroke::new(1.0, GOLD_DIM))
+                .corner_radius(8.0)
+                .inner_margin(egui::Margin::symmetric(20, 16)),
+        )
+        .show(context, |ui| {
+            ui.label(egui::RichText::new(title).size(22.0).color(GOLD));
+            ui.add_space(2.0);
+            let line = ui.available_rect_before_wrap();
+            ui.painter()
+                .hline(line.x_range(), line.top(), egui::Stroke::new(1.0, GOLD_DIM));
+            ui.add_space(8.0);
+            contents(ui);
+        });
+}
+
+fn section(ui: &mut egui::Ui, title: &str) {
+    ui.add_space(6.0);
+    ui.label(
+        egui::RichText::new(title.to_uppercase())
+            .size(11.5)
+            .color(GOLD)
+            .strong(),
+    );
+}
+
+/// One setting: its name and a short explanation on the left, its control on the right.
+fn row(ui: &mut egui::Ui, title: &str, detail: &str, control: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal(|ui| {
+        ui.set_min_height(33.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            control(ui);
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
+                ui.label(egui::RichText::new(title).color(PARCHMENT));
+                ui.add(egui::Label::new(muted(detail)).truncate());
+            });
+        });
+    });
+}
+
+/// The buttons along the bottom edge, from the right.
+fn footer(ui: &mut egui::Ui, buttons: impl FnOnce(&mut egui::Ui)) {
+    ui.add_space(12.0);
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), buttons);
+}
+
+fn primary(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add(
+        egui::Button::new(egui::RichText::new(text).color(PARCHMENT).strong())
+            .fill(RED)
+            .stroke(egui::Stroke::new(1.0, GOLD_DIM))
+            .min_size(Vec2::new(96.0, 30.0)),
+    )
+}
+
+fn secondary(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add(egui::Button::new(text).min_size(Vec2::new(0.0, 30.0)))
+}
+
+fn path(ui: &mut egui::Ui, text: &str) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(14, 10, 6))
+        .corner_radius(4.0)
+        .inner_margin(8.0)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(text)
+                        .monospace()
+                        .size(12.0)
+                        .color(MUTED),
+                )
+                .truncate(),
+            );
+        });
+}
+
+/// An on/off switch, drawn instead of a checkbox.
+fn toggle(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
+    let size = Vec2::new(40.0, 22.0);
+    let (rect, mut response) = ui.allocate_exact_size(size, Sense::click());
+    if response.clicked() {
+        *on = !*on;
+        response.mark_changed();
     }
-    visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(212, 208, 200);
-    visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, Color32::from_rgb(64, 64, 64));
-    visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(224, 222, 216);
-    context.set_visuals(visuals);
+    let position = ui.ctx().animate_bool_responsive(response.id, *on);
+    let radius = rect.height() / 2.0;
+    let track = if *on { RED } else { LEATHER };
+    let stroke = if response.hovered() { GOLD } else { GOLD_DIM };
+    ui.painter().rect(
+        rect,
+        radius,
+        track,
+        egui::Stroke::new(1.0, stroke),
+        egui::StrokeKind::Inside,
+    );
+    let x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), position);
+    ui.painter().circle_filled(
+        Pos2::new(x, rect.center().y),
+        radius - 4.0,
+        if *on { PARCHMENT } else { MUTED },
+    );
+    response
+}
+
+/// Window sizes in the game's 4:3, from the original 640x480 up.
+const WINDOW_SIZES: [(&str, &str); 6] = [
+    ("", "Original (640 × 480)"),
+    ("960x720", "960 × 720"),
+    ("1280x960", "1280 × 960"),
+    ("1600x1200", "1600 × 1200"),
+    ("1920x1440", "1920 × 1440"),
+    ("2560x1920", "2560 × 1920"),
+];
+
+fn window_sizes(ui: &mut egui::Ui, size: &mut String) {
+    let current = WINDOW_SIZES
+        .iter()
+        .find(|(value, _)| value == size)
+        .map_or_else(
+            || size.replace('x', " × "),
+            |(_, label)| (*label).to_owned(),
+        );
+    egui::ComboBox::from_id_salt("window size")
+        .selected_text(current)
+        .width(170.0)
+        .show_ui(ui, |ui| {
+            for (value, label) in WINDOW_SIZES {
+                ui.selectable_value(size, value.to_owned(), label);
+            }
+        });
+}
+
+fn theme(context: &egui::Context) {
+    let mut style = (*context.style()).clone();
+    use egui::{FontId, TextStyle};
+    style.text_styles = [
+        (TextStyle::Heading, FontId::proportional(22.0)),
+        (TextStyle::Body, FontId::proportional(14.5)),
+        (TextStyle::Button, FontId::proportional(14.0)),
+        (TextStyle::Small, FontId::proportional(12.0)),
+        (TextStyle::Monospace, FontId::monospace(12.5)),
+    ]
+    .into();
+    style.spacing.button_padding = Vec2::new(12.0, 5.0);
+    style.spacing.item_spacing = Vec2::new(8.0, 4.0);
+    let visuals = &mut style.visuals;
+    *visuals = egui::Visuals::dark();
+    visuals.weak_text_color = Some(MUTED);
+    visuals.window_fill = INK;
+    visuals.panel_fill = INK;
+    visuals.extreme_bg_color = Color32::from_rgb(14, 10, 6);
+    visuals.hyperlink_color = GOLD;
+    visuals.selection.bg_fill = RED;
+    visuals.selection.stroke = egui::Stroke::new(1.0, GOLD);
+    visuals.window_shadow = egui::Shadow {
+        offset: [0, 8],
+        blur: 24,
+        spread: 0,
+        color: Color32::from_black_alpha(160),
+    };
+    let widgets = &mut visuals.widgets;
+    for (widget, fill, stroke) in [
+        (&mut widgets.inactive, LEATHER, GOLD_DIM),
+        (&mut widgets.hovered, Color32::from_rgb(78, 56, 36), GOLD),
+        (&mut widgets.active, Color32::from_rgb(98, 70, 44), GOLD),
+        (&mut widgets.open, Color32::from_rgb(78, 56, 36), GOLD),
+    ] {
+        widget.weak_bg_fill = fill;
+        widget.bg_fill = fill;
+        widget.bg_stroke = egui::Stroke::new(1.0, stroke);
+        widget.fg_stroke = egui::Stroke::new(1.0, PARCHMENT);
+        widget.corner_radius = egui::CornerRadius::same(4);
+    }
+    // Labels take their colour from the non-interactive widget style.
+    widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, PARCHMENT);
+    context.set_style(style);
 }
 
 fn modifiers(keymod: Mod) -> egui::Modifiers {
@@ -610,7 +813,7 @@ fn run() -> Result<(), String> {
     let mut painter =
         egui_glow::Painter::new(Arc::new(gl), "", None, false).map_err(|e| e.to_string())?;
     let context = egui::Context::default();
-    classic_style(&context);
+    theme(&context);
     let mut app = App::new(program);
     let mut events = sdl.event_pump()?;
     let started = Instant::now();
