@@ -103,7 +103,7 @@ redguard-native.exe --fullscreen --skip-intro --load-save 1
 | `--game-dir FOLDER` | Use `FOLDER`, the one containing `RGFX.EXE`, as the game folder. Nothing is searched, asked or remembered, and a folder that does not hold a recognized game is an error (exit code 1) instead of a question. |
 | `--choose-game-dir` | Ask for the game folder (a folder dialog on Windows, a prompt in the terminal on Linux) instead of using the remembered one. Cannot be combined with `--game-dir`. |
 | `--user-dir FOLDER` | Keep saves and settings in `FOLDER` instead of the `user-data` folder beside the program. |
-| `--cd-image PATH` | Where the movies and CD music come from instead of the installed `game.gog` or the Redguard disc in a drive: a disc image (`game.gog`, an ISO or a raw 2352-byte `.bin`), its cue sheet (`.cue`, needed for the music; one image file for the whole disc), or a folder holding the disc's files (movies only). |
+| `--cd-image PATH` | Where the movies and CD music come from instead of the installed `game.gog` or the Redguard disc: a disc image (`game.gog`, an ISO or a raw 2352-byte `.bin`), its cue sheet (`.cue`, needed for the music; one `.bin` for the disc or one per track), or a folder holding the disc's files and perhaps a rip of it. |
 | `--fullscreen` | Borderless fullscreen at your desktop resolution. |
 | `--window-size WIDTHxHEIGHT` | A window of this size, from 320x240 to 8192x8192, for example `--window-size 1600x1200`. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. Without either window option the window has the game's own size. |
 | `--skip-intro` | New Game starts on the ship without the intro movie. |
@@ -122,7 +122,7 @@ Press the backtick key (`` ` ``, left of `1` on a US keyboard) to open or close 
 
 On a GOG installation the intro and other movies play automatically from the game's `game.gog` file, which Maiko finds inside the game folder or the folder above it. If your copy keeps movies as loose `.SMK` files, put them in the game folder or in a `MOVIES`, `ANIMS` or `VIDEO` folder inside it. A damaged or ambiguous `game.gog` stops startup with a message in the log.
 
-An installation from the original CD reads the movies from the Redguard disc, as the original did. Insert the disc: on Windows Maiko uses the drive letter the installer wrote into `SYSTEM.INI` (`animation_drive`); in a Wine prefix it follows that drive letter in the prefix; on Linux it looks in `/media/USER`, `/run/media/USER`, `/media` and `/mnt`; on macOS in `/Volumes`. Without the disc, `--cd-image` takes an image, a cue sheet or a folder with a copy of the disc's files.
+An installation from the original CD reads the movies from the Redguard disc, as the original did. Maiko looks for a folder holding the disc's `INTRO.SMK`: inside a Wine prefix, the drive letter the installer wrote into `SYSTEM.INI` (`animation_drive`); a copy of the disc in a folder inside the game folder (such as the `PlayCD` folder a DOSBox setup mounts as the CD drive); on Windows that drive letter; on Linux `/media/USER`, `/run/media/USER`, `/media` and `/mnt`; on macOS `/Volumes`. A cue sheet in that folder, for example a Redump rip with one `.bin` per track, also gives the music. Otherwise `--cd-image` takes an image, a cue sheet or a folder.
 
 ### Saves and settings
 
@@ -164,7 +164,7 @@ The browser builder creates a universal Mac package (Intel and Apple Silicon) fr
 
 ## Known limitations
 
-- **CD music needs a disc image with its cue sheet.** The music is read from the disc's audio tracks: the GOG `game.gog` with the `game.ins` beside it, or for the CD release a rip of the disc as one `.bin` with its `.cue`, given with `--cd-image redguard.cue`. A disc in a drive, an ISO or a copied folder holds no audio tracks Maiko can read, so the game then runs without music.
+- **CD music needs a disc image with its cue sheet.** The music is read from the disc's audio tracks: the GOG `game.gog` with the `game.ins` beside it, or for the CD release a rip of the disc with its `.cue` (one `.bin` for the disc or one per track) beside the disc's files or given with `--cd-image`. A disc in a drive or an ISO holds no audio tracks Maiko can read, so the game then runs without music.
 - **Only recognized `RGFX.EXE` builds run.** Other builds and patched executables are not supported.
 
 ## Legal
