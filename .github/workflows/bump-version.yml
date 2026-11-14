@@ -69,7 +69,9 @@ jobs:
             exit 1
           fi
           files='[]'
-          for file in Cargo.toml Cargo.lock patcher/Cargo.toml runtime/host/Cargo.toml runtime/glide/Cargo.toml; do
+          # Every workspace member's manifest, so a new crate is versioned with the others.
+          manifests=$(cargo metadata --no-deps --locked --format-version 1 | jq -r --arg root "$PWD/" '.packages[].manifest_path | ltrimstr($root)')
+          for file in Cargo.lock $manifests; do
             content=$(base64 -w0 "$file")
             files=$(jq -c --arg path "$file" --arg contents "$content" '. + [{path:$path,contents:$contents}]' <<< "$files")
           done
