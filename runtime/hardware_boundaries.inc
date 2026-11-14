@@ -1,7 +1,11 @@
 ; Diagnostic boundaries terminate instead of pretending to implement a DOS service.
 global x86_in_al_dx
 x86_in_al_dx:
-    jmp host_unsupported_hardware
+    ; Joystick port 0x201: no stick attached, every bit stays set so the poll times out.
+    cmp dx, 0x201
+    jne host_unsupported_hardware
+    mov al, 0xff
+    ret
 global x86_in_al_imm
 x86_in_al_imm:
     jmp host_unsupported_hardware
@@ -37,7 +41,9 @@ x86_mov_reg_mem_8:
     jmp host_unsupported_hardware
 global x86_out_dx_al
 x86_out_dx_al:
-    jmp host_unsupported_hardware
+    cmp dx, 0x201
+    jne host_unsupported_hardware
+    ret
 global x86_out_dx_ax
 x86_out_dx_ax:
     jmp host_unsupported_hardware

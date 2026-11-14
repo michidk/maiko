@@ -128,13 +128,20 @@ pub extern "C" fn rg_translation_trap(address: u32) -> ! {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn X86_InPortProcedure(port: u16, size: u32) -> ! {
+pub extern "C" fn X86_InPortProcedure(port: u16, size: u32) -> u32 {
+    // Joystick port 0x201: no stick attached, every bit stays set so the poll times out.
+    if port == 0x201 {
+        return u32::MAX;
+    }
     rg_log!("BLOCKED untranslated hardware input port={port:04x} size={size}");
     std::process::abort()
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn X86_OutPortProcedure(port: u16, size: u32, value: u32) -> ! {
+pub extern "C" fn X86_OutPortProcedure(port: u16, size: u32, value: u32) {
+    if port == 0x201 {
+        return;
+    }
     rg_log!("BLOCKED untranslated hardware output port={port:04x} size={size} value={value:08x}");
     std::process::abort()
 }
