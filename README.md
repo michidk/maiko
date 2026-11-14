@@ -4,11 +4,52 @@ Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows a
 
 Maiko contains no game files. **You need your own copy of Redguard.** The GOG release is the supported one.
 
-## What you need
+## Features
 
-- Windows 10 or newer, 64-bit, with a graphics driver that supports OpenGL.
-- A Redguard installation that contains `RGFX.EXE`, the Glide version of the game executable. The GOG release includes it. Maiko recognizes two builds of this file and refuses any other, so it never runs code it was not checked against.
-- A runtime ZIP built from your own executable using the [client-side browser builder](https://michidk.github.io/maiko/) or [Rust CLI](docs/client-builder.md). Your executable stays on your device. [Source checks](docs/building.md) are available for contributors.
+- **Native, no DOSBox.** The original game code runs as a native program with its own graphics, input, sound, file and timing services.
+- **Windows and Linux**, 64-bit. Intel and Apple Silicon Macs are experimental.
+- **Hardware rendering.** The Glide version of the game is drawn through OpenGL, in a window of any size or borderless fullscreen.
+- **Original sound, music and movies.** CD music and the intro play from your GOG `game.gog` disc image.
+- **Game controllers.** SDL2 gamepads work alongside keyboard and mouse.
+- **Finds your game itself.** It looks in the usual GOG, Wine, Heroic and Lutris folders and only asks if it finds nothing. Your installation is never modified.
+- **Separate saves and settings**, kept in a `user-data` folder next to the program, plus session logs for bug reports.
+- **Startup shortcuts:** `--skip-intro`, `--skip-outro` and `--load-save N`.
+- **Nothing leaves your device.** You build the program from your own `RGFX.EXE` in your browser or with a CLI. Maiko ships no game code or assets.
+
+## Setup
+
+You need:
+
+- A Redguard installation containing `RGFX.EXE`, the Glide version of the game executable. The GOG release is the supported one and includes it. Maiko recognizes two builds of this file and refuses any other, so it never runs code it was not checked against.
+- 64-bit Windows 10 or newer, or a Linux desktop (glibc 2.36 or newer, X11 or XWayland), with a graphics driver that supports OpenGL.
+
+Maiko is built from your own executable, which stays on your device. There are two ways to do it.
+
+### Option 1: the browser (easiest)
+
+1. Open the [Maiko builder](https://michidk.github.io/maiko/).
+2. Select your `RGFX.EXE` (in the `Redguard` folder of your installation). The page detects your system; change it if needed.
+3. Wait for the build. The download starts automatically.
+4. Extract the ZIP into its **own** writable folder and continue with [Play on Windows](#play-on-windows) or [Linux](#linux).
+
+Nothing is uploaded: the build runs in a worker in your browser. It takes a few minutes on a current desktop browser.
+
+### Option 2: the command line
+
+Use this for scripts, a machine without a graphical browser, or to check what you are running.
+
+1. From the [latest release](https://github.com/michidk/maiko/releases/latest) download `maiko-patcher-windows-x86_64.tar.gz` or `maiko-patcher-linux-x86_64.tar.gz`, and the runtime kit for your system (`maiko-runtime-kit-windows.zip` or `maiko-runtime-kit-linux.zip`). `SHA256SUMS` lists the checksums.
+2. Install [Wasmtime](https://wasmtime.dev/), which the patcher uses to run the build tools. Or build the patcher yourself with `cargo build --locked --release -p maiko-patcher --bin maiko-patcher`.
+3. Build the package:
+
+```sh
+maiko-patcher build --input /path/to/Redguard/RGFX.EXE --target linux \
+  --kit maiko-runtime-kit-linux.zip --output maiko-linux-x64.zip
+```
+
+Use `--target windows` with the Windows kit for a Windows package, and `--wasmtime PATH` to pick a specific Wasmtime. The patcher reads your game without modifying it, works in a private temporary folder and refuses to overwrite an existing output file. The macOS package is only available from the browser builder.
+
+Details, including how the kits are made, are in [docs/client-builder.md](docs/client-builder.md). [Source checks](docs/building.md) are available for contributors.
 
 ## Play on Windows
 
