@@ -220,6 +220,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             if rg_movie_clock_callback == guest_address(host_movie_clock_read as *const ()) {
                 rg_movie_clock_callback = 0;
             }
+            maiko_glide::set_movie(false);
             return;
         }
         if service & 0xf000 == 0x2000 {
@@ -310,6 +311,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             24 => {
                 rg_movie_clock_callback = guest_address(host_movie_clock_read as *const ());
                 rg_movie_clock_shutdown = guest_address(host_movie_clock_stop as *const ());
+                maiko_glide::set_movie(true);
                 f.eax = 0;
                 return;
             }

@@ -55,8 +55,22 @@ struct Bridge {
     swaps: u32,
     was_flat: bool,
     last_swap: Option<Instant>,
+    /// The game's last grTexClampMode arguments.
+    clamp: [u32; 3],
+    movie: bool,
 }
+/// Glide's GR_TEXTURECLAMP_CLAMP.
+const CLAMP: u32 = 1;
 impl Bridge {
+    /// The game sets wrap mode once for everything, including the 256-texel tiles a movie frame is
+    /// cut into. At 640x480 a tile edge lands on a pixel centre and filtering never reaches the
+    /// tile's unused black side; above that, the left edge of each tile blends with it and shows a
+    /// dark vertical line. Clamping while a movie plays keeps the filter inside the tile.
+    fn apply_clamp(&self) {
+        let [tmu, s, t] = self.clamp;
+        let (s, t) = if self.movie { (CLAMP, CLAMP) } else { (s, t) };
+        unsafe { grTexClampMode(tmu, s, t) };
+    }
     /// The original waited for a 60 Hz retrace on every swap, and several animations (flames, the
     /// free-look camera) advance once per drawn frame. Faster displays or disabled vsync would run
     /// them too fast, so never swap more often than 60 times per second.
@@ -87,6 +101,8 @@ impl Default for Bridge {
             swaps: 0,
             was_flat: false,
             last_swap: None,
+            clamp: [0; 3],
+            movie: false,
         }
     }
 }
@@ -296,7 +312,10 @@ impl Bridge {
                 25 => grDepthMask(a[0]),
                 22 => grDepthBiasLevel(a[0]),
                 86 => grTexFilterMode(a[0], a[1], a[2]),
-                77 => grTexClampMode(a[0], a[1], a[2]),
+                77 => {
+                    self.clamp = [a[0], a[1], a[2]];
+                    self.apply_clamp();
+                }
                 90 => grTexMipMapMode(a[0], a[1], a[2]),
                 120 => guTexCombineFunction(a[0], a[1]),
                 101 => guColorCombineFunction(a[0]),
@@ -453,6 +472,16 @@ impl std::ops::Index<usize> for GuestArgs {
     fn index(&self, index: usize) -> &u32 {
         unsafe { &*self.0.add(index) }
     }
+}
+/// A movie starts (`true`) or ends; see `Bridge::apply_clamp`.
+pub fn set_movie(active: bool) {
+    BRIDGE.with(|bridge| {
+        let mut bridge = bridge.borrow_mut();
+        if bridge.movie != active {
+            bridge.movie = active;
+            bridge.apply_clamp();
+        }
+    });
 }
 /// # Safety
 /// `frame` and the arguments for this Glide import point to mapped guest memory.
