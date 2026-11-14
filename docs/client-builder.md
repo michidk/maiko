@@ -79,14 +79,13 @@ Each kit is proven by building a package from it. Linux and Windows run the real
 
 The SDL, GL and notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, which the script checks against that release's `SHA256SUMS`.
 
-Kits are published only as assets of a versioned `vX.Y.Z` release. Every release carries the latest kits forward, so a release without kit changes needs nothing. After a kit changes, replace the three assets on the latest release and refresh their lines in `SHA256SUMS`, then run **Deploy browser builder** so the site picks them up:
+Kits are published only as assets of a versioned `vX.Y.Z` release. Every release carries the latest kits forward, so a release without kit changes needs nothing. After a kit changes, publish it:
 
 ```sh
-cd kits
-gh release download vX.Y.Z --repo michidk/maiko --pattern SHA256SUMS
-grep -v ' maiko-runtime-kit-' SHA256SUMS > sums && sha256sum maiko-runtime-kit-*.zip >> sums && mv sums SHA256SUMS
-gh release upload vX.Y.Z --repo michidk/maiko --clobber maiko-runtime-kit-*.zip SHA256SUMS
+python3 -m tools.publish_kits kits
 ```
+
+It replaces the three assets on the latest release, rewrites their lines in `SHA256SUMS` and starts **Deploy browser builder**, which serves the new kits. Run it with an authenticated `gh`.
 
 Keep generated playable packages private.
 
