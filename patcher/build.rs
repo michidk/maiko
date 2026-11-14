@@ -20,7 +20,7 @@ fn main() {
                 let full = fs::canonicalize(&path).unwrap();
                 source.push_str(&format!(
                     "({:?}, include_bytes!({:?})),\n",
-                    relative.to_str().unwrap(),
+                    relative.to_str().unwrap().replace('\\', "/"),
                     full.to_str().unwrap()
                 ));
             }
