@@ -19,4 +19,6 @@ mod logging;
 pub(crate) use logging::{capture_output, write_console};
 
 mod paths;
-pub(crate) use paths::{default_game, default_user_directory, log_directory, remember_game};
+pub(crate) use paths::{
+    default_game, default_user_directory, disc_roots, log_directory, remember_game,
+};

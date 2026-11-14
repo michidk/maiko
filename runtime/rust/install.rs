@@ -1,6 +1,6 @@
 //! Installation selection and exact original-executable validation on native hosts.
 use crate::rg_log;
-use crate::{media::rg_cd_mount, storage};
+use crate::storage;
 use sha2::{Digest, Sha256};
 use std::ffi::{OsString, c_char, c_int};
 use std::io::{self, Read};
@@ -238,21 +238,17 @@ fn select(selection: Selection) -> io::Result<()> {
         rg_skip_outro = u32::from(selection.skip_outro || rg_exe_variant == 1);
         rg_load_save = selection.load_save.map_or(-1, i32::from);
     }
-    if let Some(media) = &selection.media {
-        let mut path = [0; 4096];
-        unsafe {
-            storage::copy_path(media, path.as_mut_ptr(), path.len())?;
-        }
-        if unsafe { rg_cd_mount(path.as_ptr()) } == 0 {
-            return Err(storage::denied());
-        }
-    }
+    // The installer writes the CD drive letter into SYSTEM.INI; the saves folder holds the copy in use.
+    let system_ini = storage::STORAGE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .and_then(|root| root.resolved("C:\\SYSTEM.INI").ok())
+        .and_then(|path| std::fs::read(path).ok())
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        .unwrap_or_default();
+    crate::installed_media::select(selection.media.as_deref(), &game, &system_ini)?;
     std::env::set_current_dir(&game)?;
-    if selection.media.is_none()
-        && unsafe { crate::installed_media::rg_gog_movies_mount(rg_cd_mount) } < 0
-    {
-        return Err(storage::denied());
-    }
     rg_log!("Verified original game directory: {}", game.display());
     Ok(())
 }
@@ -280,7 +276,7 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
                 unsafe { storage::path_from_c(arg) }.map(PathBuf::into_os_string)
             })
             .collect::<io::Result<Vec<_>>>()?;
-        let selection=Selection::parse(args).inspect_err(|_| rg_log!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image GAME_GOG_OR_ISO] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
+        let selection=Selection::parse(args).inspect_err(|_| rg_log!("Usage: redguard-native [--game-dir GAME_DIRECTORY | --choose-game-dir] [--user-dir SAVE_DIRECTORY] [--cd-image DISC_IMAGE_CUE_OR_FOLDER] [--fullscreen | --window-size WIDTHxHEIGHT] [--skip-intro] [--skip-outro] [--load-save SLOT]"))?;
         select(selection)
     })();
     if let Err(e) = &result {

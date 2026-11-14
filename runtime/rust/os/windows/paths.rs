@@ -19,3 +19,7 @@ pub(crate) fn default_user_directory() -> Option<PathBuf> {
 pub(crate) fn remember_game(_game: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
+/// The drive the CD release was installed from, as SYSTEM.INI names it.
+pub(crate) fn disc_roots(letter: u8) -> Vec<PathBuf> {
+    vec![PathBuf::from(format!("{}:\\", letter as char))]
+}

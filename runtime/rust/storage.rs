@@ -205,8 +205,12 @@ impl Storage {
                     return Ok(path);
                 }
             }
+            if let Some(path) = crate::installed_media::disc_file(leaf) {
+                rg_log!("MOVIE disc {request} -> {}", path.display());
+                return Ok(path);
+            }
             rg_log!(
-                "MOVIE missing {request}; searched GAME_DIR, MOVIES, ANIMS, VIDEO; no installed file found"
+                "MOVIE missing {request}; searched GAME_DIR, MOVIES, ANIMS, VIDEO and the disc; no file found"
             );
             return Err(absent());
         }
