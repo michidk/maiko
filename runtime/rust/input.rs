@@ -390,6 +390,16 @@ impl Input {
     }
 }
 
+/// Explain a failed game window; the Linux package's SDL uses X11 (or XWayland) and OpenGL.
+fn window_failed(error: &str) {
+    let hint = if cfg!(target_os = "linux") && std::env::var_os("DISPLAY").is_none() {
+        " (DISPLAY is not set: Maiko needs an X11 or XWayland session)"
+    } else {
+        ""
+    };
+    rg_log!("Native SDL window failed: {error}{hint}");
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_input_window(width: u32, height: u32) -> *mut c_void {
     INPUT.with(|input| {
@@ -397,7 +407,7 @@ pub extern "C" fn rg_input_window(width: u32, height: u32) -> *mut c_void {
             .borrow_mut()
             .window(width, height)
             .unwrap_or_else(|error| {
-                rg_log!("Native SDL window failed: {error}");
+                window_failed(&error);
                 std::ptr::null_mut()
             })
     })
@@ -442,7 +452,8 @@ pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
         }
         match regs[0] & 65535 {
             0 => {
-                if input.window(640, 480).is_err() {
+                if let Err(error) = input.window(640, 480) {
+                    window_failed(&error);
                     return 0;
                 }
                 input.buttons = 0;
