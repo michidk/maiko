@@ -132,7 +132,8 @@ export async function compile(source, input, wasm) {{
     run(Command::new("ninja")
         .arg("-C")
         .arg(&native)
-        .args(["-j2", "llvm-tblgen"]))?;
+        .arg(super::jobs())
+        .args(["llvm-tblgen"]))?;
     fs::create_dir_all(cache.join("wasi"))?;
     let wasi = fs::canonicalize(cache.join("wasi"))?;
     run(Command::new("cmake").args(["-G", "Ninja", "-S"]).arg(llvm.join("llvm")).arg("-B").arg(&wasi)
@@ -145,7 +146,8 @@ export async function compile(source, input, wasm) {{
     run(Command::new("ninja")
         .arg("-C")
         .arg(&wasi)
-        .args(["-j2", "opt", "llc", "lld"]))?;
+        .arg(super::jobs())
+        .args(["opt", "llc", "lld"]))?;
     for (source, name) in [("opt", "opt"), ("llc", "llc"), ("lld", "ld64")] {
         fs::copy(
             wasi.join("bin").join(source),

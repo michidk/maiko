@@ -5,13 +5,9 @@ pub fn assembly(target: Target) -> Vec<(Vec<String>, String)> {
     if target == Target::Macos {
         return Vec::new();
     }
-    [("rgfx", "rgfx")]
+    crate::link::engine(target)
         .into_iter()
-        .map(|(source, destination)| {
-            let output = format!(
-                "{destination}.{}",
-                if target == Target::Linux { "o" } else { "obj" }
-            );
+        .map(|(source, output)| {
             let mut args = vec![
                 "nasm".into(),
                 "-f".into(),

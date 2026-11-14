@@ -24,6 +24,8 @@ patch -p1 < /work/openglide-sdl-window.patch
 patch -p1 < /work/openglide-macos.patch
 sh /work/platforms/macos/build_renderer.sh
 
+# Kit mode builds the game-free link inputs; a translation adds the real engine.
+if [ -f /game/rgfx.llasm ] || [ -n "${MAIKO_KIT:-}" ]; then
 if [ -f /game/rgfx.llasm ]; then
     # Real game input is emitted from an owned, hash-checked installation.
     # Keep the SDK and all generated engine code out of the source tree.
@@ -38,10 +40,11 @@ if [ -f /game/rgfx.llasm ]; then
     # Linux; those observations remain separate from Darwin execution.
     timeout 240 llc -O=2 -filetype=obj -mtriple=x86_64-unknown-linux-gnu \
         --relocation-model=pic /results/game.bc -o /results/engine-linux.o
+fi
     for arch in x86_64 arm64; do
         directory="/results/game-$arch"
         mkdir -p "$directory"
-        timeout 240 llc -O=2 -filetype=obj -mtriple="$arch-apple-darwin" \
+        [ -f /results/game.bc ] && timeout 240 llc -O=2 -filetype=obj -mtriple="$arch-apple-darwin" \
             --relocation-model=pic /results/game.bc -o "$directory/engine.o"
         for source in /work/SR/llasm-support/*.c; do
             # The shared Rust dispatcher supplies the CPU-state INT boundary.
@@ -58,20 +61,37 @@ if [ -f /game/rgfx.llasm ]; then
             -O2 -I/work/runtime -I/audio -F/frameworks \
             -I/frameworks/SDL2.framework/Headers -I/frameworks/SDL2_mixer.framework/Headers \
             -c /audio/Albion-sound.c -o "$directory/audio.o"
-        clang++ -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
-            -stdlib=libc++ --ld-path=/usr/lib/llvm-14/bin/ld64.lld \
-            -Wl,-platform_version,macos,11.0,11.3 -Wl,-dead_strip \
-            -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path \
-            "$directory"/*.o "/results/libmaiko-host-$arch.a" \
-            "/results/libredguard-glide-$arch.dylib" -F/frameworks \
-            -framework SDL2 -framework SDL2_mixer -framework Security \
-            -framework CoreFoundation -liconv -lresolv \
-            -o "/results/redguard-native-$arch"
+        mac_link() {
+            clang++ -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
+                -stdlib=libc++ --ld-path=/usr/lib/llvm-14/bin/ld64.lld \
+                -Wl,-platform_version,macos,11.0,11.3 \
+                -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path \
+                "$directory"/*.o "$@" \
+                "/results/libredguard-glide-$arch.dylib" -F/frameworks \
+                -framework SDL2 -framework SDL2_mixer -framework Security \
+                -framework CoreFoundation -liconv -lresolv \
+                -o "/results/redguard-native-$arch"
+        }
+        if [ -f "$directory/engine.o" ]; then
+            mac_link -Wl,-dead_strip "/results/libmaiko-host-$arch.a"
+        else
+            # Without the engine, a probe keeps the whole host so its system imports cover
+            # everything the browser's link can reference. The engine's own symbols are
+            # replaced by empty definitions; the probe is never run or packaged.
+            host="-Wl,-force_load,/results/libmaiko-host-$arch.a"
+            if ! mac_link $host -Wl,--error-limit=0 2> "/results/probe-$arch.log"; then
+                sed -n 's/.*undefined symbol: //p' "/results/probe-$arch.log" | sort -u |
+                    awk '{ printf ".globl %s\n%s:\n    ret\n", $1, $1 }' > /tmp/engine-stub.s
+                [ -s /tmp/engine-stub.s ] || { cat "/results/probe-$arch.log"; exit 1; }
+                clang -target "$arch-apple-macos11" -c /tmp/engine-stub.s -o /tmp/engine-stub-$arch.o
+                mac_link $host /tmp/engine-stub-$arch.o
+            fi
+        fi
         llvm-objdump --macho --private-headers --dylibs-used "/results/redguard-native-$arch" \
             > "/results/game-$arch.txt"
         # Retain only source-free linker inputs for the browser kit exporter.
         # The translated engine is rebuilt from the visitor's owned executable.
-        rm "$directory/engine.o"
+        rm -f "$directory/engine.o"
     done
     mkdir -p /results/runtime/Frameworks
     llvm-lipo-14 -create /results/redguard-native-x86_64 /results/redguard-native-arm64 \
@@ -83,5 +103,5 @@ if [ -f /game/rgfx.llasm ]; then
     cp -a /frameworks/SDL2.framework /frameworks/SDL2_mixer.framework \
         /results/runtime/Frameworks/
     cp /work/platforms/macos/LAUNCH.md /results/runtime/README.md
-    rm /results/game.bc
+    rm -f /results/game.bc
 fi

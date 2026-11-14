@@ -50,9 +50,9 @@ self.onmessage = async ({ data }) => {
       for (const arch of ['x86_64', 'arm64']) {
         let current = { 'game.bc': bitcode };
         for (const [tool, args, output] of builder.compilation(arch)) {
-          stage(`${{ llc: 'Compiling', ld64: 'Linking' }[tool]} for ${arch === 'arm64' ? 'Apple Silicon' : 'Intel'}…`);
+          stage(`${{ llc: 'Compiling', lld: 'Linking' }[tool]} for ${arch === 'arm64' ? 'Apple Silicon' : 'Intel'}…`);
           if (!modules.has(tool)) modules.set(tool, await WebAssembly.compile(builder.tool(tool)));
-          if (tool === 'ld64') Object.assign(current, builder.linker_files(arch));
+          if (tool === 'lld') Object.assign(current, builder.linker_files(arch));
           const result = await runWasi(modules.get(tool), args, current, [output], log);
           if (!result[output]?.length) throw new Error(`${tool} did not produce ${output}.`);
           current = { [output]: result[output] };
@@ -70,8 +70,13 @@ self.onmessage = async ({ data }) => {
         stage(`Assembling ${args[args.length - 3]}…`);
         files = await runWasi(nasm, args, files, [output], log);
       }
-      stage('Verifying executable…');
-      executable = builder.relink(files[data.target === 'linux' ? 'rgfx.o' : 'rgfx.obj']);
+      stage('Linking the game…');
+      const [args, output, inputs] = builder.link();
+      const objects = Object.fromEntries(builder.assembly().map(([, object]) => [object, files[object]]));
+      files = null;
+      const lld = await WebAssembly.compile(builder.tool('lld'));
+      executable = (await runWasi(lld, args, { ...inputs, ...objects }, [], log))[output];
+      if (!executable?.length) throw new Error('The linker did not produce the game executable.');
     }
     stage('Packing your ZIP…');
     const zip = builder.package(executable);

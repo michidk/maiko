@@ -44,7 +44,7 @@ def ensure_tool_image():
         print(f'Restoring {IMAGE}; log: {logfile}',flush=True)
         with logfile.open('w') as log:
             run(['docker','build','-t',IMAGE,'-f',str(ROOT/'platforms/windows/Dockerfile'),str(ROOT/'platforms/windows')],
-                stdout=log,stderr=subprocess.STDOUT,timeout=600)
+                stdout=log,stderr=subprocess.STDOUT,timeout=2400)
         inspected=run(['docker','image','inspect','--format','{{.Id}}',IMAGE],capture_output=True)
     return dict(image_id=inspected.stdout.strip(),rebuilt=rebuilt,
                 seconds=round(time.monotonic()-began,3),log=str(logfile) if logfile else None)

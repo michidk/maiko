@@ -13,7 +13,6 @@ use std::{collections::BTreeMap, fs, io::Write, path::Path, process::Command};
 #[derive(Deserialize)]
 struct Report {
     status: String,
-    macos_game_built: bool,
     openglide_commit: String,
     source_sha256: BTreeMap<String, String>,
     artifact_sha256: BTreeMap<String, String>,
@@ -55,22 +54,18 @@ fn renderer_source(report: &Report) -> Result<Vec<u8>> {
     Ok(zip(&files, None)?)
 }
 
-pub(super) fn export(
-    build: &Path,
-    runtime: &Path,
-    accepted: &Path,
-    revision: &str,
-    output: &Path,
-) -> Result<()> {
+pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path) -> Result<()> {
     if output.exists() {
         return Err("Output already exists".into());
     }
     let report: Report =
         serde_json::from_slice(&read_limited(&build.join("report.json"), 1024 * 1024)?)?;
-    if !report.macos_game_built
-        || report.status != "synthetic_execution_and_macos_game_cross_link_passed"
-    {
-        return Err("Mac kit export requires a completed native backend check".into());
+    if !matches!(
+        report.status.as_str(),
+        "synthetic_execution_and_macos_kit_inputs_built"
+            | "synthetic_execution_and_macos_game_cross_link_passed"
+    ) {
+        return Err("Mac kit export requires a completed native backend check (--kit)".into());
     }
     for (path, digest) in &report.source_sha256 {
         if !safe_path(path) || hash(&fs::read(path)?) != *digest {
@@ -84,7 +79,6 @@ pub(super) fn export(
         "dmd.wasm",
         "opt.wasm",
         "llc.wasm",
-        "ld64.wasm",
         "llasm.d",
         "dlang.js",
         "LICENSES.txt",
@@ -94,6 +88,10 @@ pub(super) fn export(
             read_limited(&cache.join(name), 256 * 1024 * 1024)?,
         );
     }
+    files.insert(
+        "tools/lld.wasm".into(),
+        read_limited(&cache.join("ld64.wasm"), 256 * 1024 * 1024)?,
+    );
     for entry in fs::read_dir(cache.join("llasm-support"))? {
         let path = entry?.path();
         let name = path
@@ -189,13 +187,10 @@ pub(super) fn export(
     files.insert(format!("runtime/{source_name}"), renderer_source(&report)?);
     package_files.push(source_name.into());
     package_files.sort();
-    let executable = read_limited(accepted, 512 * 1024 * 1024)?;
-    maiko_patcher::macho::check_universal(&executable)?;
     let manifest = Manifest {
-        format: 1,
+        format: maiko_patcher::kit::FORMAT,
         target: Target::Macos,
         revision: revision.into(),
-        executable_sha256: hash(&executable),
         files: files
             .iter()
             .map(|(name, bytes)| (name.clone(), hash(bytes)))
@@ -212,7 +207,6 @@ pub(super) fn export(
     for arch in macos::ARCHITECTURES {
         macos::linker_files(&kit, arch)?;
     }
-    kit.package(&executable)?;
     fs::OpenOptions::new()
         .write(true)
         .create_new(true)

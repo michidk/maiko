@@ -1,10 +1,9 @@
-//! Export a source-free template from a tested native build.
+//! Build the WebAssembly tools and export game-free runtime kits.
 use maiko_patcher::{
     image::hash,
-    kit::{Manifest, Target, zip},
+    kit::{FORMAT, Kit, Manifest, Target, zip},
     native::read_limited,
     prepare::Files,
-    relink::Recipe,
 };
 use std::{
     env, fs,
@@ -20,6 +19,16 @@ mod macos_tools;
 #[path = "maiko-kit/tools.rs"]
 mod tools;
 const SR: &str = "ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3";
+/// Parallel build jobs: MAIKO_JOBS, or 2 so a shared machine stays responsive.
+fn jobs() -> String {
+    format!(
+        "-j{}",
+        env::var("MAIKO_JOBS")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(2)
+    )
+}
 fn run(command: &mut Command) -> Result<Vec<u8>> {
     eprintln!("Running {command:?}");
     let result = command.stderr(Stdio::inherit()).output()?;
@@ -79,23 +88,8 @@ fn patch(directory: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
-fn export(
-    target: Target,
-    executable: &Path,
-    object: &Path,
-    runtime: &Path,
-    revision: &str,
-    output: &Path,
-) -> Result<()> {
-    if output.exists() {
-        return Err("Output already exists".into());
-    }
-    let executable = read_limited(executable, 256 * 1024 * 1024)?;
-    let assembled = read_limited(object, 256 * 1024 * 1024)?;
-    let (recipe, template) = Recipe::export(&executable, &assembled)?;
-    let mut files = Files::new();
-    files.insert("template.bin".into(), template);
-    files.insert("recipe.json".into(), serde_json::to_vec(&recipe)?);
+/// The compilers every kit carries: SR and NASM, plus LLVM's LLD from the Mac toolchain.
+fn compiler_tools(files: &mut Files) -> Result<()> {
     for tool in ["sr", "nasm"] {
         files.insert(
             format!("tools/{tool}.wasm"),
@@ -103,9 +97,34 @@ fn export(
         );
     }
     files.insert(
-        "tools/LICENSES.txt".into(),
-        fs::read(".cache/client-toolchain/LICENSES.txt")?,
+        "tools/lld.wasm".into(),
+        read_limited(
+            Path::new(".cache/client-macos-toolchain/ld64.wasm"),
+            256 * 1024 * 1024,
+        )?,
     );
+    let mut notices = fs::read(".cache/client-toolchain/LICENSES.txt")?;
+    notices.extend(b"\n\n");
+    notices.extend(fs::read(".cache/client-macos-toolchain/LICENSES.txt")?);
+    files.insert("tools/LICENSES.txt".into(), notices);
+    Ok(())
+}
+
+fn export(
+    target: Target,
+    link: &Path,
+    runtime: &Path,
+    revision: &str,
+    output: &Path,
+) -> Result<()> {
+    if target == Target::Macos {
+        return Err("Use export-macos for the Mac kit".into());
+    }
+    if output.exists() {
+        return Err("Output already exists".into());
+    }
+    let mut files = Files::new();
+    compiler_tools(&mut files)?;
     let support = String::from_utf8(run(Command::new("git").args([
         "-C",
         ".cache/sr",
@@ -128,8 +147,27 @@ fn export(
             run(Command::new("git").args(["-C", ".cache/sr", "show", &format!("{SR}:{path}")]))?,
         );
     }
-    // This directory is deliberately curated by the maintainer. Never copy a
-    // build directory recursively: it contains proprietary translated output.
+    // Link inputs are start files, libraries and runtime objects. None is built from the game.
+    for entry in fs::read_dir(link)? {
+        let path = entry?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("Invalid link input name")?;
+        if !path.is_file()
+            || !(name.ends_with(".o")
+                || name.ends_with(".obj")
+                || name.ends_with(".a")
+                || name.contains(".so"))
+        {
+            return Err(format!("Unexpected link input: {name}").into());
+        }
+        files.insert(
+            format!("support/link/{name}"),
+            read_limited(&path, 128 * 1024 * 1024)?,
+        );
+    }
+    // This directory is deliberately curated. Never copy a build directory recursively.
     let mut package_files = Vec::new();
     for entry in fs::read_dir(runtime)? {
         let path = entry?.path();
@@ -154,10 +192,9 @@ fn export(
     }
     package_files.sort();
     let manifest = Manifest {
-        format: 1,
+        format: FORMAT,
         target,
         revision: revision.into(),
-        executable_sha256: hash(&executable),
         files: files.iter().map(|(n, b)| (n.clone(), hash(b))).collect(),
         package_files,
         package_links: Default::default(),
@@ -168,8 +205,7 @@ fn export(
     );
     let bytes = zip(&files, None)?;
     // Repeat the consumer validation before exporting anything.
-    let kit = maiko_patcher::kit::Kit::load(&bytes, target)?;
-    kit.package(&kit.relink(&assembled)?)?;
+    Kit::load(&bytes, target)?;
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -199,8 +235,8 @@ fn main() -> Result<()> {
         Some("tools") if args.len() == 2 => tools::build(),
         Some("tools-macos") if args.len() == 2 => macos_tools::build(),
         Some("web-tools") if args.len() == 4 => web_tools(Path::new(&args[2]), Path::new(&args[3])),
-        Some("export-macos") if args.len() == 7 => macos_export::export(Path::new(&args[2]), Path::new(&args[3]), Path::new(&args[4]), &args[5], Path::new(&args[6])),
-        Some("export") if args.len() == 8 => export(Target::parse(&args[2])?, Path::new(&args[3]), Path::new(&args[4]), Path::new(&args[5]), &args[6], Path::new(&args[7])),
-        _ => Err("Usage: maiko-kit tools | tools-macos | web-tools MACOS_KIT DIST_DIRECTORY | export TARGET ACCEPTED_EXECUTABLE ENGINE_OBJECT CURATED_RUNTIME REVISION OUTPUT.zip | export-macos CHECKED_BUILD CURATED_RUNTIME ACCEPTED_UNIVERSAL REVISION OUTPUT.zip".into()),
+        Some("export-macos") if args.len() == 6 => macos_export::export(Path::new(&args[2]), Path::new(&args[3]), &args[4], Path::new(&args[5])),
+        Some("export") if args.len() == 7 => export(Target::parse(&args[2])?, Path::new(&args[3]), Path::new(&args[4]), &args[5], Path::new(&args[6])),
+        _ => Err("Usage: maiko-kit tools | tools-macos | web-tools MACOS_KIT DIST_DIRECTORY | export linux|windows LINK_INPUTS CURATED_RUNTIME REVISION OUTPUT.zip | export-macos CHECKED_BUILD CURATED_RUNTIME REVISION OUTPUT.zip".into()),
     }
 }

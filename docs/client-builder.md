@@ -29,22 +29,24 @@ Download the matching runtime kit from the same release, and run:
 
 ```sh
 maiko-patcher build --input /path/to/RGFX.EXE --target linux \
-  --kit linux.zip --output maiko-linux-x64.zip
+  --kit maiko-runtime-kit-linux.zip --output maiko-linux.zip
 ```
 
-The local Wasmtime CLI supports Linux and Windows. Use `--target windows` with `windows.zip` for Windows x64. For macOS, use the browser or the [local source build](../platforms/macos/README.md). `--wasmtime PATH` selects a local Wasmtime installation. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
+The local Wasmtime CLI supports Linux and Windows. Use `--target windows` with `maiko-runtime-kit-windows.zip` for Windows x64. For macOS, use the browser or the [local source build](../platforms/macos/README.md). `--wasmtime PATH` selects a local Wasmtime installation. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
 
 Extract the generated ZIP into a separate writable folder. Windows users double-click `redguard-native.exe`; Linux users run `./redguard-native` in a terminal. The program looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. The Linux package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries that the program finds beside itself. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory. Startup options such as `--skip-intro` are command-line options (a shortcut's Target on Windows); see the README.
 
 ## Runtime kits
 
-The project release provides support libraries, build tools and licence/source files. It contains no original game executable, game assets or runnable game package. A recognized executable from an owned installation is required to create a package locally.
+A kit holds everything needed to turn an owned `RGFX.EXE` into the native game, and no game code:
 
-The builder checks the kit checksum, validates its input and verifies the resulting executable against the accepted runtime snapshot before offering a download. Changed or unrecognized inputs fail validation.
+- **Compilers**, built for WebAssembly: SR (the static recompiler), NASM and LLVM's LLD linker. The Mac kit adds SR's LLasm output, the browser D compiler, LLVM `opt` and `llc`.
+- **Link inputs**: C runtime start files, system import libraries, the Rust host and SR's heap and audio objects. The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
+- **The packaged runtime**: the renderer, SDL and (on Linux) GL libraries, licence notices and corresponding source.
 
-The Mac kit contains SR/LLasm, the browser D compiler, LLVM/LLD, runtime objects and SDL frameworks. It contains no translated engine. System-library stubs contain the accepted native build's library identities and imported names, plus the libSystem unwind ABI required by LLVM 19's Rust personality code; the kit contains no Apple SDK. The browser links fresh engine objects from the selected executable and preserves framework links and executable permissions in the ZIP. The ZIP also carries the corresponding renderer source and build files.
+The browser or CLI checks the executable, translates it with SR, assembles the four engine objects with NASM (Mac: compiles them with LLVM for both architectures) and links them with LLD into the program. Browser and CLI produce byte-identical executables. Changed or unrecognized executables fail validation before anything is built.
 
-The Linux kit includes SDL2 2.30.11, SDL2_mixer 2.8.1, GLU and OpenGL dispatch libraries. The mixer supports WAVE playback. Corresponding notices and source/build files accompany the libraries. Keep those notices with any redistributed support libraries. Game files and generated playable packages must stay out of release uploads.
+The Linux kit includes SDL2 2.30.11, SDL2_mixer 2.8.1, GLU and OpenGL dispatch libraries, and links against glibc 2.36. The mixer supports WAVE playback. Keep the notices with any redistributed support libraries. Game files and generated playable packages must stay out of release uploads.
 
 ## Build and deploy the site
 
@@ -56,52 +58,38 @@ bun test web
 bun run build
 ```
 
-Runtime kits are assets of the latest release. The site build downloads `maiko-runtime-kit-{linux,windows,macos}.zip` from `releases/latest/download`, checks each against that release's `SHA256SUMS`, and serves them from the same origin. Nothing is pinned in the repository. For an offline build, set `MAIKO_KIT_DIRECTORY` to a folder with those three ZIPs and a `SHA256SUMS`; `MAIKO_KIT_URL` selects another release URL. The content security policy restricts browser requests to the page's origin.
+A release build serves the kits that release built. Otherwise the site build downloads `maiko-runtime-kit-{linux,windows,macos}.zip` from `releases/latest/download`, checks each against that release's `SHA256SUMS`, and serves them from the same origin. Nothing is pinned in the repository. For an offline build, set `MAIKO_KIT_DIRECTORY` to a folder with those three ZIPs and a `SHA256SUMS`; `MAIKO_KIT_URL` selects another release URL. The content security policy restricts browser requests to the page's origin.
 
-`.github/workflows/pages.yml` calls the reusable source-check and browser-build workflows and deploys on main or manual dispatch. Set **Settings → Pages → Source → GitHub Actions** before deploying. The managed GitHub App needs Pages write permission to enable that setting through the API.
+Releases deploy the site. `.github/workflows/pages.yml` redeploys main against the latest release's kits on manual dispatch. Set **Settings → Pages → Source → GitHub Actions** before deploying. The managed GitHub App needs Pages write permission to enable that setting through the API.
 
 
 ## Build the runtime kits
 
-One command builds the Linux, Windows and macOS kits from an owned `RGFX.EXE`, with the same arguments and outputs for every system:
+The release workflow builds the kits; no game file is involved. To build them locally:
 
 ```sh
-python3 -m tools.build_kits --exe /path/to/RGFX.EXE --output kits
+python3 -m tools.build_kits --output kits
 ```
 
-Inputs: the accepted original executable (the SHA-256 is checked), a new `--output` folder and `wasmtime` on `PATH` (or `--wasmtime`). The build host needs Docker, Bun, Rust with `rustup`, `wasm-bindgen-cli` 0.2.129, Git, curl, patch, tar, CMake, Ninja and a native C++ compiler. Keep at least 60 GB free, run one build at a time and expect a long run: the Mac backend check alone takes about 10 minutes and 9 GB of memory. The first run also builds the Windows/Linux tools and, if `.cache/client-macos-toolchain` is missing, the Mac compilers (`maiko-kit tools-macos`: checksum-pinned LLVM 19.1.0, WASI SDK 29 and browser-d sources, SR/LLasm, `opt`, `llc` and Mach-O LLD for WebAssembly), which is the slowest step.
+This writes `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip`, `maiko-runtime-kit-macos.zip` and their `SHA256SUMS`. It needs Docker, Bun, Rust with `rustup`, Git, curl, patch, tar, CMake, Ninja and a native C++ compiler. The first run builds the WebAssembly compilers (`maiko-kit tools` and `maiko-kit tools-macos`: checksum-pinned LLVM 19.1.0, WASI SDK 29 and browser-d sources), which takes hours; later runs reuse `.cache/client-toolchain` and `.cache/client-macos-toolchain`. `MAIKO_JOBS` sets the compiler build's parallel jobs (default 2).
 
-Outputs in `--output`:
+With `--exe /path/to/RGFX.EXE` (and Wasmtime), the script also builds a package from every kit through the website's real worker under Bun (`tools/browser_build.mjs`) and through the CLI, as a local end-to-end check.
 
-- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`, named like the release assets.
-
-Each kit is proven by building a package from it. Linux and Windows run the real `maiko-patcher build` on the executable. macOS runs the website's real `web/worker.js` under Bun (`tools/browser_build.mjs`) because the Mac kit pins the hash of a universal executable that only the browser toolchain produces. The script therefore exports a bootstrap Mac kit with a placeholder hash, lets the worker build the universal executable (it ends with "Compiled executable differs from the accepted build" by design), exports the final kit with that executable's hash and runs the worker again. It requires the identical executable and a passing package gate. Generated game code and executables stay in work folders that are removed after success, and a failed build keeps them for diagnosis; delete them yourself afterwards.
-
-The SDL, GL and notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, which the script checks against that release's `SHA256SUMS`.
-
-Kits are published only as assets of a versioned `vX.Y.Z` release. Every release carries the latest kits forward, so a release without kit changes needs nothing. After a kit changes, publish it:
-
-```sh
-python3 -m tools.publish_kits kits
-```
-
-It replaces the three assets on the latest release, rewrites their lines in `SHA256SUMS` and starts **Deploy browser builder**, which serves the new kits. Run it with an authenticated `gh`.
-
-Keep generated playable packages private.
+The SDL, GL and notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, checked against that release's `SHA256SUMS`.
 
 ## Versioned releases
 
 Run **Bump version and tag** on `main` to increment all four Rust packages together. It uses the Releaser App to publish a GitHub-signed commit and a `vX.Y.Z` tag. The workflow requires `RELEASER_APP_ID` and `RELEASER_APP_PRIVATE_KEY`, distributed through the shared workflows repository. It checks the published signature and contributor trailers before creating the tag. If tagging fails after the commit succeeds, create the matching tag on that commit to resume; rerunning the bump would increment the version again.
 
-A stable `vX.Y.Z` tag starts the release workflow. Tags must point to a commit on main and match every package version. Source checks, Windows and Linux patcher tests/builds, and the browser build must all succeed before publication. Manual dispatch defaults to a dry run: it builds and tests release artifacts on main without publishing. To retry publication, dispatch on the existing tag with `dry_run=false`.
+A stable `vX.Y.Z` tag starts the release workflow. Tags must point to a commit on main and match every package version. Source checks, the three runtime kits, Windows and Linux patcher tests/builds and the browser build must all succeed before publication; the kits job caches the WebAssembly compilers between releases. Manual dispatch defaults to a dry run: it builds and tests release artifacts on main without publishing. To retry publication, dispatch on the existing tag with `dry_run=false`.
 
 Each release contains:
 
 - `maiko-patcher-linux-x86_64.tar.gz` and `maiko-patcher-windows-x86_64.tar.gz`: standalone CLI, licence and usage instructions. Wasmtime is installed separately. The Linux CLI is statically linked with musl; the runtime kit has its own desktop and glibc requirements above.
 - `maiko-browser.tar.gz`: the complete static builder, including its checked support kits.
-- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`: the kits embedded in the browser build, with their upstream notices and corresponding source files. The Linux and Windows kits also work with the CLI's `--kit` option.
+- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`: the kits this release built and the browser serves, with their upstream notices and corresponding source files. The Linux and Windows kits also work with the CLI's `--kit` option.
 - `SHA256SUMS`, `LICENSE` and `README.md`.
 
-The workflow stages all assets in a draft and publishes only after uploads succeed. Retrying preserves an already published release. After publication, Pages deploys the browser artifact from that release run. Main also continues to deploy development builds. Published kits remain pinned snapshots until `web/kits.json` is deliberately updated; a version bump does not regenerate them.
+The workflow stages all assets in a draft and publishes only after uploads succeed. Retrying preserves an already published release. After publication, Pages deploys the browser from that release, so one run of **Bump version and tag** builds, releases and deploys everything.
 
 Workflows carry Orcastrate headers referencing `michidk/workflows` project templates. Update those templates alongside changes here so future synchronization preserves the change. Renovate extends the same shared preset used by Cyrus and redguard-preservation.

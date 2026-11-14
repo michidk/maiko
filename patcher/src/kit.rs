@@ -8,6 +8,8 @@ use std::io::{Cursor, Read, Write};
 
 const MAX_KIT: u64 = 384 * 1024 * 1024;
 const MAX_ENTRY: u64 = 256 * 1024 * 1024;
+/// Format 2 kits carry link inputs instead of a prebuilt executable template.
+pub const FORMAT: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -40,8 +42,8 @@ impl Target {
     }
     pub fn tools(self) -> &'static [&'static str] {
         match self {
-            Self::Linux | Self::Windows => &["sr", "nasm"],
-            Self::Macos => &["sr-llasm", "dmd", "opt", "llc", "ld64"],
+            Self::Linux | Self::Windows => &["sr", "nasm", "lld"],
+            Self::Macos => &["sr-llasm", "dmd", "opt", "llc", "lld"],
         }
     }
 }
@@ -52,7 +54,6 @@ pub struct Manifest {
     pub format: u32,
     pub target: Target,
     pub revision: String,
-    pub executable_sha256: String,
     pub files: std::collections::BTreeMap<String, String>,
     pub package_files: Vec<String>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -173,17 +174,8 @@ impl Kit {
         }
         let manifest: Manifest =
             serde_json::from_slice(manifest_bytes).map_err(|error| error.to_string())?;
-        if manifest.format != 1 || manifest.target != target {
+        if manifest.format != FORMAT || manifest.target != target {
             return Err("Runtime kit format or target does not match".into());
-        }
-        if manifest.executable_sha256 == "0".repeat(64)
-            || manifest.executable_sha256.len() != 64
-            || !manifest
-                .executable_sha256
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit())
-        {
-            return Err("Runtime kit needs an accepted executable SHA-256".into());
         }
         if files.len() != manifest.files.len() + 1 {
             return Err("Runtime kit contains unlisted files".into());
@@ -230,6 +222,11 @@ impl Kit {
                 return Err("Unsafe or duplicate framework link".into());
             }
         }
+        for name in crate::link::required(target) {
+            if !files.contains_key(&name) {
+                return Err(format!("Missing linker input {name}"));
+            }
+        }
         if target == Target::Macos {
             for name in ["tools/llasm.d", "tools/dlang.js"] {
                 if files
@@ -272,31 +269,9 @@ impl Kit {
             .collect()
     }
 
-    pub fn relink(&self, assembled: &[u8]) -> Result<Vec<u8>> {
-        let recipe: crate::relink::Recipe = serde_json::from_slice(
-            self.files
-                .get("recipe.json")
-                .ok_or("Missing relocation recipe")?,
-        )
-        .map_err(|e| e.to_string())?;
-        let executable = recipe.apply(
-            self.files
-                .get("template.bin")
-                .ok_or("Missing runtime template")?,
-            assembled,
-        )?;
-        if hash(&executable) != self.manifest.executable_sha256 {
-            return Err("Reconstructed executable differs from the accepted build".into());
-        }
-        Ok(executable)
-    }
-
     pub fn package(&self, executable: &[u8]) -> Result<Vec<u8>> {
-        if hash(executable) != self.manifest.executable_sha256 {
-            return Err(
-                "Compiled executable differs from the accepted build. No package was produced."
-                    .into(),
-            );
+        if executable.is_empty() {
+            return Err("The linker produced no executable. No package was produced.".into());
         }
         let target = self.manifest.target;
         let mut files = Files::new();
@@ -304,7 +279,7 @@ impl Kit {
             files.insert(name.clone(), self.files[&format!("runtime/{name}")].clone());
         }
         files.insert(target.executable().into(), executable.to_vec());
-        files.insert("build.json".into(), serde_json::to_vec_pretty(&serde_json::json!({"revision": self.manifest.revision, "target": target, "executable_sha256": self.manifest.executable_sha256})).map_err(|error| error.to_string())?);
+        files.insert("build.json".into(), serde_json::to_vec_pretty(&serde_json::json!({"revision": self.manifest.revision, "target": target, "executable_sha256": hash(executable)})).map_err(|error| error.to_string())?);
         zip_with_links(
             &files,
             Some(target.executable()),
@@ -344,10 +319,9 @@ mod tests {
             .filter_map(|name| name.strip_prefix("runtime/").map(str::to_owned))
             .collect();
         let manifest = Manifest {
-            format: 1,
+            format: FORMAT,
             target: Target::Macos,
             revision: "test".into(),
-            executable_sha256: hash(&executable),
             files: files
                 .iter()
                 .map(|(name, bytes)| (name.clone(), hash(bytes)))
@@ -372,7 +346,7 @@ mod tests {
     fn macos_package_contains_both_architectures_framework_links_and_no_compiler() {
         let (bytes, executable) = macos_kit("Versions/Current/SDL2");
         let kit = Kit::load(&bytes, Target::Macos).unwrap();
-        assert!(kit.package(b"wrong executable").is_err());
+        assert!(kit.package(b"").is_err());
         let package = kit.package(&executable).unwrap();
         let mut archive = zip::ZipArchive::new(Cursor::new(package)).unwrap();
         let names: Vec<_> = archive.file_names().map(str::to_owned).collect();

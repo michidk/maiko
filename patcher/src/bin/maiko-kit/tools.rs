@@ -61,7 +61,8 @@ pub(super) fn build() -> Result<()> {
         ))?;
     run(Command::new("make")
         .current_dir(&nasm_source)
-        .args(["-j2", "nasm"]))?;
+        .arg(super::jobs())
+        .args(["nasm"]))?;
     fs::copy(nasm_source.join("nasm"), cache.join("nasm.wasm"))?;
     let mut notice = fs::read_to_string(nasm_source.join("LICENSE"))?;
     let sr_notice = String::from_utf8(run(Command::new("git").args([

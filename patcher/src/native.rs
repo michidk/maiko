@@ -88,20 +88,23 @@ pub fn build(options: BuildOptions<'_>) -> Result<()> {
     write_files(&work, &prepare(&input)?)?;
     let tools = temporary.path().join("tools");
     fs::create_dir(&tools).map_err(|error| error.to_string())?;
-    for tool in ["sr", "nasm"] {
+    for tool in options.target.tools() {
         fs::write(
             tools.join(format!("{tool}.wasm")),
             &kit.files[&format!("tools/{tool}.wasm")],
         )
         .map_err(|error| error.to_string())?;
     }
+    // args[0] is the program name the tool sees; LLD selects its driver from it.
     let execute = |tool: &str, args: &[String]| -> Result<()> {
         let result = Command::new(&wasmtime)
             .arg("run")
             .arg("--dir")
             .arg(".")
+            .arg("--argv0")
+            .arg(&args[0])
             .arg(tools.join(format!("{tool}.wasm")))
-            .args(args)
+            .args(&args[1..])
             .current_dir(&work)
             .status()
             .map_err(|error| {
@@ -113,23 +116,18 @@ pub fn build(options: BuildOptions<'_>) -> Result<()> {
         Ok(())
     };
     eprintln!("Translating RGFX.EXE locally...");
-    execute("sr", &["RGFX.EXE".into(), "rgfx.asm".into()])?;
+    execute("sr", &["sr".into(), "RGFX.EXE".into(), "rgfx.asm".into()])?;
     write_files(&work, &finish(&input, read_sources(&work)?)?)?;
     fs::remove_file(work.join("RGFX.EXE")).map_err(|error| error.to_string())?;
     for (args, _) in assembly(options.target) {
         eprintln!("Assembling {}...", args[args.len() - 3]);
-        execute("nasm", &args[1..])?;
+        execute("nasm", &args)?;
     }
-    eprintln!("Reconstructing and verifying the native executable...");
-    let object = read_limited(
-        &work.join(if options.target == Target::Linux {
-            "rgfx.o"
-        } else {
-            "rgfx.obj"
-        }),
-        256 * 1024 * 1024,
-    )?;
-    let executable = kit.relink(&object)?;
+    eprintln!("Linking the native executable...");
+    write_files(&work, &crate::link::files(&kit))?;
+    let (args, output) = crate::link::command(options.target)?;
+    execute("lld", &args)?;
+    let executable = read_limited(&work.join(output), 256 * 1024 * 1024)?;
     let package = kit.package(&executable)?;
     let mut output = fs::OpenOptions::new()
         .write(true)

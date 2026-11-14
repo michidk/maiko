@@ -9,6 +9,10 @@ on:
       pages_artifact:
         type: boolean
         default: true
+      kits_artifact:
+        description: Artifact with the kits this release builds; without it the latest release's kits are served
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -31,6 +35,14 @@ jobs:
         run: |
           version=$(cargo metadata --locked --format-version 1 | jq -er '[.packages[] | select(.name == "wasm-bindgen") | .version] | unique | if length == 1 then .[0] else error("ambiguous wasm-bindgen version") end')
           cargo install wasm-bindgen-cli --version "$version" --locked
+      - name: Use the kits built by this release
+        if: inputs.kits_artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ inputs.kits_artifact }}
+          path: .cache/site-kits
+      - if: inputs.kits_artifact != ''
+        run: echo "MAIKO_KIT_DIRECTORY=$PWD/.cache/site-kits" >> "$GITHUB_ENV"
       - name: Build site and verify runtime kit checksums
         run: bun run build
       - name: Archive browser distribution

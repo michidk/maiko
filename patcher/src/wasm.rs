@@ -143,8 +143,14 @@ impl Builder {
             })
             .collect()
     }
-    pub fn relink(&self, assembled: &[u8]) -> Result<Vec<u8>, JsValue> {
-        self.kit.relink(assembled).map_err(error)
+    /// LLD arguments, the executable they write and the kit files LLD reads.
+    pub fn link(&self) -> Result<Array, JsValue> {
+        let (args, output) = crate::link::command(self.kit.manifest.target).map_err(error)?;
+        let command = Array::new();
+        command.push(&args.into_iter().map(JsValue::from).collect::<Array>());
+        command.push(&output.into());
+        command.push(&to_js(crate::link::files(&self.kit))?);
+        Ok(command)
     }
     pub fn executable(&self) -> String {
         self.kit.manifest.target.executable().into()

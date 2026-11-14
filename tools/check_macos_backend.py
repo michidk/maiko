@@ -127,12 +127,14 @@ def main():
     parser.add_argument('--keep-container', action='store_true', help='Retain bounded tools for follow-up compilation')
     parser.add_argument('--reuse-toolchain', action='store_true',
                         help='Use the existing local compiler image instead of rebuilding it')
+    parser.add_argument('--kit', action='store_true',
+                        help='Build the game-free Mac kit inputs (runtime objects, renderer, frameworks)')
     parser.add_argument('--translation', type=Path,
                         help='Also cross-link an original-game tools.translate_llasm output for both Macs')
     args = parser.parse_args()
     if sys.version_info < (3, 11):
         parser.error('Python 3.11 or newer is required')
-    if shutil.disk_usage(ROOT).free < 60_000_000_000:
+    if args.translation and shutil.disk_usage(ROOT).free < 60_000_000_000:
         parser.error('Less than 60 GB free; clean disposable output before building')
     cache = ROOT / '.cache/macos'
     cache.mkdir(parents=True, exist_ok=True)
@@ -166,23 +168,23 @@ def main():
             with (output / 'toolchain-build.log').open('w') as log:
                 run('docker', 'build', '-t', IMAGE, '-f', str(ROOT / 'platforms/macos/Dockerfile'),
                     str(ROOT / 'platforms/macos'), stdout=log, stderr=subprocess.STDOUT,
-                    timeout=600)
+                    timeout=2400)
         report['toolchain_image_reused'] = args.reuse_toolchain
         report['toolchain_image'] = subprocess.check_output(
             ['docker', 'image', 'inspect', IMAGE, '--format', '{{.Id}}'], text=True).strip()
         memory = '6g' if translation else '3g'
         run('docker', 'run', '-d', '--network', 'none', '--memory', memory, '--memory-swap', memory,
-            '--cpus', '2', '--name', container, IMAGE, 'sleep', '3600' if translation or args.keep_container else '900',
+            '--cpus', '2', '--name', container, IMAGE, 'sleep', '3600' if translation or args.kit or args.keep_container else '900',
             stdout=subprocess.DEVNULL)
         run('docker', 'exec', container, 'mkdir', '-p', '/results')
-        report['rust_archives'] = stage_rust(container, game=bool(translation))
-        if translation:
+        report['rust_archives'] = stage_rust(container, game=bool(translation) or args.kit)
+        if translation or args.kit:
             from .sr_heap import stage_sr_heap
             from .sr_audio import stage_sr_audio
             report['heap'] = stage_sr_heap(container)
             report['audio'] = stage_sr_audio(container)
             run('docker', 'exec', container, 'mkdir', '-p', '/game')
-            for source in translation.iterdir():
+            for source in (translation.iterdir() if translation else []):
                 if source.suffix in ('.llasm', '.llinc'):
                     run('docker', 'cp', str(source), container + ':/game/' + source.name)
         archive = cache / 'sr-backend.tar'
@@ -202,7 +204,7 @@ def main():
         for name in PATCHES:
             run('docker', 'cp', str(ROOT / 'patches' / name), container + ':/work/' + name)
         with (output / 'build-test.log').open('w') as log:
-            run('docker', 'exec', container, 'timeout', '1200' if translation else '600', 'sh', '/work/platforms/macos/check_backend.sh',
+            run('docker', 'exec', *(['--env', 'MAIKO_KIT=1'] if args.kit else []), container, 'timeout', '1200' if translation else '900', 'sh', '/work/platforms/macos/check_backend.sh',
                 stdout=log, stderr=subprocess.STDOUT)
         run('docker', 'cp', container + ':/results/.', str(output))
         exported = True
@@ -211,6 +213,8 @@ def main():
         report['linux_translated_fixture_verified'] = True
         report['linux_arm64_emulated_fixture_verified'] = True
         report['darwin_rust_runtime_cross_linked'] = True
+        if args.kit and not translation:
+            report['status'] = 'synthetic_execution_and_macos_kit_inputs_built'
         if translation:
             current = {p.name: digest(p) for p in translation.iterdir()
                        if p.suffix in ('.llasm', '.llinc')}

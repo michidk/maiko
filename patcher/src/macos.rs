@@ -86,7 +86,7 @@ pub fn compilation(arch: &str) -> Result<Vec<(&'static str, Vec<String>, String)
     let executable = format!("redguard-native-{arch}");
     let triple = format!("{arch}-apple-darwin");
     let mut link: Vec<String> = [
-        "ld64",
+        "ld64.lld",
         "-arch",
         arch,
         "-platform_version",
@@ -123,7 +123,7 @@ pub fn compilation(arch: &str) -> Result<Vec<(&'static str, Vec<String>, String)
             ],
             object,
         ),
-        ("ld64", link, executable),
+        ("lld", link, executable),
     ])
 }
 

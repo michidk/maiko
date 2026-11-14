@@ -9,18 +9,15 @@ import time
 import tempfile
 import uuid
 from .toolchain import ROOT, IMAGE, run, ensure_tool_image
-from .le_image import Image
 from .sr_heap import stage_sr_heap
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
 from .windows_sdl import stage_windows_sdl
-from glide.imports import emit
 
 COMMIT='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--install',type=Path,required=True)
-    args=parser.parse_args()
+    parser.parse_args()
     cache=ROOT/'.cache'; source=cache/'openglide-ng'; output=cache/'glide'
     output.mkdir(exist_ok=True)
     if not source.exists():
@@ -34,7 +31,6 @@ def main():
         subprocess.run(['tar','-x','-C',directory],input=archive,check=True)
         subprocess.run(['patch','-p1','-d',directory],input=(ROOT/'patches/openglide-x64.patch').read_bytes(),check=True)
         archive=subprocess.check_output(['tar','-c','-C',directory,'.'])
-    emit(Image(args.install.resolve()/'RGFX.EXE'),output)
     name='rg-glide-'+uuid.uuid4().hex[:10]
     began=time.monotonic()
     report=dict(commit=COMMIT,status='started',native_windows_verified=False,menu_verified=False)
@@ -49,7 +45,8 @@ def main():
             run(['docker','cp',str(ROOT/folder)+'/.',name+':/work/'])
         for fixture in ['backend_smoke.cpp','bridge_test.cpp']:
             run(['docker','cp',str(ROOT/'tests'/fixture),name+':/work/'+fixture])
-        run(['docker','cp',str(output/'glide_imports.h'),name+':/work/'])
+        # Glide's import order, as the patcher derives it from RGFX.EXE; the bridge test needs no game.
+        run(['docker','cp',str(ROOT/'tests/glide_imports.h'),name+':/work/'])
         report['sr_heap']=stage_sr_heap(name)
         report['rust_runtime']=stage_rust_runtime(name,rust_glide)
         report['sdl_runtime']=stage_windows_sdl(name)
