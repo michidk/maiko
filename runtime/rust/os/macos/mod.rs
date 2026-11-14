@@ -10,7 +10,9 @@ pub(crate) use memory::*;
 pub(crate) const NAME: &str = "macOS native";
 
 mod paths;
-pub(crate) use paths::{default_game, default_user_directory, log_directory, remember_game};
+pub(crate) use paths::{
+    default_game, default_user_directory, disc_roots, log_directory, remember_game,
+};
 
 mod dialog;
 pub(crate) use dialog::{choose_game_directory, show_error};

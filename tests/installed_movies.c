@@ -53,7 +53,9 @@ int main(void) {
     assert(rg_file_service(&f) && (f.flags&1));
     read_movie("D:\\INTRO.SMK","root");
     denied(0x3d00,"D:\\..\\OUTSIDE.SMK");denied(0x3d00,"D:\\MOVIES\\INTRO.SMK");
-    denied(0x3d00,"D:\\*.SMK");denied(0x3d00,"D:\\README.TXT");denied(0x3d00,"E:\\INTRO.SMK");
+    denied(0x3d00,"D:\\*.SMK");denied(0x3d00,"D:\\README.TXT");
+    /* A CD release installed from another drive asks for that drive (animation_drive). */
+    read_movie("E:\\INTRO.SMK","root");
     f=request(0x3d00,"D:\\ABSENT.SMK");assert(rg_file_service(&f) && (f.flags&1) && f.eax==2);
     assert(!remove("game/INTRO.SMK"));read_movie("D:\\INTRO.SMK","movies");
     assert(!remove("game/mOvIeS/intro.smk"));read_movie("D:\\INTRO.SMK","anims");

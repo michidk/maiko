@@ -1,8 +1,9 @@
 //! CD music. The original plays its music from the audio tracks of the game disc through the Miles
 //! `AIL_redbook_*` calls. Here those calls are services (see `native-metadata/external_procedures.sci`)
-//! that read the audio tracks of the GOG disc image (`game.gog` with its `game.ins` cue sheet) and mix
-//! them into the game's audio output. Without that image the open call fails and the game goes on
-//! without music, as it does on a PC with no CD in the drive.
+//! that read the audio tracks of a disc image with its cue sheet (the GOG `game.gog` with `game.ins`,
+//! or a rip of the CD given with `--cd-image`, chosen in `installed_media.rs`) and mix them into the
+//! game's audio output. Without that image the open call fails and the game goes on without music, as
+//! it does on a PC with no CD in the drive.
 //!
 //! Positions are the Miles ones: milliseconds from the start of the disc. The original asks for a
 //! track's start and end (`track_info`) and then plays exactly that range (`play`), so the unit only
@@ -13,7 +14,7 @@ use crate::rg_log;
 use std::ffi::c_int;
 use std::fs::File;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 
 const SECTOR: u64 = 2352;
@@ -28,8 +29,27 @@ const STOPPED: u32 = 3;
 /// Opaque non-zero handle; the original only passes it back.
 const HANDLE: u32 = 0x5244_4231;
 
+/// The one image file a cue sheet names. Rips with a file per track are refused: their `INDEX`
+/// times count from the start of each file, not of the disc.
+pub(crate) fn cue_file(text: &str) -> Option<&str> {
+    let mut files = text.lines().map(str::trim).filter_map(|line| {
+        let (keyword, rest) = line.split_once(char::is_whitespace)?;
+        keyword.eq_ignore_ascii_case("FILE").then_some(rest.trim())
+    });
+    let file = files.next()?;
+    if files.next().is_some() {
+        return None;
+    }
+    let name = match file.strip_prefix('"') {
+        Some(quoted) => &quoted[..quoted.find('"')?],
+        None => file.split_whitespace().next()?,
+    };
+    (!name.is_empty()).then_some(name)
+}
+
 /// Track start sectors from a cue sheet; entry 0 is track 1. Only `INDEX 01` lines count.
 fn parse_cue(text: &str) -> Option<Vec<u64>> {
+    cue_file(text)?;
     let mut starts = Vec::new();
     let mut track = 0;
     for line in text.lines().map(str::trim) {
@@ -109,29 +129,6 @@ impl Disc {
     fn track_at(&self, sector: u64) -> u32 {
         self.bounds[1..].partition_point(|end| *end <= sector) as u32 + 1
     }
-}
-
-/// `game.gog` and the cue sheet beside it, looked for in the game folder and the one above it.
-fn locate(root: &Path) -> Option<(PathBuf, PathBuf)> {
-    for directory in [root.to_path_buf(), root.join("..")] {
-        if let Some(image) = entries_named(&directory, &["game.gog"]) {
-            return entries_named(&directory, &["game.ins", "game.cue"]).map(|cue| (image, cue));
-        }
-    }
-    None
-}
-
-fn entries_named(directory: &Path, names: &[&str]) -> Option<PathBuf> {
-    std::fs::read_dir(directory)
-        .ok()?
-        .flatten()
-        .find_map(|entry| {
-            let name = entry.file_name();
-            let matches = names
-                .iter()
-                .any(|n| name.to_str().is_some_and(|s| s.eq_ignore_ascii_case(n)));
-            (matches && entry.path().is_file()).then(|| entry.path())
-        })
 }
 
 #[derive(Default)]
@@ -283,16 +280,18 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
     let mut player = player();
     let known = a[1] == HANDLE;
     frame.eax = match service {
-        // open_drive(drive letter): succeeds only when the disc image and its cue sheet exist.
+        // open_drive(drive letter): succeeds only when a disc image with its cue sheet was found.
         0 => {
             if player.disc.is_none() {
-                match locate(Path::new(".")).map(|(image, cue)| Disc::open(&image, &cue)) {
+                match crate::installed_media::audio().map(|(image, cue)| Disc::open(&image, &cue)) {
                     Some(Ok(disc)) => {
-                        rg_log!("CD music: {} tracks on the game disc image", disc.tracks());
+                        rg_log!("CD music: {} tracks on the disc image", disc.tracks());
                         player.disc = Some(disc);
                     }
                     Some(Err(error)) => rg_log!("CD music unavailable: {error}"),
-                    None => rg_log!("CD music unavailable: no game.gog with game.ins found"),
+                    None => rg_log!(
+                        "CD music unavailable: no disc image with a cue sheet (the GOG game.gog with game.ins, or a rip of the CD given with --cd-image FILE.cue)"
+                    ),
                 }
             }
             u64::from(if player.disc.is_some() { HANDLE } else { 0 })
@@ -387,6 +386,17 @@ mod tests {
     }
 
     #[test]
+    fn cue_sheets_name_one_image_file() {
+        assert_eq!(cue_file(CUE), Some("game.gog"));
+        assert_eq!(cue_file("file Redguard.bin BINARY\n"), Some("Redguard.bin"));
+        assert_eq!(cue_file("FILE \"a b.bin\" BINARY\n"), Some("a b.bin"));
+        let per_track = "FILE \"t1.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"t2.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n";
+        assert_eq!(cue_file(per_track), None);
+        assert_eq!(parse_cue(per_track), None);
+        assert_eq!(cue_file("TRACK 01 AUDIO\n"), None);
+    }
+
+    #[test]
     fn malformed_cue_sheets_are_refused() {
         for bad in [
             "",
@@ -396,7 +406,8 @@ mod tests {
             "TRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n",
             "TRACK 01 AUDIO\nINDEX 01 xx:00:00\n",
         ] {
-            assert_eq!(parse_cue(bad), None, "{bad:?}");
+            let bad = format!("FILE game.gog BINARY\n{bad}");
+            assert_eq!(parse_cue(&bad), None, "{bad:?}");
         }
     }
 
@@ -430,10 +441,8 @@ mod tests {
             bytes.extend(std::iter::repeat_n(((s % 100) + 1) as u8, SECTOR as usize));
         }
         std::fs::write(dir.path().join("game.gog"), bytes).unwrap();
-        let cue: String = starts
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
+        let cue: String = std::iter::once("FILE \"game.gog\" BINARY\n".to_string())
+            .chain(starts.iter().enumerate().map(|(i, s)| {
                 format!(
                     "TRACK {:02} AUDIO\nINDEX 01 {:02}:{:02}:{:02}\n",
                     i + 1,
@@ -441,7 +450,7 @@ mod tests {
                     s / 75 % 60,
                     s % 75
                 )
-            })
+            }))
             .collect();
         std::fs::write(dir.path().join("game.ins"), cue).unwrap();
         let disc = Disc::open(&dir.path().join("game.gog"), &dir.path().join("game.ins")).unwrap();
@@ -496,11 +505,9 @@ mod tests {
         std::fs::write(dir.path().join("game.gog"), vec![0; 2 * SECTOR as usize]).unwrap();
         std::fs::write(
             dir.path().join("game.ins"),
-            "TRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 00:05:00\n",
+            "FILE game.gog BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 00:05:00\n",
         )
         .unwrap();
         assert!(Disc::open(&dir.path().join("game.gog"), &dir.path().join("game.ins")).is_err());
-        assert!(locate(dir.path()).is_some());
-        assert!(locate(&dir.path().join("missing")).is_none());
     }
 }

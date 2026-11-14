@@ -10,4 +10,6 @@ pub(crate) use memory::*;
 pub(crate) const NAME: &str = "Linux native x64";
 
 mod paths;
-pub(crate) use paths::{default_game, default_user_directory, log_directory, remember_game};
+pub(crate) use paths::{
+    default_game, default_user_directory, disc_roots, log_directory, remember_game,
+};

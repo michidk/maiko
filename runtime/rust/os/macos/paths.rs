@@ -35,3 +35,9 @@ pub(crate) fn remember_game(game: &std::path::Path) -> io::Result<()> {
     )?;
     std::fs::rename(temporary, directory.join("game-directory"))
 }
+/// Mounted volumes; the DOS drive letter means nothing here.
+pub(crate) fn disc_roots(_letter: u8) -> Vec<PathBuf> {
+    std::fs::read_dir("/Volumes")
+        .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
+        .unwrap_or_default()
+}

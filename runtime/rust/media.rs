@@ -286,34 +286,44 @@ unsafe fn cd_path<'a>(pointer: u32) -> Option<&'a [u8]> {
         return None;
     }
     let bytes = unsafe { CStr::from_ptr(guest_ptr::<c_char>(pointer)) }.to_bytes();
-    (bytes.len() >= 2 && bytes[0].eq_ignore_ascii_case(&b'd') && bytes[1] == b':')
-        .then(|| &bytes[2..])
+    crate::movies::cd_drive(bytes)
+}
+
+/// Mount a disc image (ISO or raw 2352-byte sectors) read-only as the CD drive. Call during
+/// installation selection.
+pub(crate) fn mount(path: &Path) -> bool {
+    let mut media = MEDIA.lock().unwrap_or_else(|e| e.into_inner());
+    *media = None;
+    let Some(opened) = Media::open(path) else {
+        rg_log!("CD image unavailable or invalid: {}", path.display());
+        return false;
+    };
+    rg_log!(
+        "Native CD image mounted read-only as the CD drive: {} layout={}/{} root_files={}",
+        path.display(),
+        opened.sector,
+        opened.header,
+        opened.entries.len()
+    );
+    *media = Some(opened);
+    true
 }
 
 /// # Safety
 /// `path` points to a live NUL-terminated host path. Call during installation selection.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rg_cd_mount(path: *const c_char) -> c_int {
-    let mut media = MEDIA.lock().unwrap_or_else(|e| e.into_inner());
-    *media = None;
     if path.is_null() {
+        rg_cd_close();
         return 0;
     }
-    let Ok(native_path) = (unsafe { crate::os::path_from_c(path) }) else {
-        return 0;
-    };
-    let Some(opened) = Media::open(&native_path) else {
-        rg_log!("CD image unavailable or invalid: {}", native_path.display());
-        return 0;
-    };
-    rg_log!(
-        "Native CD image mounted read-only as D: layout={}/{} root_files={}",
-        opened.sector,
-        opened.header,
-        opened.entries.len()
-    );
-    *media = Some(opened);
-    1
+    match unsafe { crate::os::path_from_c(path) } {
+        Ok(path) => mount(&path) as c_int,
+        Err(_) => {
+            rg_cd_close();
+            0
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
