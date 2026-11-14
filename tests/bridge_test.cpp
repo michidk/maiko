@@ -5,6 +5,23 @@
 #include "bridge.h"
 #include "glide_imports.h"
 #include "sdk2_glide.h"
+
+// The game provides these; the bridge test never plays audio, so it only needs them to link.
+extern "C" {
+int Game_AIL_allocate_sample_handle(...) { return 0; }
+int Game_AIL_end_sample(...) { return 0; }
+int Game_AIL_init_sample(...) { return 0; }
+int Game_AIL_release_sample_handle(...) { return 0; }
+int Game_AIL_sample_status(...) { return 0; }
+int Game_AIL_set_sample_address(...) { return 0; }
+int Game_AIL_set_sample_loop_count(...) { return 0; }
+int Game_AIL_set_sample_pan(...) { return 0; }
+int Game_AIL_set_sample_playback_rate(...) { return 0; }
+int Game_AIL_set_sample_type(...) { return 0; }
+int Game_AIL_set_sample_volume(...) { return 0; }
+int Game_AIL_start_sample(...) { return 0; }
+}
+
 struct Tex32 {int32_t small,large,aspect,format; uint32_t data;};
 struct Lfb32 {uint32_t size,pointer,stride; int32_t mode,origin;};
 static uint32_t *args;
