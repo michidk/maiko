@@ -74,6 +74,10 @@ def stage_rust(container, game=False):
                 run('docker', 'cp', str(host),
                     container + f':/results/libmaiko-host-{name}.a')
                 reports[name]['host'] = report
+                launcher, report = build(target, component='launcher')
+                run('docker', 'cp', str(launcher),
+                    container + f':/results/libmaiko-launcher-{name}.a')
+                reports[name]['launcher'] = report
     return reports
 
 

@@ -38,7 +38,7 @@ def cross_tools(target):
 
 
 def build(target, *, component="runtime", llasm=False):
-    if component not in ("runtime", "host", "probe", "glide"):
+    if component not in ("runtime", "host", "probe", "glide", "launcher"):
         raise ValueError("Unknown Rust component: "+component)
     if target not in TARGETS:
         raise ValueError('Unsupported runtime target: '+target)
@@ -52,7 +52,9 @@ def build(target, *, component="runtime", llasm=False):
     output.mkdir(parents=True, exist_ok=True)
     tag=target+('' if component=='runtime' else '-'+component)+('-llasm' if llasm else '')
     with (output/(tag+'.log')).open('w') as log:
+        # The launcher's own binary needs SDL to link; the packages link its static library instead.
         subprocess.run([cargo, 'build', '--locked', '--profile', 'runtime', '--target', target, '-p', 'maiko-'+component,
+                        *(['--lib'] if component == 'launcher' else []),
                         *(['--features', 'maiko-'+component+('/llasm-entry' if component=='host' else '/llasm')] if llasm else [])],
                        cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
     metadata = json.loads(subprocess.check_output(
@@ -60,7 +62,8 @@ def build(target, *, component="runtime", llasm=False):
     archive = Path(metadata['target_directory'])/target/('runtime/libmaiko_'+component+'.a')
     sources = [ROOT/'build.rs', ROOT/'Cargo.toml', ROOT/'Cargo.lock', ROOT/'rust-toolchain.toml',
                *sorted((ROOT/'runtime').rglob('*.rs')),
-               *sorted((ROOT/'runtime').rglob('Cargo.toml'))]
+               *sorted((ROOT/'runtime').rglob('Cargo.toml')),
+               *sorted((ROOT/'launcher').rglob('*.rs')), ROOT/'launcher/Cargo.toml']
     report = dict(target=target, component=component, llasm=llasm, archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
                   source_sha256={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources})
     (output/(tag+'.json')).write_text(json.dumps(report, indent=2)+'\n')
@@ -76,7 +79,7 @@ def stage(container, prepared):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', choices=TARGETS, required=True)
-    parser.add_argument('--component', choices=['runtime','host','probe','glide'], default='runtime')
+    parser.add_argument('--component', choices=['runtime','host','probe','glide','launcher'], default='runtime')
     parser.add_argument('--llasm', action='store_true')
     args = parser.parse_args()
     print(build(args.target, component=args.component, llasm=args.llasm)[0])

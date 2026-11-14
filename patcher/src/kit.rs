@@ -9,6 +9,8 @@ use std::io::{Cursor, Read, Write};
 const MAX_KIT: u64 = 384 * 1024 * 1024;
 const MAX_ENTRY: u64 = 256 * 1024 * 1024;
 /// Format 2 kits carry link inputs instead of a prebuilt executable template.
+/// The launcher executables a runtime kit may carry (Windows; Linux and macOS).
+pub const LAUNCHERS: [&str; 2] = ["Maiko.exe", "maiko"];
 pub const FORMAT: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -133,6 +135,7 @@ fn zip_with_links(
             return Err(format!("Unsafe package path: {name}"));
         }
         let mode = if Some(name.as_str()) == executable
+            || LAUNCHERS.contains(&name.as_str())
             || name.ends_with(".dylib")
             || name.ends_with("/SDL2")
             || name.ends_with("/SDL2_mixer")

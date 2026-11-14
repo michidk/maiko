@@ -43,6 +43,8 @@ resolve() {{
 }}
 for library in {' '.join(WINDOWS_LIBRARIES)}; do resolve $library; done
 cp redguard-glide.dll /out/runtime/
+x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/Maiko.exe launcher_main.c libmaiko_launcher.a -L/sdl/lib \\
+  -lSDL2_mixer -lSDL2 -lshell32 -lole32 -luser32 -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp
 '''
 LINUX = '''set -e
 cd /work
@@ -59,7 +61,12 @@ for file in /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o /u
   cp -L $file /out/link/
 done
 cp libredguard-glide.so /out/runtime/
+gcc -O2 -s -o /out/runtime/maiko launcher_main.c libmaiko_launcher.a $(pkg-config --libs SDL2_mixer sdl2) \\
+  -Wl,-rpath,'$ORIGIN' -Wl,--as-needed -lgcc_s -lutil -lrt -lpthread -lm -ldl
 '''
+
+# The launcher is a Rust static library (maiko-launcher); this is the executable's whole C side.
+LAUNCHER_MAIN = b'int maiko_launcher_main(void);\nint main(void) { return maiko_launcher_main(); }\n'
 
 
 def openglide(patches):
@@ -91,13 +98,18 @@ def main():
     else:
         image = LINUX_IMAGE
         run(['docker', 'build', '-t', image, '-f', str(ROOT / 'platforms/linux/Dockerfile'), str(ROOT / 'platforms/linux')])
-    host = build_rust_runtime('x86_64-pc-windows-gnu' if windows else 'x86_64-unknown-linux-gnu', component='host')
+    rust_target = 'x86_64-pc-windows-gnu' if windows else 'x86_64-unknown-linux-gnu'
+    host = build_rust_runtime(rust_target, component='host')
+    launcher, _ = build_rust_runtime(rust_target, component='launcher')
     name = 'rg-link-' + uuid.uuid4().hex[:10]
     run(['docker', 'run', '-d', '--network', 'none', '--memory', '4g', '--cpus', '2', '--name', name, image, 'sleep', '1800'])
     try:
         for directory, destination in [('runtime', '/work'), ('glide', '/work'), ('platforms/linux', '/linux')]:
             run(['docker', 'cp', str(ROOT / directory) + '/.', name + ':' + destination])
         stage_rust_runtime(name, host)
+        run(['docker', 'cp', str(launcher), name + ':/work/libmaiko_launcher.a'])
+        subprocess.run(['docker', 'exec', '-i', name, 'sh', '-c', 'cat > /work/launcher_main.c'], check=True,
+                       input=LAUNCHER_MAIN)
         stage_sr_heap(name)
         stage_sr_audio(name)
         if windows:

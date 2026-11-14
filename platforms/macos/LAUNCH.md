@@ -1,13 +1,13 @@
 # Launching Maiko on macOS
 
 The runtime requires macOS 11 or newer on Apple Silicon or Intel.
-The package contains a universal `redguard-native` executable, its renderer and
-SDL frameworks. It contains no Redguard installation, game assets or disc media.
+The package contains the universal `maiko` launcher and `redguard-native` game
+executables, the renderer and SDL frameworks. It contains no Redguard installation, game assets or disc media.
 You must supply your own copy of Redguard.
 
 ## First launch
 
-1. Extract the whole runtime ZIP. Keep `redguard-native`,
+1. Extract the whole runtime ZIP. Keep `maiko`, `redguard-native`,
    `libredguard-glide.dylib` and `Frameworks/` together.
 2. If macOS blocks this trusted test build, dismiss the warning with **Done**
    and run this in Terminal, adjusting the extracted folder path:
@@ -18,9 +18,12 @@ You must supply your own copy of Redguard.
 
    This removes quarantine from that package and its libraries. The build is
    not notarized. Use this command only for a package you trust.
-3. Open `redguard-native` directly. No command launcher is needed. If no game
-   installation is found beside it, a folder picker asks for the owned folder
-   containing `RGFX.EXE`, `SYSTEM.INI` and `FXART`.
+3. Open `maiko`, the launcher. If it finds no game installation, it asks for
+   the owned folder containing `RGFX.EXE`, `SYSTEM.INI` and `FXART`. It then
+   shows Redguard's original start window, drawn from the `REDGUARD.EXE` in that
+   installation. **Game Options** sets fullscreen, the window size and skipping
+   the intro; **Play Redguard** starts the game. You can also open
+   `redguard-native` directly.
 
 The executable runs natively on both Mac architectures. It checks `game/`
 beside itself, then its own directory, then the remembered installation before

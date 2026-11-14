@@ -177,7 +177,8 @@ fn export(
             .and_then(|n| n.to_str())
             .ok_or("Invalid runtime name")?;
         if !path.is_file()
-            || !(name.ends_with(".dll")
+            || !(maiko_patcher::kit::LAUNCHERS.contains(&name)
+                || name.ends_with(".dll")
                 || name.ends_with(".so")
                 || name.contains(".so.")
                 || name.ends_with(".txt"))

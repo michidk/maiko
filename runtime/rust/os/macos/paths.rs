@@ -10,7 +10,7 @@ pub(crate) fn state_directory() -> io::Result<PathBuf> {
     home().map(|path| path.join("Library/Application Support/Maiko"))
 }
 pub(crate) fn log_directory() -> io::Result<PathBuf> {
-    home().map(|path| path.join("Library/Logs/Maiko"))
+    maiko_launcher::settings::log_directory()
 }
 
 pub(crate) fn default_game() -> Option<PathBuf> {

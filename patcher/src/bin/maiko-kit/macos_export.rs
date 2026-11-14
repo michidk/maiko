@@ -139,6 +139,7 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
             }
             if !safe_path(&name)
                 || !(name == "libredguard-glide.dylib"
+                    || name == "maiko"
                     || name == "README.md"
                     || name == "LICENSES.txt"
                     || name == "Frameworks"

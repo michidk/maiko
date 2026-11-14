@@ -4,11 +4,10 @@ The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows, Lin
 
 Both interfaces use the same Rust library for input validation and package creation. The browser uses an isolated worker; the CLI uses a private temporary directory.
 
-The kits include controller support and automatic game-folder discovery. Start `redguard-native.exe` on Windows or `./redguard-native` on Linux directly; it asks for the game folder only if it cannot find it. The included README repeats this.
+The kits include controller support and automatic game-folder discovery. Start the launcher, `Maiko.exe` on Windows or `./maiko` on Linux and macOS; it asks for the game folder only if it cannot find it, then shows Redguard's original start window with artwork read from the installation's `REDGUARD.EXE`. The included README repeats this.
 
-For macOS, select `RGFX.EXE`, build the ZIP and extract it. Open
-`redguard-native` and select your owned installation when asked. The Mac runtime
-has no command launcher. See the [Mac launch guide](../platforms/macos/LAUNCH.md)
+For macOS, select `RGFX.EXE`, build the ZIP and extract it. Open the `maiko`
+launcher and select your owned installation when asked. See the [Mac launch guide](../platforms/macos/LAUNCH.md)
 for quarantine removal, saves and logs.
 
 Mac builds run SR's LLasm translator, the D frontend, LLVM optimization and both
@@ -34,7 +33,7 @@ maiko-patcher build --input /path/to/RGFX.EXE --target linux \
 
 The local Wasmtime CLI supports Linux and Windows. Use `--target windows` with `maiko-runtime-kit-windows.zip` for Windows x64. For macOS, use the browser or the [local source build](../platforms/macos/README.md). `--wasmtime PATH` selects a local Wasmtime installation. `--v5-fixes` adds the optional [version 5 fixes](../README.md#version-5-fixes); the browser builder offers the same option as a checkbox. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
 
-Extract the generated ZIP into a separate writable folder. Windows users double-click `redguard-native.exe`; Linux users run `./redguard-native` in a terminal. The program looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. The Linux package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries that the program finds beside itself. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory. Startup options such as `--skip-intro` are command-line options (a shortcut's Target on Windows); see the README.
+Extract the generated ZIP into a separate writable folder. Windows users double-click `Maiko.exe`; Linux users run `./maiko`. The launcher looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. The Linux package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries that the program finds beside itself. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory. Startup options such as skipping the intro are set in the launcher's Game Options, or given as command-line options to `redguard-native`; see the README.
 
 ## Runtime kits
 
@@ -42,7 +41,7 @@ A kit holds everything needed to turn an owned `RGFX.EXE` into the native game, 
 
 - **Compilers**, built for WebAssembly: SR (the static recompiler), NASM and LLVM's LLD linker. The Mac kit adds SR's LLasm output, the browser D compiler, LLVM `opt` and `llc`.
 - **Link inputs**: C runtime start files, system import libraries, the Rust host and SR's heap and audio objects. The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
-- **The packaged runtime**: the renderer, SDL and (on Linux) GL libraries and licence notices.
+- **The packaged runtime**: the launcher, the renderer, SDL and (on Linux) GL libraries and licence notices.
 - **Renderer source** in `source/`: OpenGLide is LGPL, so the kit, which is what a release distributes, carries its corresponding source and build files. Generated packages leave it out.
 
 The browser or CLI checks the executable, translates it with SR, assembles the four engine objects with NASM (Mac: compiles them with LLVM for both architectures) and links them with LLD into the program. Browser and CLI produce byte-identical executables. Changed or unrecognized executables fail validation before anything is built.

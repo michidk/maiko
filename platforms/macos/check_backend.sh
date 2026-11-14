@@ -102,6 +102,18 @@ fi
         -output /results/runtime/libredguard-glide.dylib
     cp -a /frameworks/SDL2.framework /frameworks/SDL2_mixer.framework \
         /results/runtime/Frameworks/
+    # The launcher (maiko-launcher) is a Rust static library; this is its whole C side.
+    printf 'int maiko_launcher_main(void);\nint main(void) { return maiko_launcher_main(); }\n' \
+        > /tmp/launcher_main.c
+    for arch in x86_64 arm64; do
+        clang -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
+            --ld-path=/usr/lib/llvm-14/bin/ld64.lld -Wl,-platform_version,macos,11.0,11.3 \
+            -Wl,-rpath,@executable_path/Frameworks /tmp/launcher_main.c \
+            "/results/libmaiko-launcher-$arch.a" -F/frameworks -framework SDL2 -framework SDL2_mixer \
+            -framework CoreFoundation -framework Security -liconv -lresolv -o "/results/maiko-$arch"
+    done
+    llvm-lipo-14 -create /results/maiko-x86_64 /results/maiko-arm64 -output /results/runtime/maiko
+    chmod +x /results/runtime/maiko
     cp /work/platforms/macos/LAUNCH.md /results/runtime/README.md
     rm -f /results/game.bc
 fi

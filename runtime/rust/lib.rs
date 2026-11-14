@@ -9,7 +9,7 @@ pub mod input;
 pub mod install;
 pub mod installed_media;
 pub mod llasm;
-pub mod locate;
+pub use maiko_launcher::locate;
 pub mod logging;
 pub mod media;
 pub mod memory;
