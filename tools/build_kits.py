@@ -4,8 +4,8 @@
 It translates the executable, builds the three runtimes (without playing the game),
 exports the kits and proves each one by building a package from it: the real patcher
 for Linux and Windows, the website's real worker for macOS. Neither the executable nor
-any generated game code leaves the work folders; only the three kit ZIPs and a kits.json
-with release-asset pins are written to --output.
+any generated game code leaves the work folders; only the three kit ZIPs, named like the release assets, are
+written to --output.
 """
 import argparse
 import hashlib
@@ -22,13 +22,12 @@ from pathlib import Path
 
 from .toolchain import IMAGE, ROOT, ensure_tool_image
 
-SEED = ROOT / 'platforms/kit-seed.json'
 MACOS_TARGETS = ['aarch64-unknown-linux-gnu', 'aarch64-apple-darwin', 'x86_64-apple-darwin', 'wasm32-unknown-unknown']
 TARGETS = ['linux', 'windows', 'macos']
 MACOS_TOOLCHAIN = ROOT / '.cache/client-macos-toolchain'
 # Release assets are named by platform so a tag explains what it holds.
 ASSET = 'maiko-runtime-kit-{}.zip'
-REPOSITORY = 'https://github.com/michidk/maiko/releases/download'
+RELEASE = 'https://github.com/michidk/maiko/releases/latest/download'
 
 
 def sh(command, **options):
@@ -56,12 +55,15 @@ def sha256(data):
 
 
 def fetch_seed(target):
-    """The curated SDL, GL and notice files have no source here; they come from a pinned kit."""
-    pin = json.loads(SEED.read_text())[target]
-    with urllib.request.urlopen(pin['url'], timeout=300) as response:
-        data = response.read()
-    if sha256(data) != pin['sha256']:
-        raise SystemExit(f'{target} seed kit does not match its pinned SHA-256')
+    """The curated SDL, GL and notice files have no source here; they come from the latest release's kit."""
+    def download(name):
+        with urllib.request.urlopen(f'{RELEASE}/{name}', timeout=300) as response:
+            return response.read()
+    name = ASSET.format(target)
+    expected = {line.split()[1].lstrip('*'): line.split()[0] for line in download('SHA256SUMS').decode().splitlines() if line.strip()}
+    data = download(name)
+    if sha256(data) != expected.get(name):
+        raise SystemExit(f'{target} seed kit does not match the release SHA256SUMS')
     return zipfile.ZipFile(io.BytesIO(data))
 
 
@@ -177,8 +179,7 @@ def macos_kit(exe, install, scratch, revision, kit_tool, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, required=True, help='Owned RGFX.EXE (the accepted original)')
-    parser.add_argument('--output', type=Path, required=True, help='New folder for linux.zip, windows.zip, macos.zip, kits.json')
-    parser.add_argument('--tag', required=True, help='Release tag the kits will be published under')
+    parser.add_argument('--output', type=Path, required=True, help='New folder for the three kit ZIPs')
     parser.add_argument('--wasmtime', type=Path, default=shutil.which('wasmtime'),
                         help='Wasmtime used to prove each kit with the real patcher')
     args = parser.parse_args()
@@ -232,24 +233,19 @@ def main():
         runtime_directory('windows', windows / 'redguard-glide.dll', tarball, runtimes['windows'])
         args.output.mkdir(parents=True)
         sh([kit_tool, 'export', 'linux', objects / 'rg-linux', objects / 'rgfx.o', runtimes['linux'], revision,
-            args.output / 'linux.zip'])
+            args.output / ASSET.format('linux')])
         sh([kit_tool, 'export', 'windows', windows / 'redguard-native.exe', objects / 'rgfx.obj', runtimes['windows'],
-            revision, args.output / 'windows.zip'])
+            revision, args.output / ASSET.format('windows')])
         for target in ['linux', 'windows']:
             package = scratch / f'verify-{target}'
-            sh([patcher, 'build', '--input', args.exe, '--target', target, '--kit', args.output / f'{target}.zip',
+            sh([patcher, 'build', '--input', args.exe, '--target', target, '--kit', args.output / ASSET.format(target),
                 '--wasmtime', args.wasmtime, '--output', package])
             package.unlink()
         for directory in {translation, windows, linux}:
             shutil.rmtree(directory, ignore_errors=True)
         # The macOS stage needs most of the disk, so the first stage's output is gone before it starts.
-        macos_folders = macos_kit(exe_path, install, scratch, revision, kit_tool, args.output / 'macos.zip')
-        pins = {}
-        for target in TARGETS:
-            pins[target] = dict(url=f'{REPOSITORY}/{args.tag}/{ASSET.format(target)}',
-                                sha256=sha256((args.output / f'{target}.zip').read_bytes()))
-        (args.output / 'kits.json').write_text(json.dumps(pins, indent=2) + '\n')
-        print(json.dumps(pins, indent=2))
+        macos_folders = macos_kit(exe_path, install, scratch, revision, kit_tool, args.output / ASSET.format('macos'))
+        print('Kits:', *sorted(p.name for p in args.output.iterdir()))
     finally:
         # The executable copy never stays behind. A failed build keeps its other folders
         # (translations, build output, scratch) for diagnosis; a successful one removes them.

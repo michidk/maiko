@@ -14,25 +14,35 @@ await rm('web/dist', { recursive: true, force: true });
 await mkdir('web/dist/kits', { recursive: true });
 const built = await Bun.build({ entrypoints: ['web/main.js', 'web/worker.js'], outdir: 'web/dist', target: 'browser', minify: true, external: ['./pkg/maiko_patcher.js'] });
 if (!built.success) throw new AggregateError(built.logs, 'Website build failed');
-for (const name of ['index.html', 'style.css', 'kits.json', 'favicon.svg', 'og.png']) await cp(`web/${name}`, `web/dist/${name}`);
+for (const name of ['index.html', 'style.css', 'favicon.svg', 'og.png']) await cp(`web/${name}`, `web/dist/${name}`);
 await cp('web/pkg', 'web/dist/pkg', { recursive: true });
 await cp('web/fonts', 'web/dist/fonts', { recursive: true });
-const kits = JSON.parse(await readFile('web/kits.json', 'utf8'));
+// Kits are release assets. The site takes the latest release's kits and checks each one
+// against that release's SHA256SUMS, so there is no pin to maintain.
+const releases = process.env.MAIKO_KIT_URL ?? 'https://github.com/michidk/maiko/releases/latest/download';
+const local = process.env.MAIKO_KIT_DIRECTORY;
+const fetchAsset = async name => {
+  if (local) return new Uint8Array(await readFile(resolve(local, name)));
+  const url = new URL(`${releases}/${name}`);
+  if (url.protocol !== 'https:' || url.hostname !== 'github.com' || !url.pathname.startsWith('/michidk/maiko/releases/')) throw new Error('Runtime kits must come from a Maiko release.');
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Cannot download ${name}: HTTP ${response.status}`);
+  return new Uint8Array(await response.arrayBuffer());
+};
+const sums = new Map(new TextDecoder().decode(await fetchAsset('SHA256SUMS')).split('\n').flatMap(line => {
+  const [, hash, name] = line.match(/^([a-f0-9]{64}) [ *](.+)$/) ?? [];
+  return hash ? [[name, hash]] : [];
+}));
+const kits = {};
 for (const target of ['linux', 'windows', 'macos']) {
-  const kit = kits[target];
-  if (!kit || !/^[a-f0-9]{64}$/.test(kit.sha256)) throw new Error(`No verified ${target} kit configured`);
-  let bytes;
-  if (process.env.MAIKO_KIT_DIRECTORY) bytes = new Uint8Array(await readFile(resolve(process.env.MAIKO_KIT_DIRECTORY, `${target}.zip`)));
-  else {
-    const url = new URL(kit.url);
-    if (url.protocol !== 'https:' || url.hostname !== 'github.com' || !url.pathname.startsWith('/michidk/maiko/releases/download/')) throw new Error('Runtime kits must come from a pinned Maiko release.');
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Cannot download ${target} kit: HTTP ${response.status}`);
-    bytes = new Uint8Array(await response.arrayBuffer());
-  }
-  if (new Bun.CryptoHasher('sha256').update(bytes).digest('hex') !== kit.sha256) throw new Error(`${target} runtime kit checksum mismatch`);
+  const name = `maiko-runtime-kit-${target}.zip`;
+  const bytes = await fetchAsset(name);
+  const sha256 = new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
+  if (sums.get(name) !== sha256) throw new Error(`${target} runtime kit checksum mismatch`);
+  kits[target] = { sha256 };
   await Bun.write(`web/dist/kits/${target}.zip`, bytes);
 }
+await Bun.write('web/dist/kits.json', JSON.stringify(kits, null, 2) + '\n');
 command(['cargo', 'run', '--locked', '--release', '-p', 'maiko-patcher', '--bin', 'maiko-kit', '--', 'web-tools', 'web/dist/kits/macos.zip', 'web/dist']);
 const fonts = (await readdir('web/dist/fonts')).sort();
 const assets = ['index.html', 'style.css', 'main.js', 'worker.js', 'dlang.js', 'kits.json', 'pkg/maiko_patcher_bg.wasm', ...fonts.map(name => `fonts/${name}`)];

@@ -4,7 +4,7 @@ The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows, Lin
 
 Both interfaces use the same Rust library for input validation and package creation. The browser uses an isolated worker; the CLI uses a private temporary directory.
 
-The pinned kits include controller support and automatic game-folder discovery. Start `redguard-native.exe` on Windows or `./redguard-native` on Linux directly; it asks for the game folder only if it cannot find it. The included README repeats this.
+The kits include controller support and automatic game-folder discovery. Start `redguard-native.exe` on Windows or `./redguard-native` on Linux directly; it asks for the game folder only if it cannot find it. The included README repeats this.
 
 For macOS, select `RGFX.EXE`, build the ZIP and extract it. Open
 `redguard-native` and select your owned installation when asked. The Mac runtime
@@ -25,7 +25,7 @@ Download the patcher for your system from a versioned release and install [Wasmt
 cargo build --locked --release -p maiko-patcher --bin maiko-patcher
 ```
 
-Download the matching runtime kit from the same release (or the pinned kit release linked in `web/kits.json`), and run:
+Download the matching runtime kit from the same release, and run:
 
 ```sh
 maiko-patcher build --input /path/to/RGFX.EXE --target linux \
@@ -53,12 +53,10 @@ Use Bun, Rust's `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.129:
 ```sh
 bun install --frozen-lockfile
 bun test web
-gh release download v0.2.2 --repo michidk/maiko --pattern 'maiko-runtime-kit-*.zip' --dir .cache/site-kits
-# Name them linux.zip, windows.zip and macos.zip.
-MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
+bun run build
 ```
 
-`web/kits.json` pins Maiko release URLs and SHA-256 hashes. The site build checks the downloads and serves them from the same origin. The workflow downloads the public, pinned kits and verifies their hashes before building. For a local build, `MAIKO_KIT_DIRECTORY` can point to a directory with the same checked `linux.zip`, `windows.zip` and `macos.zip`. The content security policy restricts browser requests to the page's origin.
+Runtime kits are assets of the latest release. The site build downloads `maiko-runtime-kit-{linux,windows,macos}.zip` from `releases/latest/download`, checks each against that release's `SHA256SUMS`, and serves them from the same origin. Nothing is pinned in the repository. For an offline build, set `MAIKO_KIT_DIRECTORY` to a folder with those three ZIPs and a `SHA256SUMS`; `MAIKO_KIT_URL` selects another release URL. The content security policy restricts browser requests to the page's origin.
 
 `.github/workflows/pages.yml` calls the reusable source-check and browser-build workflows and deploys on main or manual dispatch. Set **Settings → Pages → Source → GitHub Actions** before deploying. The managed GitHub App needs Pages write permission to enable that setting through the API.
 
@@ -68,30 +66,29 @@ MAIKO_KIT_DIRECTORY=.cache/site-kits bun run build
 One command builds the Linux, Windows and macOS kits from an owned `RGFX.EXE`, with the same arguments and outputs for every system:
 
 ```sh
-python3 -m tools.build_kits --exe /path/to/RGFX.EXE --output kits --tag vX.Y.Z
+python3 -m tools.build_kits --exe /path/to/RGFX.EXE --output kits
 ```
 
-Inputs: the accepted original executable (the SHA-256 is checked), a new `--output` folder, the release tag the kits will be published under, and `wasmtime` on `PATH` (or `--wasmtime`). The build host needs Docker, Bun, Rust with `rustup`, `wasm-bindgen-cli` 0.2.129, Git, curl, patch, tar, CMake, Ninja and a native C++ compiler. Keep at least 60 GB free, run one build at a time and expect a long run: the Mac backend check alone takes about 10 minutes and 9 GB of memory. The first run also builds the Windows/Linux tools and, if `.cache/client-macos-toolchain` is missing, the Mac compilers (`maiko-kit tools-macos`: checksum-pinned LLVM 19.1.0, WASI SDK 29 and browser-d sources, SR/LLasm, `opt`, `llc` and Mach-O LLD for WebAssembly), which is the slowest step.
+Inputs: the accepted original executable (the SHA-256 is checked), a new `--output` folder and `wasmtime` on `PATH` (or `--wasmtime`). The build host needs Docker, Bun, Rust with `rustup`, `wasm-bindgen-cli` 0.2.129, Git, curl, patch, tar, CMake, Ninja and a native C++ compiler. Keep at least 60 GB free, run one build at a time and expect a long run: the Mac backend check alone takes about 10 minutes and 9 GB of memory. The first run also builds the Windows/Linux tools and, if `.cache/client-macos-toolchain` is missing, the Mac compilers (`maiko-kit tools-macos`: checksum-pinned LLVM 19.1.0, WASI SDK 29 and browser-d sources, SR/LLasm, `opt`, `llc` and Mach-O LLD for WebAssembly), which is the slowest step.
 
 Outputs in `--output`:
 
-- `linux.zip`, `windows.zip` and `macos.zip`.
-- `kits.json`: pins in the format of `web/kits.json`, pointing at the release assets `maiko-runtime-kit-<target>.zip` under the tag, with each ZIP's SHA-256. The script also prints it.
+- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`, named like the release assets.
 
 Each kit is proven by building a package from it. Linux and Windows run the real `maiko-patcher build` on the executable. macOS runs the website's real `web/worker.js` under Bun (`tools/browser_build.mjs`) because the Mac kit pins the hash of a universal executable that only the browser toolchain produces. The script therefore exports a bootstrap Mac kit with a placeholder hash, lets the worker build the universal executable (it ends with "Compiled executable differs from the accepted build" by design), exports the final kit with that executable's hash and runs the worker again. It requires the identical executable and a passing package gate. Generated game code and executables stay in work folders that are removed after success, and a failed build keeps them for diagnosis; delete them yourself afterwards.
 
-The SDL, GL and notice files that have no source in the repository come from the pinned seed kits in `platforms/kit-seed.json`; the Mac notices (`LICENSES.txt`) come from the seed Mac kit. Update the seed pins when a kit is deliberately published with new support libraries or notices.
+The SDL, GL and notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, which the script checks against that release's `SHA256SUMS`.
 
-Kits are published only as assets of a versioned `vX.Y.Z` release, like everything else. Every release carries the pinned kits forward, so a release without kit changes needs nothing. After a kit changes, upload the three ZIPs to the latest release under their asset names and copy the pins:
+Kits are published only as assets of a versioned `vX.Y.Z` release. Every release carries the latest kits forward, so a release without kit changes needs nothing. After a kit changes, replace the three assets on the latest release and refresh their lines in `SHA256SUMS`, then run **Deploy browser builder** so the site picks them up:
 
 ```sh
-for target in linux windows macos; do cp kits/$target.zip kits/maiko-runtime-kit-$target.zip; done
-gh release upload vX.Y.Z --repo michidk/maiko --clobber \
-  kits/maiko-runtime-kit-linux.zip kits/maiko-runtime-kit-windows.zip kits/maiko-runtime-kit-macos.zip
-cp kits/kits.json web/kits.json
+cd kits
+gh release download vX.Y.Z --repo michidk/maiko --pattern SHA256SUMS
+grep -v ' maiko-runtime-kit-' SHA256SUMS > sums && sha256sum maiko-runtime-kit-*.zip >> sums && mv sums SHA256SUMS
+gh release upload vX.Y.Z --repo michidk/maiko --clobber maiko-runtime-kit-*.zip SHA256SUMS
 ```
 
-Commit the new `web/kits.json` on `main`. Keep generated playable packages private.
+Keep generated playable packages private.
 
 ## Versioned releases
 
