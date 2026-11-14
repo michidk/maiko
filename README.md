@@ -21,7 +21,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 You need:
 
-- A Redguard installation containing `RGFX.EXE`, the Glide version of the game executable. The GOG release is the supported one and includes it. The Steam release does not work: it ships only the software-rendered `REDGUARD.EXE`, which Maiko cannot use. Maiko recognizes three builds of this file and refuses any other, so it never runs code it was not checked against: the GOG and CD build 1.0, a variant of it, and build 5.0 from the 1998 demo.
+- A Redguard installation containing `RGFX.EXE`, the Glide version of the game executable. The GOG release is the supported one and includes it. The Steam release does not work: it ships only `RG.EXE`, the software-rendered version, which Maiko cannot use. Maiko recognizes three builds of this file and refuses any other, so it never runs code it was not checked against: the GOG and CD build 1.0, a variant of it, and build 5.0 from the 1998 demo.
 - 64-bit Windows 10 or newer, or a Linux desktop (glibc 2.36 or newer, X11 or XWayland), with a graphics driver that supports OpenGL.
 
 Maiko is built from your own executable, which stays on your device. There are two ways to do it.
