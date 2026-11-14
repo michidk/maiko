@@ -390,14 +390,31 @@ impl Input {
     }
 }
 
-/// Explain a failed game window; the Linux package's SDL uses X11 (or XWayland) and OpenGL.
-fn window_failed(error: &str) {
-    let hint = if cfg!(target_os = "linux") && std::env::var_os("DISPLAY").is_none() {
-        " (DISPLAY is not set: Maiko needs an X11 or XWayland session)"
-    } else {
-        ""
-    };
-    rg_log!("Native SDL window failed: {error}{hint}");
+/// The game cannot run without its window: say why and exit instead of letting the original
+/// code treat the failed mouse reset or Glide open as an unsupported call.
+fn window_failed(error: &str) -> ! {
+    rg_log!(
+        "Native SDL window failed: {error}{}",
+        window_hint(
+            cfg!(target_os = "linux"),
+            std::env::var_os("DISPLAY").is_some_and(|v| !v.is_empty()),
+            std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
+        )
+    );
+    rg_log!("FATAL Redguard could not open its game window and will exit.");
+    crate::host::exit_cleanly(1)
+}
+
+/// The Linux package's SDL has only the X11 video driver (XWayland covers Wayland desktops).
+fn window_hint(linux: bool, display: bool, wayland: bool) -> &'static str {
+    match (linux, display, wayland) {
+        (false, ..) => "",
+        (true, false, true) => {
+            " (WAYLAND_DISPLAY is set but DISPLAY is not: enable XWayland in your compositor, Maiko needs X11 or XWayland)"
+        }
+        (true, false, false) => " (DISPLAY is not set: Maiko needs an X11 or XWayland session)",
+        (true, true, _) => " (Maiko needs X11 or XWayland and an OpenGL 2.1 driver)",
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -406,10 +423,7 @@ pub extern "C" fn rg_input_window(width: u32, height: u32) -> *mut c_void {
         input
             .borrow_mut()
             .window(width, height)
-            .unwrap_or_else(|error| {
-                window_failed(&error);
-                std::ptr::null_mut()
-            })
+            .unwrap_or_else(|error| window_failed(&error))
     })
 }
 
@@ -454,7 +468,6 @@ pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
             0 => {
                 if let Err(error) = input.window(640, 480) {
                     window_failed(&error);
-                    return 0;
                 }
                 input.buttons = 0;
                 input.dx = 0;
@@ -512,6 +525,14 @@ pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_hint_names_the_missing_display() {
+        assert_eq!(window_hint(false, false, true), "");
+        assert!(window_hint(true, false, true).contains("XWayland in your compositor"));
+        assert!(window_hint(true, false, false).contains("DISPLAY is not set"));
+        assert!(window_hint(true, true, true).contains("OpenGL"));
+    }
 
     #[test]
     fn window_size_accepts_only_sane_dimensions() {
