@@ -52,7 +52,7 @@ def main():
     notices=sorted((work/'notices').glob('*.txt'))
     if len(notices)!=6:
         parser.error('Expected the complete SR, GCC/MinGW and LGPL notices')
-    licence='Redguard native experiment. Personal test; requires original game assets.\n'
+    licence='Maiko, a native port of Redguard. Personal test; requires original game assets.\n'
     licence+='OpenGLide-ng '+BACKEND+' is a replaceable LGPL library.\n'
     licence+='Its corresponding source and build files are provided alongside this ZIP in redguard-development.zip.\n\n'
     for notice in notices:

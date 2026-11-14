@@ -101,7 +101,7 @@ with out.with_suffix('.log').open('w') as log:
     try:
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
-            result = subprocess.run(['xdotool', 'search', '--name', '^Redguard native experiment$'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['xdotool', 'search', '--name', '^Maiko$'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 subprocess.run(['xdotool', 'windowfocus', '--sync', result.stdout.splitlines()[0]], check=True, timeout=5)
                 break

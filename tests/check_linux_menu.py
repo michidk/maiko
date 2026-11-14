@@ -23,7 +23,7 @@ with (root/'linux-menu.log').open('w') as log:
             if time.monotonic()>deadline: raise TimeoutError('Original book initialization')
             time.sleep(.1)
         time.sleep(3)
-        window=subprocess.check_output(['xdotool','search','--name','^Redguard native experiment$'],text=True,timeout=5).strip().splitlines()[0]
+        window=subprocess.check_output(['xdotool','search','--name','^Maiko$'],text=True,timeout=5).strip().splitlines()[0]
         subprocess.run(['xdotool','windowfocus','--sync',window],check=True,timeout=5)
         frame_hashes={}
         def frame(name):

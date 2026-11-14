@@ -48,7 +48,7 @@ def main():
             else:
                 raise TimeoutError('Original direct-world startup')
             window = subprocess.check_output(
-                ['xdotool', 'search', '--name', '^Redguard native experiment$'],
+                ['xdotool', 'search', '--name', '^Maiko$'],
                 text=True, timeout=5,
             ).splitlines()[0]
             subprocess.run(['xdotool', 'windowfocus', '--sync', window], check=True, timeout=5)

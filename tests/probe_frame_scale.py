@@ -74,7 +74,7 @@ with (root / (a.label + '.log')).open('w') as log:
 
     try:
         for _ in range(300):
-            r = subprocess.run(['xdotool', 'search', '--name', '^Redguard native experiment$'], capture_output=True, text=True, timeout=5)
+            r = subprocess.run(['xdotool', 'search', '--name', '^Maiko$'], capture_output=True, text=True, timeout=5)
             if r.returncode == 0:
                 subprocess.run(['xdotool', 'windowfocus', '--sync', r.stdout.splitlines()[0]], check=True, timeout=5)
                 break

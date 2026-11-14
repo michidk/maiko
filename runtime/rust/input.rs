@@ -208,7 +208,7 @@ impl Input {
             gl.set_depth_size(24);
             let (fullscreen, size) = *DISPLAY.lock().unwrap_or_else(|e| e.into_inner());
             let (w, h) = size.unwrap_or((width, height));
-            let mut builder = video.window("Redguard native experiment", w, h);
+            let mut builder = video.window("Maiko", w, h);
             builder.opengl();
             if fullscreen {
                 builder.fullscreen_desktop();

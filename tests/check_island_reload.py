@@ -106,7 +106,7 @@ def main():
 
         try:
             book.wait_ready(timeout=40)
-            result = subprocess.run(['xdotool', 'search', '--name', '^Redguard native experiment$'],
+            result = subprocess.run(['xdotool', 'search', '--name', '^Maiko$'],
                                     capture_output=True, text=True, check=True, timeout=5)
             subprocess.run(['xdotool', 'windowfocus', '--sync', result.stdout.splitlines()[0]],
                            check=True, timeout=5)

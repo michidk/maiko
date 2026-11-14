@@ -129,7 +129,7 @@ def main():
             while time.monotonic() < window_deadline:
                 require(process.poll() is None, 'Original game stopped before its SDL window')
                 found = subprocess.run(
-                    ['xdotool', 'search', '--name', '^Redguard native experiment$'],
+                    ['xdotool', 'search', '--name', '^Maiko$'],
                     capture_output=True, text=True, timeout=5,
                 )
                 if found.returncode == 0:

@@ -66,7 +66,7 @@ with prefix.with_suffix('.log').open('w') as log:
         if not a.wine:
             window_deadline=time.monotonic()+40
             while True:
-                found=subprocess.run(['xdotool','search','--name','^Redguard native experiment$'],text=True,capture_output=True,timeout=5)
+                found=subprocess.run(['xdotool','search','--name','^Maiko$'],text=True,capture_output=True,timeout=5)
                 if found.returncode==0:
                     window=found.stdout.splitlines()[0]
                     break
