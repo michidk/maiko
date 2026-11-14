@@ -378,13 +378,8 @@ impl Files {
                         frame.ecx as u32 as usize,
                     )
                 };
-                let result = if handle == 1 {
-                    io::stdout().write(data)
-                } else {
-                    io::stderr().write(data)
-                };
-                match result {
-                    Ok(n) => frame.success(n as u32),
+                match crate::logging::game_output(handle == 2, data) {
+                    Ok(()) => frame.success(data.len() as u32),
                     Err(e) => frame.error(dos_error(e)),
                 }
                 return true;

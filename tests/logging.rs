@@ -8,6 +8,8 @@ fn logging_child() {
     };
     maiko_runtime::logging::initialize_in(std::path::Path::new(&directory)).unwrap();
     maiko_runtime::rg_log!("test Rust console and file marker");
+    maiko_runtime::logging::game_output(false, b"\"game quote ").unwrap();
+    maiko_runtime::logging::game_output(false, b"marker\"\r\n").unwrap();
     unsafe {
         libc::write(1, b"native stdout marker\n".as_ptr().cast(), 21);
     }
@@ -42,7 +44,9 @@ fn captures_native_output_exit_details_and_retains_seven_logs() {
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(17));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("test Rust console and file marker"));
+    let console = String::from_utf8_lossy(&output.stderr);
+    assert!(console.contains("test Rust console and file marker"));
+    assert!(console.contains("game: \"game quote marker\"\r\n"));
     let files = std::fs::read_dir(directory.path())
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -63,6 +67,7 @@ fn captures_native_output_exit_details_and_retains_seven_logs() {
         "test Rust console and file marker",
         "native stdout marker",
         "native stderr marker",
+        "game: \"game quote marker\"\r\n",
         "reason=test-request status=17",
     ] {
         assert!(text.contains(expected), "missing {expected}: {text}");

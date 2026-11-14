@@ -15,7 +15,9 @@ struct Session {
     path: PathBuf,
 }
 static SESSION: OnceLock<Session> = OnceLock::new();
-static RECORD: Mutex<()> = Mutex::new(());
+/// Serializes records; also holds whether each original-game stream (stdout,
+/// stderr) is at the start of a line.
+static RECORD: Mutex<[bool; 2]> = Mutex::new([true, true]);
 
 #[macro_export]
 macro_rules! rg_log {
@@ -167,6 +169,36 @@ pub fn write(arguments: fmt::Arguments<'_>) {
     }
 }
 
+/// Original-game console output (DOS handles 1 and 2): every line is tagged
+/// `game: ` and goes to the session log and the terminal, as on DOS.
+pub fn game_output(stderr: bool, data: &[u8]) -> io::Result<()> {
+    let mut starts = RECORD.lock().unwrap_or_else(|error| error.into_inner());
+    let tagged = tag_game_lines(&mut starts[usize::from(stderr)], data);
+    if stderr {
+        io::stderr().write_all(&tagged)?;
+    } else {
+        let mut stdout = io::stdout();
+        stdout.write_all(&tagged)?;
+        stdout.flush()?;
+    }
+    if let Some(console) = SESSION.get().and_then(|session| session.console.as_ref()) {
+        let _ = (&*console).write_all(&tagged);
+    }
+    Ok(())
+}
+
+fn tag_game_lines(line_start: &mut bool, data: &[u8]) -> Vec<u8> {
+    let mut tagged = Vec::with_capacity(data.len() + 6);
+    for line in data.split_inclusive(|&byte| byte == b'\n') {
+        if *line_start {
+            tagged.extend_from_slice(b"game: ");
+        }
+        tagged.extend_from_slice(line);
+        *line_start = line.ends_with(b"\n");
+    }
+    tagged
+}
+
 pub(crate) fn fatal_console(bytes: &[u8]) {
     if let Some(console) = SESSION.get().and_then(|session| session.console.as_ref()) {
         crate::os::write_console(console, bytes);
@@ -175,4 +207,20 @@ pub(crate) fn fatal_console(bytes: &[u8]) {
 
 pub fn exit(reason: &str, status: i32) {
     crate::rg_log!("event=exit reason={reason} status={status}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn game_lines_are_tagged_across_partial_writes() {
+        let mut start = true;
+        let mut out = tag_game_lines(&mut start, b"RedGuard version\r\n\r\n\"[Charlie] ");
+        out.extend(tag_game_lines(&mut start, b"Bye\"\r\n"));
+        assert_eq!(
+            out,
+            b"game: RedGuard version\r\ngame: \r\ngame: \"[Charlie] Bye\"\r\n"
+        );
+        assert!(start);
+    }
 }

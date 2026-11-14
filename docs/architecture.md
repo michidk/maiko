@@ -63,7 +63,9 @@ The native entry point initializes `runtime/rust/logging.rs` before installation
 selection. The OS layer redirects native stdout and stderr to an append-only
 session file, so C diagnostics and the allocation-free fatal handler also reach
 the file without a background logging thread. Rust records additionally mirror
-to the original console. Seven session logs are retained. Startup records include
+to the original console. The original game's own console writes (DOS handles 1
+and 2, such as the version banner and exit quote) also go to both, with each line
+prefixed `game: `. Seven session logs are retained. Startup records include
 the revision, OS, architecture, CPU backend and arguments; exit boundaries record
 the reason and status. Panic hooks include a backtrace. Log files are outside the
 owned installation: `~/Library/Logs/Maiko` on macOS,
