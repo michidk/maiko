@@ -4,11 +4,15 @@ Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows a
 
 Maiko contains no game files. **You need your own copy of Redguard.** The GOG release is the supported one.
 
+Join the [Discord](https://discord.com/invite/xjCCyqbxkp) and discuss Maiko in `#redguard-maiko-recomp`.
+
+**Disclaimer:** AI was used heavily in this reverse engineering project; without AI it would not have been possible.
+
 ## Features
 
 - **Native, no DOSBox.** The original game code runs as a native program with its own graphics, input, sound, file and timing services.
 - **Windows, Linux and macOS.** 64-bit Windows and Linux; macOS 11 or newer. Intel and Apple Silicon Macs use one universal package.
-- **Hardware rendering.** The Glide version of the game is drawn through Vulkan, Direct3D 12, Metal or OpenGL, in a window of any size or borderless fullscreen.
+- **Hardware rendering.** The Glide version of the game is drawn by [rustyglide](https://github.com/michidk/rustyglide) through Vulkan, Direct3D 12, Metal or OpenGL, in a window of any size or borderless fullscreen. The launcher lets you pick the backend.
 - **Original sound, music and movies.** CD music and the intro play from your GOG `game.gog` disc image.
 - **Game controllers.** SDL2 gamepads work alongside keyboard and mouse.
 - **The original launcher.** `maiko.exe` (`maiko` on Linux and macOS) recreates Redguard's own start window: Play Redguard, Game Options, Technical Support. Its artwork and sounds are read from the `REDGUARD.EXE` in your installation; Maiko ships none of them.
@@ -205,7 +209,9 @@ Maiko is released under the [MIT licence](LICENSE). It is an independent fan pro
 
 ## Related projects
 
-Maiko runs the original game. Two other projects work from the same game files:
+Maiko runs the original game. Other projects grew from the same work:
+
+- [rustyglide](https://github.com/michidk/rustyglide): the 3dfx Glide API in Rust on wgpu (Vulkan, Metal, Direct3D 12 or OpenGL), and Maiko's renderer. Usable as a Rust library or as a drop-in `glide2x.dll` / `libglide2x.so` for any game that needed a Voodoo card.
 
 - [Redguard Preservation](https://github.com/michidk/redguard-preservation): the reverse-engineered file format, engine and configuration documentation ([published docs](https://michidk.github.io/redguard-preservation/)) and the `rgpre` tool that reads and converts the game's files.
 - [Cyrus](https://github.com/michidk/cyrus) ([site](https://michidk.github.io/cyrus/)): a rebuild of Redguard in Rust and Bevy, which is early in development, and a finished [asset viewer](https://michidk.github.io/cyrus/viewer/) that opens the game's models, worlds, textures, fonts, animations, scripts and audio.
