@@ -243,6 +243,14 @@ impl App {
                 if let Some(backend) = self.settings.renderer_backend() {
                     command.env("WGPU_BACKEND", backend);
                 }
+                // The game is a console program; without the setting it runs without a window
+                // for its log (the log file is written either way).
+                #[cfg(windows)]
+                if !self.settings.console {
+                    use std::os::windows::process::CommandExt;
+                    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                    command.creation_flags(CREATE_NO_WINDOW);
+                }
                 command.spawn()
             });
         match result {
@@ -505,6 +513,16 @@ impl App {
                             choice(ui, "renderer", &mut draft.renderer, RENDERERS);
                         },
                     );
+                    if cfg!(windows) {
+                        row(
+                            ui,
+                            "Console window",
+                            "Shows the game's log while it runs",
+                            |ui| {
+                                toggle(ui, &mut draft.console);
+                            },
+                        );
+                    }
                     section(ui, "Movies");
                     row(
                         ui,

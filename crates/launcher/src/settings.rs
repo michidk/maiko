@@ -22,6 +22,8 @@ pub struct Settings {
     pub texture_filter: String,
     /// Graphics backend for the renderer (`WGPU_BACKEND`); empty lets it choose.
     pub renderer: String,
+    /// Windows: show the game's console window with its log while it runs. Off by default.
+    pub console: bool,
     /// A disc image (cue sheet) for CD music when the game folder has none beside it.
     pub cd_image: Option<PathBuf>,
 }
@@ -164,6 +166,16 @@ mod tests {
         );
         settings.texture_filter = "sharp".into();
         assert!(args(&settings).ends_with("--skip-intro --texture-filter sharp"));
+    }
+
+    #[test]
+    fn the_console_window_is_off_unless_chosen() {
+        assert!(!Settings::default().console);
+        let saved: Settings = serde_json::from_str(r#"{"fullscreen":true}"#).unwrap();
+        assert!(
+            !saved.console,
+            "settings saved before the option keep it off"
+        );
     }
 
     #[test]
