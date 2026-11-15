@@ -187,8 +187,9 @@ def main():
         report['sr_source_archive_sha256'] = digest(archive)
         for name, path in downloads.items():
             run('docker', 'cp', str(path.resolve()), container + ':/work/' + name)
+        run('docker', 'exec', container, 'mkdir', '-p', '/work/metadata')
         for directory, name in [('platforms', 'platforms'), ('tests', 'tests'), ('crates/runtime', 'runtime'),
-                                ('metadata/llasm', 'llasm-metadata')]:
+                                ('metadata/llasm', 'metadata/llasm')]:
             run('docker', 'cp', str(ROOT / directory), container + ':/work/' + name)
         for name in PATCHES:
             run('docker', 'cp', str(ROOT / 'patches' / name), container + ':/work/' + name)
