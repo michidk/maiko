@@ -14,7 +14,7 @@ await rm('web/dist', { recursive: true, force: true });
 await mkdir('web/dist/kits', { recursive: true });
 const built = await Bun.build({ entrypoints: ['web/main.js', 'web/worker.js'], outdir: 'web/dist', target: 'browser', minify: true, external: ['./pkg/maiko_patcher.js'] });
 if (!built.success) throw new AggregateError(built.logs, 'Website build failed');
-for (const name of ['index.html', 'style.css', 'favicon.svg', 'og.png']) await cp(`web/${name}`, `web/dist/${name}`);
+for (const name of ['index.html', 'style.css', 'favicon.svg', 'og.png', 'stros-mkai.webp']) await cp(`web/${name}`, `web/dist/${name}`);
 await cp('web/pkg', 'web/dist/pkg', { recursive: true });
 await cp('web/fonts', 'web/dist/fonts', { recursive: true });
 // Kits are release assets. The site takes the latest release's kits and checks each one
@@ -45,7 +45,7 @@ for (const target of ['linux', 'windows', 'macos']) {
 await Bun.write('web/dist/kits.json', JSON.stringify(kits, null, 2) + '\n');
 command(['cargo', 'run', '--locked', '--release', '-p', 'maiko-patcher', '--bin', 'maiko-kit', '--', 'web-tools', 'web/dist/kits/macos.zip', 'web/dist']);
 const fonts = (await readdir('web/dist/fonts')).sort();
-const assets = ['index.html', 'style.css', 'main.js', 'worker.js', 'dlang.js', 'kits.json', 'pkg/maiko_patcher_bg.wasm', ...fonts.map(name => `fonts/${name}`)];
+const assets = ['index.html', 'style.css', 'main.js', 'worker.js', 'dlang.js', 'kits.json', 'stros-mkai.webp', 'pkg/maiko_patcher_bg.wasm', ...fonts.map(name => `fonts/${name}`)];
 const hasher = new Bun.CryptoHasher('sha256');
 for (const name of assets) hasher.update(name).update('\0').update(await readFile(`web/dist/${name}`));
 const version = hasher.digest('hex').slice(0, 20);
@@ -57,5 +57,6 @@ await Bun.write('web/dist/index.html', html.replace('./style.css', `./style.css?
   .replace('releases/latest">Latest release<', `releases/tag/${release}">${release}<`));
 let css = await readFile('web/dist/style.css', 'utf8');
 for (const name of fonts) css = css.replaceAll(`./fonts/${name}`, `./fonts/${name}?v=${version}`);
+css = css.replace("url('stros-mkai.webp')", `url('stros-mkai.webp?v=${version}')`);
 await Bun.write('web/dist/style.css', css);
 console.info(`Built web/dist with verified runtime kits and asset version ${version}.`);

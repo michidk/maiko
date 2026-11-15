@@ -41,7 +41,11 @@ body {
 ::selection { background: var(--gold-pale); color: var(--burgundy-dark); }
 a { color: var(--red); text-underline-offset: 4px; }
 a:hover { color: var(--red-light); }
-header { background: var(--burgundy); border-bottom: 3px solid var(--gold-muted); }
+/* The UESP map of Stros M'Kai, tinted so the links stay readable. */
+header {
+  background: linear-gradient(rgb(74 26 42 / .78), rgb(74 26 42 / .9)), url('stros-mkai.webp') center 42% / cover, var(--burgundy);
+  border-bottom: 3px solid var(--gold-muted);
+}
 .header-inner {
   max-width: 860px;
   margin: auto;
