@@ -49,7 +49,9 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Free disk space for the compiler and runtime builds
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost && df -h /
+        # Runs on while the later steps start; the runner has ~70 GB free before it, far more than the
+        # build's first minutes use, and it only kills leftover processes when the job ends.
+        run: (sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost >/dev/null 2>&1 &) && df -h /
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
@@ -68,7 +70,8 @@ jobs:
             .cache/client-macos-toolchain/*.js
             .cache/client-macos-toolchain/*LICENSE*.txt
             .cache/client-macos-toolchain/llasm-support
-          key: wasm-compilers-${{ hashFiles('patcher/src/bin/maiko-kit/tools.rs', 'patcher/src/bin/maiko-kit/macos_tools.rs', 'patches/**') }}
+          # Only the SR and LLVM patches go into these compilers; the OpenGLide ones do not.
+          key: wasm-compilers-${{ hashFiles('patcher/src/bin/maiko-kit/tools.rs', 'patcher/src/bin/maiko-kit/macos_tools.rs', 'patches/sr-*.patch', 'patches/llvm-*.patch') }}
       - name: Build, export and check the runtime kits
         env:
           MAIKO_JOBS: '4'

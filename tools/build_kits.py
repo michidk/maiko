@@ -9,6 +9,7 @@ With --exe, the script also builds a package from every kit through the website'
 (and the CLI for Linux and Windows), to check the kits end to end before publishing.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import io
 import json
@@ -167,14 +168,22 @@ def main():
     tarball = scratch / 'openglide-source.tar.gz'
     source_tarball(tarball)
     args.output.mkdir(parents=True)
-    for target, renderer in [('windows', 'redguard-glide.dll'), ('linux', 'libredguard-glide.so')]:
+
+    def kit(target, renderer):
         inputs = scratch / f'inputs-{target}'
         sh([sys.executable, '-m', 'tools.build_link_inputs', '--target', target, '--output', inputs])
         runtime = scratch / f'runtime-{target}'
         runtime_directory(target, inputs / 'runtime' / renderer, runtime)
         sh([kit_tool, 'export', target, inputs / 'link', runtime, tarball, revision, args.output / ASSET.format(target)])
-    backend = macos_kit(scratch, revision, kit_tool, args.output / ASSET.format('macos'))
-    shutil.rmtree(backend, ignore_errors=True)
+
+    def macos():
+        shutil.rmtree(macos_kit(scratch, revision, kit_tool, args.output / ASSET.format('macos')), ignore_errors=True)
+
+    # The three kits use separate containers and output files; Cargo's own lock orders their Rust builds.
+    with concurrent.futures.ThreadPoolExecutor(3) as pool:
+        for job in [pool.submit(kit, 'windows', 'redguard-glide.dll'), pool.submit(kit, 'linux', 'libredguard-glide.so'),
+                    pool.submit(macos)]:
+            job.result()
     if args.exe:
         sh(['cargo', 'build', '--locked', '--release', '-p', 'maiko-patcher', '--lib', '--target', 'wasm32-unknown-unknown'])
         sh(['wasm-bindgen', '--target', 'web', '--out-dir', scratch / 'pkg',
