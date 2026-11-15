@@ -15,7 +15,7 @@ const OBJECTS: [&str; 11] = [
     "llasm_scas.o",
     "llasm_stos.o",
 ];
-const LIBRARIES: [(&str, &str); 18] = [
+const LIBRARIES: [(&str, &str); 20] = [
     ("System", "/usr/lib/libSystem.B.dylib"),
     (
         "Security",
@@ -75,6 +75,15 @@ const LIBRARIES: [(&str, &str); 18] = [
     (
         "IOKit",
         "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+    ),
+    // AppKit's colour and file-type services, imported by the window crates.
+    (
+        "CoreServices",
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+    ),
+    (
+        "ColorSync",
+        "/System/Library/Frameworks/ColorSync.framework/Versions/A/ColorSync",
     ),
 ];
 
