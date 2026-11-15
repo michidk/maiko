@@ -11,8 +11,7 @@ Maiko's own source is MIT licensed (see LICENSE). Upstream components retain the
 | LLVM WASI compatibility changes | https://github.com/breeze833/clang-wasi/tree/b284fc9fb092f7ffec71a17163b8c585a4763548 | Apache-2.0; documented LLVM-only patch in `patches/llvm-wasi.patch` |
 | rustyglide 0.1.0 | https://github.com/michidk/rustyglide | MIT OR Apache-2.0; statically linked renderer |
 | wgpu, naga 30.0.2 | https://github.com/gfx-rs/wgpu | MIT OR Apache-2.0; graphics backends (Vulkan, Direct3D 12, Metal, OpenGL) under rustyglide, statically linked |
-| SDL2 2.30.11 | https://github.com/libsdl-org/SDL/tree/release-2.30.11 | zlib; input, windowing, timing and audio |
-| SDL2_mixer 2.8.1 | https://github.com/libsdl-org/SDL_mixer/tree/release-2.8.1 | zlib; audio mixing; optional codecs retain their licenses |
+| SDL2 2.30.11 | https://github.com/libsdl-org/SDL/tree/release-2.30.11 | zlib; input, windowing and timing |
 | MinGW-w64 / GCC runtime | Debian toolchain packages | Package-specific licenses and GCC runtime exceptions |
 | egui, egui_glow, glow 0.33.3 / 0.16.0 | https://github.com/emilk/egui/tree/0.33.3, https://github.com/grovesNL/glow | MIT/Apache-2.0; launcher interface. The bundled egui fonts carry their own licenses (Ubuntu Font Licence, OFL, MIT/Bitstream Vera) |
 | egui, egui-wgpu 0.36.2 | https://github.com/emilk/egui/tree/0.36.2 | MIT/Apache-2.0; in-game overlay |

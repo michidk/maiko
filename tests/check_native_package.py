@@ -40,7 +40,7 @@ image.write_bytes(Path('/work/user-RGFX.EXE').read_bytes())
 if a.loose_movie:shutil.copyfile(a.loose_movie,scenario/'INTRO.SMK')
 root=Path('/work/extracted native test')
 with zipfile.ZipFile('/work/runtime.zip') as archive:
-    assert set(archive.namelist())=={'redguard-native.exe','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll','LICENSES.txt'}
+    assert set(archive.namelist())=={'redguard-native.exe','libwinpthread-1.dll','SDL2.dll','LICENSES.txt'}
     archive.extractall(root)
 # The program is started directly: there is no launcher script. It asks for the game folder when
 # none is given; here the folder is given the way a shortcut or terminal would, at a real Wine D: path

@@ -4,10 +4,8 @@ cd /work
 mkdir -p /sdk /frameworks /fixture /results
 tar -xJf MacOSX11.3.sdk.tar.xz -C /sdk
 7z x -y -o/tmp/sdl SDL2-2.30.11.dmg > /results/sdl-extract.log
-7z x -y -o/tmp/mixer SDL2_mixer-2.8.1.dmg > /results/mixer-extract.log
 cp -a /tmp/sdl/SDL2/SDL2.framework /frameworks/
-cp -a /tmp/mixer/SDL2_mixer/SDL2_mixer.framework /frameworks/
-rm -rf /tmp/sdl /tmp/mixer
+rm -rf /tmp/sdl
 tar -xf sr.tar
 patch -p1 < sr-x64.patch
 patch -p1 < sr-llasm.patch
@@ -50,17 +48,13 @@ fi
         clang++ -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
             -x c++ -stdlib=libc++ -std=c++11 -O2 -DPTROFS_64BIT \
             -I/work -c /work/sr_Game_memory.c -o "$directory/heap.o"
-        clang -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
-            -O2 -I/work/runtime -I/audio -F/frameworks \
-            -I/frameworks/SDL2.framework/Headers -I/frameworks/SDL2_mixer.framework/Headers \
-            -c /audio/Albion-sound.c -o "$directory/audio.o"
         mac_link() {
             clang++ -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
                 -stdlib=libc++ --ld-path=/usr/lib/llvm-14/bin/ld64.lld \
                 -Wl,-platform_version,macos,11.0,11.3 \
                 -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path \
                 "$directory"/*.o "$@" -F/frameworks \
-                -framework SDL2 -framework SDL2_mixer -framework Security \
+                -framework SDL2 -framework Security -framework CoreAudio -framework AudioToolbox \
                 -framework CoreFoundation -liconv -lresolv \
                 -framework Metal -framework QuartzCore -framework CoreGraphics -framework Foundation -lobjc \
                 -o "/results/redguard-native-$arch"
@@ -90,7 +84,7 @@ fi
     llvm-lipo-14 -create /results/redguard-native-x86_64 /results/redguard-native-arm64 \
         -output /results/runtime/redguard-native
     chmod +x /results/runtime/redguard-native
-    cp -a /frameworks/SDL2.framework /frameworks/SDL2_mixer.framework \
+    cp -a /frameworks/SDL2.framework \
         /results/runtime/Frameworks/
     # The launcher (maiko-launcher) is a Rust static library; this is its whole C side.
     printf 'int maiko_launcher_main(void);\nint main(void) { return maiko_launcher_main(); }\n' \
@@ -99,8 +93,11 @@ fi
         clang -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
             --ld-path=/usr/lib/llvm-14/bin/ld64.lld -Wl,-platform_version,macos,11.0,11.3 \
             -Wl,-rpath,@executable_path/Frameworks /tmp/launcher_main.c \
-            "/results/libmaiko-launcher-$arch.a" -F/frameworks -framework SDL2 -framework SDL2_mixer \
-            -framework CoreFoundation -framework Security -liconv -lresolv -o "/results/maiko-$arch"
+            "/results/libmaiko-launcher-$arch.a" -framework AppKit -framework ApplicationServices -framework Carbon -framework IOKit \
+            -framework QuartzCore -framework CoreGraphics -framework CoreVideo -framework Metal -framework Foundation \
+            -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework Security \
+            -framework UniformTypeIdentifiers -lobjc \
+            -liconv -lresolv -o "/results/maiko-$arch"
     done
     llvm-lipo-14 -create /results/maiko-x86_64 /results/maiko-arm64 -output /results/runtime/maiko
     chmod +x /results/runtime/maiko

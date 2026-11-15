@@ -1,7 +1,14 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <SDL.h>
+#include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#define pause_ms Sleep
+#else
+#include <unistd.h>
+#define pause_ms(ms) usleep((ms) * 1000)
+#endif
 #include "audio.h"
 static uint32_t *args;
 static uint32_t call(unsigned op,uint32_t a,uint32_t b,uint32_t c,uint32_t d,uint32_t e) {
@@ -24,12 +31,12 @@ int main(void) {
     call(23,stream,1,(uintptr_t)pcm,8192,0);
     assert(call(22,stream,0,0,0,0)==UINT32_MAX);
     assert(call(11,stream,0,0,0,0)==4);
-    Uint32 deadline=SDL_GetTicks()+5000;uint32_t ready;
-    while((ready=call(22,stream,0,0,0,0))==UINT32_MAX && SDL_GetTicks()<deadline)SDL_Delay(1);
+    time_t deadline=time(NULL)+5;uint32_t ready;
+    while((ready=call(22,stream,0,0,0,0))==UINT32_MAX && time(NULL)<deadline)pause_ms(1);
     assert(ready==0);
     call(23,stream,0,0,0,0);
-    deadline=SDL_GetTicks()+5000;
-    while(call(11,stream,0,0,0,0)==4 && SDL_GetTicks()<deadline)SDL_Delay(1);
+    deadline=time(NULL)+5;
+    while(call(11,stream,0,0,0,0)==4 && time(NULL)<deadline)pause_ms(1);
     assert(call(11,stream,0,0,0,0)==2);
     uint32_t *info=args+8;
     assert(call(24,stream,(uintptr_t)&info[0],(uintptr_t)&info[1],(uintptr_t)&info[2],(uintptr_t)&info[3])==1);

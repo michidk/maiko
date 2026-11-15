@@ -2,8 +2,7 @@
 use crate::{image::Result, kit::Kit, prepare::Files};
 
 pub const ARCHITECTURES: [&str; 2] = ["x86_64", "arm64"];
-const OBJECTS: [&str; 12] = [
-    "audio.o",
+const OBJECTS: [&str; 11] = [
     "heap.o",
     "llasm_cmps.o",
     "llasm_divide.o",
@@ -16,7 +15,7 @@ const OBJECTS: [&str; 12] = [
     "llasm_scas.o",
     "llasm_stos.o",
 ];
-const LIBRARIES: [(&str, &str); 11] = [
+const LIBRARIES: [(&str, &str); 13] = [
     ("System", "/usr/lib/libSystem.B.dylib"),
     (
         "Security",
@@ -47,11 +46,17 @@ const LIBRARIES: [(&str, &str); 11] = [
         "Metal",
         "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
     ),
+    // Sound output (cpal).
+    (
+        "CoreAudio",
+        "/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio",
+    ),
+    (
+        "AudioToolbox",
+        "/System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox",
+    ),
 ];
-const RUNTIME: [&str; 2] = [
-    "Frameworks/SDL2.framework/Versions/A/SDL2",
-    "Frameworks/SDL2_mixer.framework/Versions/A/SDL2_mixer",
-];
+const RUNTIME: [&str; 1] = ["Frameworks/SDL2.framework/Versions/A/SDL2"];
 
 fn architecture(arch: &str) -> Result<()> {
     if !ARCHITECTURES.contains(&arch) {

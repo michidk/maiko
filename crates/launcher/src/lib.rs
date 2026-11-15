@@ -8,6 +8,7 @@ pub mod app;
 pub mod artwork;
 pub mod font;
 pub mod locate;
+#[cfg(feature = "app")]
 pub mod picker;
 #[cfg(feature = "app")]
 pub mod report;

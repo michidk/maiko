@@ -90,7 +90,8 @@ def runtime_directory(target, built, destination):
                 leaf = name.removeprefix('runtime/')
                 # shortcut: skips the launcher's old name, the OpenGLide renderer and its GL libraries in the seed;
                 # drop once a release ships without them.
-                if (leaf.startswith(('RUN', 'libGL', 'libOpenGL', 'libredguard-', 'redguard-')) or leaf.endswith('.tar.gz')
+                if (leaf.startswith(('RUN', 'libGL', 'libOpenGL', 'libredguard-', 'redguard-', 'libSDL2_mixer', 'SDL2_mixer'))
+                        or leaf.endswith('.tar.gz')
                         or leaf in ('README.txt', 'Maiko.exe')):
                     continue
                 data = seed.read(name)

@@ -1,5 +1,5 @@
 //! Miles double-buffer PCM state exposed through the original service ABI.
-use sdl2::sys::{SDL_AudioCVT, SDL_BuildAudioCVT, SDL_ConvertAudio};
+use crate::mixer::{Format, to_stereo16};
 use std::ffi::{c_int, c_void};
 
 #[repr(C)]
@@ -37,7 +37,6 @@ unsafe impl Send for PcmStream {}
 impl PcmStream {
     pub(crate) fn clear(&mut self) {
         for buffer in &mut self.buffer {
-            // SDL conversion buffers use the same CRT allocator on both hosts.
             unsafe {
                 libc::free(buffer.data.cast());
             }
@@ -74,53 +73,30 @@ impl PcmStream {
         if data.is_null() || self.output_rate == 0 {
             return false;
         }
-        let format = match (width, self.flags & 1 != 0) {
-            (2, true) => sdl2::sys::AUDIO_S16LSB,
-            (2, false) => sdl2::sys::AUDIO_U16LSB,
-            (_, true) => sdl2::sys::AUDIO_S8,
-            (_, false) => sdl2::sys::AUDIO_U8,
-        } as u16;
-        let mut cvt = std::mem::MaybeUninit::<SDL_AudioCVT>::zeroed();
-        if unsafe {
-            SDL_BuildAudioCVT(
-                cvt.as_mut_ptr(),
-                format,
-                channels as u8,
-                self.rate as c_int,
-                sdl2::sys::AUDIO_S16LSB as u16,
-                2,
-                self.output_rate as c_int,
-            )
-        } < 0
-        {
+        let source = unsafe { std::slice::from_raw_parts(data.cast::<u8>(), length as usize) };
+        let format = Format {
+            stereo: channels == 2,
+            sixteen: width == 2,
+            signed: self.flags & 1 != 0,
+        };
+        let pcm = to_stereo16(source, format, self.rate, self.output_rate);
+        if pcm.is_empty() {
             return false;
         }
-        let mut cvt = unsafe { cvt.assume_init() };
-        if cvt.len_mult < 1 || length > c_int::MAX as u32 / cvt.len_mult as u32 {
-            return false;
-        }
-        let converted =
-            unsafe { libc::malloc(length as usize * cvt.len_mult as usize) }.cast::<u8>();
+        let bytes = pcm.len() * 2;
+        let converted = unsafe { libc::malloc(bytes) }.cast::<u8>();
         if converted.is_null() {
             return false;
         }
         unsafe {
-            converted.copy_from_nonoverlapping(data.cast(), length as usize);
-        }
-        cvt.buf = converted;
-        cvt.len = length as c_int;
-        if unsafe { SDL_ConvertAudio(&mut cvt) } < 0 || cvt.len_cvt <= 0 || cvt.len_cvt % 4 != 0 {
-            unsafe {
-                libc::free(converted.cast());
-            }
-            return false;
+            converted.copy_from_nonoverlapping(pcm.as_ptr().cast(), bytes);
         }
         unsafe {
             libc::free(buffer.data.cast());
         }
         *buffer = StreamBuffer {
             data: converted,
-            length: cvt.len_cvt as u32,
+            length: bytes as u32,
             position: 0,
             source_length: length,
             state: 2,
@@ -276,5 +252,162 @@ pub unsafe extern "C" fn rg_stream_mix(stream: *mut PcmStream, output: *mut u8, 
     }
     unsafe {
         stream.mix(std::slice::from_raw_parts_mut(output, length as usize));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bytes(samples: &[i16]) -> Vec<u8> {
+        samples.iter().flat_map(|s| s.to_le_bytes()).collect()
+    }
+
+    fn stream(format: u32, flags: u32, rate: u32) -> PcmStream {
+        let mut s = PcmStream::default();
+        unsafe { rg_stream_reset(&mut s) };
+        (s.format, s.flags, s.rate) = (format, flags, rate);
+        s
+    }
+
+    unsafe fn load(s: &mut PcmStream, index: u32, data: &[u8]) -> bool {
+        unsafe { rg_stream_load(s, index, data.as_ptr().cast(), data.len() as u32) != 0 }
+    }
+
+    fn mix(s: &mut PcmStream, output: &mut [i16]) {
+        unsafe { rg_stream_mix(s, output.as_mut_ptr().cast(), (output.len() * 2) as u32) };
+    }
+
+    #[test]
+    fn buffers_play_in_order_with_gain_saturation_and_end() {
+        let first = bytes(&[1000, -2000, 1000, -2000, 1000, -2000, 1000, -2000]);
+        let second = bytes(&[3000, -4000, 3000, -4000, 3000, -4000, 3000, -4000]);
+        let mut s = stream(3, 1, 44100);
+        unsafe {
+            assert_eq!(rg_stream_ready(&mut s), 0);
+            assert!(load(&mut s, 0, &first));
+            assert!(!load(&mut s, 0, &first), "a loaded buffer is not refilled");
+            assert_eq!(rg_stream_ready(&mut s), 1);
+            assert!(!load(&mut s, 1, &second[..3]), "partial frames are refused");
+            assert!(load(&mut s, 1, &second));
+            assert_eq!(rg_stream_ready(&mut s), u32::MAX);
+        }
+        let mut output = [10i16; 16];
+        mix(&mut s, &mut output);
+        for (i, value) in output.iter().enumerate() {
+            let expected = match (i < 8, i % 2) {
+                (true, 0) => 1010,
+                (true, _) => -1990,
+                (false, 0) => 3010,
+                (false, _) => -3990,
+            };
+            assert_eq!(*value, expected, "frame value {i}");
+        }
+        assert_eq!((s.mixed_frames, s.nonzero_frames), (8, 8));
+        unsafe {
+            assert_eq!(rg_stream_status(&s), 2);
+            assert_eq!(rg_stream_ready(&mut s), 0);
+            assert!(rg_stream_load(&mut s, 0, std::ptr::null(), 0) != 0);
+        }
+        assert!(s.ended != 0);
+
+        let mut s = stream(3, 1, 44100);
+        s.pan = 0;
+        unsafe {
+            assert_eq!(rg_stream_ready(&mut s), 0);
+            assert!(load(&mut s, 0, &second));
+        }
+        let mut output = [32000i16; 16];
+        mix(&mut s, &mut output);
+        assert_eq!(&output[..2], &[32767, 32000], "panned left and saturated");
+        s.volume = 0;
+        unsafe {
+            assert_eq!(rg_stream_ready(&mut s), 1);
+            assert!(load(&mut s, 1, &second));
+        }
+        let mut output = [0i16; 16];
+        mix(&mut s, &mut output);
+        assert!(output.iter().all(|&v| v == 0));
+    }
+
+    #[test]
+    fn conversion_keeps_duration_and_silence() {
+        let mut s = stream(3, 1, 44100);
+        s.output_rate = 48000;
+        let tone: Vec<i16> = (0..4410).flat_map(|_| [12000, -6000]).collect();
+        unsafe {
+            assert_eq!(rg_stream_ready(&mut s), 0);
+            assert!(load(&mut s, 0, &bytes(&tone)));
+        }
+        assert_eq!(s.buffer[0].length, 4800 * 4);
+        let converted = unsafe { std::slice::from_raw_parts(s.buffer[0].data.cast::<i16>(), 9600) };
+        assert!(converted[2000] > 11000 && converted[2001] < -5000);
+        unsafe { rg_stream_clear(&mut s) };
+        for bits in 0..2 {
+            for sign in 0..2 {
+                let mut s = stream(bits, sign, 44100);
+                let mut silence = vec![if sign == 1 { 0 } else { 128 }; 256];
+                if bits == 1 {
+                    for pair in silence.chunks_mut(2) {
+                        pair.copy_from_slice(&[0, if sign == 1 { 0 } else { 128 }]);
+                    }
+                }
+                unsafe {
+                    assert_eq!(rg_stream_ready(&mut s), 0);
+                    assert!(load(&mut s, 0, &silence));
+                }
+                let mut zeros = [0i16; 512];
+                mix(&mut s, &mut zeros);
+                assert!(zeros.iter().all(|&v| v == 0), "bits {bits} signed {sign}");
+                unsafe {
+                    assert_eq!(rg_stream_status(&s), 2);
+                    rg_stream_clear(&mut s);
+                }
+            }
+        }
+        let mut s = stream(2, 0, 22050);
+        s.output_rate = 22050;
+        unsafe {
+            assert_eq!(rg_stream_ready(&mut s), 0);
+            assert!(load(&mut s, 0, &[0, 255, 128, 64]));
+        }
+        let mut out = [0i16; 4];
+        mix(&mut s, &mut out);
+        assert_eq!(out, [-32768, 32512, 0, -16384]);
+    }
+
+    #[test]
+    fn partial_refills_never_starve_and_starvation_is_counted() {
+        let block = bytes(&[7000; 512]);
+        let mut s = stream(3, 1, 44100);
+        unsafe {
+            for n in 0..2 {
+                assert_eq!(rg_stream_ready(&mut s), n);
+                assert!(load(&mut s, n, &block));
+            }
+        }
+        for cycle in 0..200 {
+            for quarter in 0..4 {
+                let mut part = [0i16; 128];
+                mix(&mut s, &mut part);
+                assert!(part.iter().all(|&v| v == 7000));
+                if quarter < 3 {
+                    assert_eq!(unsafe { rg_stream_ready(&mut s) }, u32::MAX);
+                }
+            }
+            let next = unsafe { rg_stream_ready(&mut s) };
+            assert_eq!(next, cycle & 1);
+            unsafe { assert!(load(&mut s, next, &block)) };
+        }
+        assert!(s.mixed_frames >= 51200 && s.underrun_frames == 0);
+        unsafe {
+            rg_stream_clear(&mut s);
+            assert_eq!(rg_stream_ready(&mut s), 0);
+            assert!(load(&mut s, 0, &block));
+        }
+        let mut large = [0i16; 1024];
+        mix(&mut s, &mut large);
+        assert_eq!(s.underrun_frames, 256);
+        unsafe { rg_stream_clear(&mut s) };
     }
 }

@@ -138,7 +138,6 @@ fn zip_with_links(
             || LAUNCHERS.contains(&name.as_str())
             || name.ends_with(".dylib")
             || name.ends_with("/SDL2")
-            || name.ends_with("/SDL2_mixer")
         {
             0o755
         } else {
@@ -216,8 +215,7 @@ impl Kit {
         }
         for (name, link) in &manifest.package_links {
             if target != Target::Macos
-                || !(name.starts_with("Frameworks/SDL2.framework/")
-                    || name.starts_with("Frameworks/SDL2_mixer.framework/"))
+                || !name.starts_with("Frameworks/SDL2.framework/")
                 || !safe_path(name)
                 || !safe_path(link)
                 || manifest.package_files.contains(name)
