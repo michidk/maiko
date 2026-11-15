@@ -175,8 +175,8 @@ Every launch writes a session log under `%LOCALAPPDATA%/Maiko/logs` on Windows,
 `MAIKO_TRACE=1` adds the detailed state samples the developer tests use.
 
 When the game was started from the launcher and crashes, freezes and has to be closed, or fails
-to start, the launcher saves `Maiko-crash-DATE_TIME.zip` (UTC) beside itself and offers to open
-an issue. It holds the run's log, the last screenshot, the system details (OS, CPU, graphics
+to start, the launcher saves `Maiko-crash-DATE_TIME.zip` (UTC) in the `crash-reports` folder
+inside the log folder and offers to open an issue. It holds the run's log, the last screenshot, the system details (OS, CPU, graphics
 driver, Maiko version, the names and sizes of the files in the game folder), the launcher
 settings, your INI files and your newest save; never any game files. **Technical Support ›
 Create report** makes the same ZIP at any time. A game that stops drawing for 15 seconds logs

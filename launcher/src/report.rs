@@ -1,4 +1,4 @@
-//! Crash reports: one timestamped ZIP beside the launcher with what is needed to look into a game
+//! Crash reports: one timestamped ZIP in the log folder's `crash-reports` folder with what is needed to look into a game
 //! that crashed or froze: the run's log, its last screenshot, system details, the launcher
 //! settings, the player's INI files and newest save. Game files are never included.
 use crate::font::named;
@@ -22,9 +22,10 @@ pub struct Exit {
     pub status: String,
 }
 
-/// Write `Maiko-crash-<UTC date and time>.zip` (or `Maiko-report-...` without `exit`) into
-/// `folder`, falling back to the log folder when `folder` cannot be written.
-pub fn create(folder: &Path, sources: &Sources, exit: Option<&Exit>) -> io::Result<PathBuf> {
+/// Write `Maiko-crash-<UTC date and time>.zip` (or `Maiko-report-...` without `exit`) into the
+/// `crash-reports` folder inside the log folder, falling back to `fallback` when that cannot be
+/// written.
+pub fn create(fallback: &Path, sources: &Sources, exit: Option<&Exit>) -> io::Result<PathBuf> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -34,12 +35,10 @@ pub fn create(folder: &Path, sources: &Sources, exit: Option<&Exit>) -> io::Resu
     let name = format!("Maiko-{kind}-{date}_{}.zip", time.replace(':', "-"));
     let bytes = archive(sources, exit, &format!("{date} {time} UTC"))?;
     let mut last = None;
-    for directory in [Some(folder), sources.logs.as_deref()]
-        .into_iter()
-        .flatten()
-    {
+    let reports = sources.logs.as_ref().map(|logs| logs.join("crash-reports"));
+    for directory in [reports.as_deref(), Some(fallback)].into_iter().flatten() {
         let path = directory.join(&name);
-        match std::fs::write(&path, &bytes) {
+        match std::fs::create_dir_all(directory).and_then(|()| std::fs::write(&path, &bytes)) {
             Ok(()) => return Ok(path),
             Err(error) => last = Some(error),
         }
@@ -320,7 +319,7 @@ mod tests {
             status: "exit status: 3".into(),
         };
         let path = create(&out, &sources, Some(&exit)).unwrap();
-        assert!(path.starts_with(&out));
+        assert!(path.starts_with(sources.logs.as_ref().unwrap().join("crash-reports")));
         assert!(
             path.file_name()
                 .unwrap()

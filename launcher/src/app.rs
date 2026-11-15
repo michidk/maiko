@@ -254,7 +254,7 @@ impl App {
     }
 
     /// Once the game ends: close the launcher after a normal quit, or write a crash report
-    /// beside the launcher and show it after a crash, a freeze the player ended, or a failed start.
+    /// into the log folder's `crash-reports` folder and show it after a crash, a freeze the player ended, or a failed start.
     fn watch_game(&mut self) {
         let Some(child) = &mut self.game_process else {
             return;
