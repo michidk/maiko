@@ -256,7 +256,7 @@ fn select(selection: Selection) -> io::Result<()> {
             return Err(storage::absent());
         }
     }
-    // Variant 1 already skips the outro in its bytes (metadata/image_variants.json).
+    // Variant 1 already skips the outro in its bytes (metadata/image/image_variants.json).
     unsafe {
         rg_skip_intro = u32::from(selection.skip_intro);
         rg_skip_outro = u32::from(selection.skip_outro || rg_exe_variant == 1);

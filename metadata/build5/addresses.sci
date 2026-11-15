@@ -1,7 +1,7 @@
 # Build 5.0 RGFX.EXE (1998 demo, SHA-256 900cbfe2d586a7d80796763b1449ba050f8517b7fc7cc4742710c11e46455a31).
 #
 # Address of each reference-image (build 1.0) address that Maiko's metadata, startup hooks and
-# patcher checks name, in build 5.0: loc_<build 1.0>,loc_<build 5.0>. patcher/src/image.rs rewrites
+# patcher checks name, in build 5.0: loc_<build 1.0>,loc_<build 5.0>. crates/patcher/src/image.rs rewrites
 # the metadata through this table when the input is build 5.0.
 # Evidence: instruction-level alignment of both images (build 5.0 inserts code, so later code and
 # data move); code pairs are aligned instructions with equal operands apart from relocated

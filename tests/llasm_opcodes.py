@@ -79,7 +79,7 @@ def main():
         relocations.append(offset+3)
     # Exercise the actual overlap expansion at both legal entry points.
     replacement = next(line for line in
-        (Path(__file__).resolve().parents[1] / 'llasm-metadata/instruction_replacements.sci').read_text().splitlines()
+        (Path(__file__).resolve().parents[1] / 'metadata/llasm/instruction_replacements.sci').read_text().splitlines()
         if line.startswith('loc_F70B6,'))
     replacement = replacement.replace('loc_F70B6,', 'loc_203A0,').replace('loc_F70BA', 'loc_203A4')
     (args.output / 'instruction_replacements.sci').write_text(replacement + '\n')

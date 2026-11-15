@@ -6,10 +6,6 @@ Join the [Discord](https://discord.com/invite/xjCCyqbxkp) and discuss Maiko in `
 
 **Disclaimer:** AI was used heavily in this reverse engineering project; without AI it would not have been possible.
 
-## Name
-
-Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the cartographer in *Redguard*. The name reflects how the project maps the original DOS executable to native code for modern systems.
-
 ## Features
 
 - **Native, no DOSBox:** the original game code runs as a native 64-bit program.

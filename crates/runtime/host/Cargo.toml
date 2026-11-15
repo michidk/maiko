@@ -17,5 +17,5 @@ llasm = ["maiko-runtime/llasm", "maiko-glide/llasm"]
 llasm-entry = ["llasm"]
 
 [dependencies]
-maiko-runtime = { path = "../.." }
+maiko-runtime = { path = ".." }
 maiko-glide = { path = "../glide" }

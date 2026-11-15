@@ -16,7 +16,7 @@
 # Replacement: calls host service 9 or 10, which clears the same bit in the host's own lock state.
 # Effect: the game keeps its original lock-state logic; a native process cannot write BIOS memory or raise INT 9.
 # Why: the DOS BIOS data area and software interrupts do not exist natively.
-# Evidence: runtime/host/lib.rs services 9 and 10.
+# Evidence: crates/runtime/host/lib.rs services 9 and 10.
 # sha256: 6b503dd400ddcfbea3b5262026602b372f091e2252d7dcedcbf295435982bb5b
 loc_20DCD,20,CALL host_clear_scroll_lock
 # sha256: 6c649aedb7444e65b41d586347d927c05fc616e66ceb9b348df75d59077e2708
@@ -27,7 +27,7 @@ loc_20DE1,20,CALL host_clear_num_lock
 # Replacement: host services 16 and 17. Service 16 allocates the keyboard stack, sets the extended-handler flag and starts native event delivery; the original key translation tables and handler logic are retained. Service 17 zeroes the three lock variables.
 # Effect: key events reach the original translation code without a DOS interrupt vector.
 # Why: DPMI vector hooks and BIOS memory are unavailable natively.
-# Evidence: runtime/host/lib.rs services 16 and 17 ('original key translation retained').
+# Evidence: crates/runtime/host/lib.rs services 16 and 17 ('original key translation retained').
 # sha256: 23a74eed5606a4f0e78c1e5c6ab1c0ed392b2a34838003b42d95e0d0f0144700
 loc_D72E5,79,CALL host_keyboard_install
 # sha256: 7da01710ea56ac54cc3192e10ececb749f783885520e43d70d655b134fab879d
@@ -58,7 +58,7 @@ loc_3F058F,1,RET
 # Replacement: host service 20, which creates the native 640x480 window that the original Glide initialization then draws into.
 # Effect: the legacy VGA mode switch becomes window preparation; Glide setup is untouched.
 # Why: no BIOS video service natively; the Glide build never displays the VGA mode.
-# Evidence: runtime/host/lib.rs service 20.
+# Evidence: crates/runtime/host/lib.rs service 20.
 # sha256: 93f493d541780ad24ccd3a0fbca1252a1d912cec52a1c995dfa2b31f723fe641
 loc_B9D2F,9,CALL host_prepare_graphics
 
@@ -73,10 +73,10 @@ loc_EB55D,2,test eax,eax|jz loc_EB5C3|mov dl,[eax]
 
 # == Image variants: two RGFX.EXE builds; outro skip (--skip-outro)
 # Original: the executable at the GOG install (variant 0) has JZ 0x5544F at 0x55441 and MOV ECX,2 at 0xAD96B. The JZ passes over command 0x138A, which reopens the book when a script has set 0x1A38BD. MOV ECX,2 begins the book-close animation played when quitting from the book. The owner's RGFX.EXE (variant 1) differs by exactly three bytes: JZ becomes an unconditional JMP to 0x5544F, and the first two bytes of MOV ECX,2 become a JMP to 0xAD9E0.
-# Replacement: RG_SKIP_JUMP takes the variant-1 jump at 0x55441 when the executable hash selected variant 1 (rg_exe_variant), and at 0xAD96B when the host sets rg_skip_outro (runtime/rust/install.rs: variant 1, or the --skip-outro option); otherwise the original instruction runs.
+# Replacement: RG_SKIP_JUMP takes the variant-1 jump at 0x55441 when the executable hash selected variant 1 (rg_exe_variant), and at 0xAD96B when the host sets rg_skip_outro (crates/runtime/rust/install.rs: variant 1, or the --skip-outro option); otherwise the original instruction runs.
 # Effect: both known executables behave as they do natively in their own builds; --skip-outro quits from the book without the book-close animation on either build.
 # Why: both executables must run, and players asked to skip the outro without patching their files. Which executable is the unmodified release is not established.
-# Evidence: metadata/image_variants.json; tests/image_variant.c; the three bytes are the patches github.com/michidk/redguard-trainer applies for its --skip-intro option (patterns 83 3D ?? ?? ?? ?? 00 74 0C and 75 7C C6 05 ?? ?? ?? ?? 02 B9 02).
+# Evidence: metadata/image/image_variants.json; tests/image_variant.c; the three bytes are the patches github.com/michidk/redguard-trainer applies for its --skip-intro option (patterns 83 3D ?? ?? ?? ?? 00 74 0C and 75 7C C6 05 ?? ?? ?? ?? 02 B9 02).
 # sha256: 57a97cadea0452df11971965cf92e9e279b06b4b5b2806b94dc1174a4fa06871
 loc_55441,2,RG_SKIP_JUMP rg_exe_variant,loc_5544F|jz loc_5544F
 # sha256: 86c50ee89b1749fd3d78aafa56fe1abe55d39899809d5f2cf0908a56fc213149
@@ -84,7 +84,7 @@ loc_AD96B,5,RG_SKIP_JUMP rg_skip_outro,loc_AD9E0|mov ecx,2
 
 # == Intro movie skip (--skip-intro)
 # Original: CALL 0xB1464 with EAX=0, EDX=0, EBX=1 plays movie 0 (MENU.INI movie_name[0] = INTRO.SMK). 0x2078D is in main()'s New Game command (0x1771); 0x20651 is the MENU.INI ignore_autosave=1 direct start. The result is not used: both are followed by MOV EDX,0xFFFFFF00; XOR EAX,EAX.
-# Replacement: RG_SKIP_CALL makes the call unless the host sets rg_skip_intro (runtime/rust/install.rs, the --skip-intro option).
+# Replacement: RG_SKIP_CALL makes the call unless the host sets rg_skip_intro (crates/runtime/rust/install.rs, the --skip-intro option).
 # Effect: with --skip-intro, New Game goes straight to the ship. Without it the original call runs. Movies the scripts queue later (main() at 0x2095A) still play.
 # Why: players asked to skip the intro without patching their files.
 # Evidence: the Linux New Game probe logs 'MOVIE missing d:\INTRO.SMK' after the New Game command without the option and no INTRO.SMK request with it; the call targets were read from the original bytes (E8 rel32 to 0xB1464).
@@ -104,7 +104,7 @@ loc_D5963,3,test edx,edx|jz loc_D5726|cmp ecx,[edx+4]
 
 # == Font style 10 metric from a null source
 # Original: MOV DX,[EAX+0x46] reads a font metric word.
-# Replacement: RG_FONT10_METRIC (runtime/font_metric.inc): the same read for a non-null source; 0xF000 for null. Flags are saved and restored and the upper half of EDX is preserved.
+# Replacement: RG_FONT10_METRIC (crates/runtime/font_metric.inc): the same read for a non-null source; 0xF000 for null. Flags are saved and restored and the upper half of EDX is preserved.
 # Effect: reproduces what the DOS reference showed for this one site.
 # Why: the DOS reference read 0xF000 from the interrupt-table high word at DS:null+0x46; native Windows faults.
 # Evidence: tests/font_metric.c covers null/non-null values and preserved flags/register bits. The recorded DOS observation was 0xF000 at this site; it does not establish a policy for other null reads.
@@ -116,7 +116,7 @@ loc_BDCAD,4,RG_FONT10_METRIC
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_ABC0A,8,CALL host_poll_input|cmp word [loc_2055C2],0
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
@@ -231,16 +231,16 @@ loc_2FAF8,3,mov eax,[eax+0x25]|test eax,eax|jz loc_2FB23
 # Replacement: host service 24, which registers the host clock reader and shutdown callbacks, then RET.
 # Effect: movie playback reads the native millisecond clock.
 # Why: the VxD timer and real-mode callback do not exist natively.
-# Evidence: runtime/host/lib.rs service 24; runtime/rust/movies.rs.
+# Evidence: crates/runtime/host/lib.rs service 24; crates/runtime/rust/movies.rs.
 # sha256: 2b8b9a4b4841057356ece45fcb580732df1e946374777c66ee8b346b325aae99
 loc_11A380,168,CALL host_movie_clock_init|RET
 
 # == Audio startup and shutdown
 # Original: loc_C84C0 is the audio initialization routine (305 bytes replaced): after calling loc_C85F4 it calls the Miles startup function at 0xCB580 and further initialization helpers. loc_CB580 is the first instruction (three PUSHes) of that startup function. loc_D03A0 is the first instruction (two PUSHes) of AIL_redbook_open_drive, the CD-audio open.
 # Replacement: loc_C84C0 keeps the original call to loc_C85F4, then calls host_audio_init (service 0x3000) and returns. loc_CB580 becomes host_audio_startup (0x3011) and loc_D03A0 becomes host_redbook_open_drive (0x3100), each followed by RET.
-# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (native-metadata/external_procedures.sci).
+# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (crates/runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (metadata/native/external_procedures.sci).
 # Why: the Miles driver, DOS audio hardware and a CD-ROM device are not available natively.
-# Evidence: runtime/host/lib.rs service 0x3000 and 0x3100; runtime/rust/audio.rs; runtime/rust/redbook.rs; docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs service 0x3000 and 0x3100; crates/runtime/rust/audio.rs; crates/runtime/rust/redbook.rs; docs/architecture.md.
 # sha256: 0235edcd76b8bb6e428c3fe36bc889a383a502520068e9f2cdaedbbe4643d37e
 loc_C84C0,305,CALL loc_C85F4|CALL host_audio_init|RET
 # sha256: 4b065669e47a4cb45505bace1c278a15421fba8813ffeb939cc9a175f2d7a2b0
@@ -253,7 +253,7 @@ loc_D03A0,2,CALL host_redbook_open_drive|RET
 # Replacement: CALL host_audio_callbacks_prepare first (service 0x301b), then the original MOV.
 # Effect: the native callback trampolines are ready before the original code reads the pointer.
 # Why: the callbacks are called from the native audio thread, so their state must exist before the game uses them.
-# Evidence: runtime/rust/audio.rs.
+# Evidence: crates/runtime/rust/audio.rs.
 # sha256: c3958dcdb18f93308f34ec55d5eee53e9da8e26a2e5be66bc29869f51299728c
 loc_F1EE3,6,CALL host_audio_callbacks_prepare|mov edx,[loc_1AA258]
 

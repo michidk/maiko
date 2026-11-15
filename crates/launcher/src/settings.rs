@@ -118,7 +118,7 @@ pub fn log_directory() -> std::io::Result<PathBuf> {
 /// the game folder (which is never written), `user-data` in Maiko's data folder.
 pub fn user_directory(program: &Path, game: &Path) -> std::io::Result<PathBuf> {
     // A downloaded Mac program may run from a read-only, translocated folder; the Mac game keeps
-    // its saves in Application Support (runtime/rust/os/macos/paths.rs).
+    // its saves in Application Support (crates/runtime/rust/os/macos/paths.rs).
     if cfg!(target_os = "macos") {
         return std::env::var_os("HOME")
             .map(|home| PathBuf::from(home).join("Library/Application Support/Maiko/user-data"))

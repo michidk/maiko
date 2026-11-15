@@ -17,7 +17,7 @@ fn main() {
     {
         println!("cargo:rerun-if-changed={path}");
     }
-    for path in ["runtime", "Cargo.toml", "Cargo.lock"] {
+    for path in [".", "../../Cargo.toml", "../../Cargo.lock"] {
         println!("cargo:rerun-if-changed={path}");
     }
     let mut revision =

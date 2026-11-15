@@ -1,6 +1,6 @@
 # Byte-level replacements applied to every build.
 #
-# Format and rules are the same as native-metadata/instruction_replacements.sci: the comment
+# Format and rules are the same as metadata/native/instruction_replacements.sci: the comment
 # block above an entry documents it, `# sha256:` pins the original bytes, and comments are
 # removed before the translator reads the file (tools/pipeline.py, read_replacements).
 

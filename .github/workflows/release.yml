@@ -32,12 +32,12 @@ jobs:
         run: |
           git merge-base --is-ancestor HEAD origin/main
           if [[ "$DRY_RUN" == true ]]; then
-            version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["package"]["version"])')
+            version=$(python3 -c 'import tomllib; print(tomllib.load(open("crates/runtime/Cargo.toml","rb"))["package"]["version"])')
           else
             [[ "$GITHUB_REF" =~ ^refs/tags/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo '::error::Select a stable vX.Y.Z tag.'; exit 1; }
             version="${GITHUB_REF_NAME#v}"
           fi
-          for manifest in Cargo.toml patcher/Cargo.toml runtime/host/Cargo.toml runtime/glide/Cargo.toml; do
+          for manifest in crates/runtime/Cargo.toml crates/patcher/Cargo.toml crates/runtime/host/Cargo.toml crates/runtime/glide/Cargo.toml; do
             actual=$(python3 -c 'import sys,tomllib; print(tomllib.load(open(sys.argv[1],"rb"))["package"]["version"])' "$manifest")
             test "$actual" = "$version"
           done
@@ -70,7 +70,7 @@ jobs:
             .cache/client-macos-toolchain/*.js
             .cache/client-macos-toolchain/*LICENSE*.txt
             .cache/client-macos-toolchain/llasm-support
-          key: wasm-compilers-${{ hashFiles('patcher/src/bin/maiko-kit/tools.rs', 'patcher/src/bin/maiko-kit/macos_tools.rs', 'patches/sr-*.patch', 'patches/llvm-*.patch') }}
+          key: wasm-compilers-${{ hashFiles('crates/patcher/src/bin/maiko-kit/tools.rs', 'crates/patcher/src/bin/maiko-kit/macos_tools.rs', 'patches/sr-*.patch', 'patches/llvm-*.patch') }}
       - name: Build, export and check the runtime kits
         env:
           MAIKO_JOBS: '4'

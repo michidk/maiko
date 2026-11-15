@@ -48,7 +48,7 @@ loc_F1FF0,host_movie_clock_stop
 loc_F9AE0,host_audio_buffer_unlock
 loc_F9B00,host_audio_buffer_lock
 
-# CD music: the AIL_redbook_* entry points (runtime/rust/redbook.rs).
+# CD music: the AIL_redbook_* entry points (crates/runtime/rust/redbook.rs).
 loc_D03A0,host_redbook_open_drive
 loc_D0310,host_redbook_close
 loc_D0130,host_redbook_status

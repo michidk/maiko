@@ -16,7 +16,7 @@ import struct
 import tempfile
 
 from .le_image import Image
-from glide.imports import emit as emit_glide
+from .glide_imports import emit as emit_glide
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / '.cache'
@@ -128,7 +128,7 @@ def check_replacements(entries, image):
 
 
 def metadata(image, work):
-    for file in (ROOT / 'metadata').glob('*.sci'):
+    for file in (ROOT / 'metadata/image').glob('*.sci'):
         if file.name == 'instruction_replacements.sci':
             entries = read_replacements(file)
             check_replacements(entries, image)
@@ -188,7 +188,7 @@ def instrument_native(work):
     Effect: each entry first calls `trace_<address>`, a host service that records the call; game
     logic and registers are untouched.
     Why: lets the probes follow startup, movie and audio flow without a debugger.
-    Evidence: runtime/call_trace.inc; runtime/host/lib.rs (trace services, service numbers with the top bit set).
+    Evidence: crates/runtime/call_trace.inc; crates/runtime/host/lib.rs (trace services, service numbers with the top bit set).
     """
     addresses = [0x1115c2, 0x113c04, 0x113c63, 0x113cad, 0xf1cde, 0x129dc4,
                  0x119b86, 0x133707, 0x11fd96, 0x1303d4, 0x130c8b, 0x110826,
@@ -253,7 +253,7 @@ def native_startup_book(image, text):
     Evidence: tests/check_linux_menu.py (fresh start, Continue disabled); tests/check_startup_override.py.
     Guards: the original bytes at 0x205F6 and the exact translation text are checked; any change stops the build.
 
-    Load save (--load-save SLOT): when the host sets rg_load_save (runtime/rust/install.rs), the startup
+    Load save (--load-save SLOT): when the host sets rg_load_save (crates/runtime/rust/install.rs), the startup
     book is not shown. The slot goes to the original's load slot (0x1F9C0C) and the book's result becomes
     0x1772, the command the book returns for Continue and Load, so the original LoadGame path at 0x206F4
     loads it. rg_load_save is cleared, so later book entries are untouched.
@@ -406,7 +406,7 @@ def native_startup_clock(image, text):
     """Pace the original fixed-step clock before it advances the simulation.
 
     Original: at 0x5F6BC the original calls its clock update (loc_5F761) and then tests the step counter.
-    Replacement: call host_startup_clock_pace first (runtime/rust/timing.rs).
+    Replacement: call host_startup_clock_pace first (crates/runtime/rust/timing.rs).
     Effect: the 12 Hz loading warm-up advances at its fixed rate instead of as fast as the host runs.
     Simulation arithmetic is untouched.
     Why: reported on real Windows: a burst of fast movement at the start.
@@ -445,7 +445,7 @@ def main():
     report['import_names'] = metadata(image, work)
     report['unresolved_instruction_sites'] = 12
     report['native_runtime_complete'] = False
-    for file in (ROOT / 'native-metadata').glob('*.sci'):
+    for file in (ROOT / 'metadata/native').glob('*.sci'):
         if file.name in ['global_aliases.sci','fixup_do_not_interpret_as_code.sci']:
             with (work / file.name).open('a') as out:
                 out.write(file.read_text())
@@ -486,9 +486,9 @@ def main():
             report['translator_input_sha256']=hashlib.sha256(raw).hexdigest()
             command([sr, translator_input, 'rgfx.asm'], cwd=work, log=work / 'translation.log', timeout=60)
         relax_branches(work)
-        for file in (ROOT / 'runtime').glob('*.inc'):
+        for file in (ROOT / 'crates/runtime').glob('*.inc'):
             shutil.copyfile(file, work / file.name)
-        shutil.copyfile(ROOT / 'native-metadata/extern.inc', work / 'extern.inc')
+        shutil.copyfile(ROOT / 'metadata/native/extern.inc', work / 'extern.inc')
         report['glide_imports']=emit_glide(image,work,write_mappings=False)
         source=work/'seg02.inc'
         source.write_text(native_startup_book(image, source.read_text()))
@@ -550,9 +550,9 @@ def main():
         report['native_mixed_sections_split']=[5,7]
         instrument_native(work)
         with (work/'macros.inc').open('a') as out:
-            out.write((ROOT/'runtime/call_trace.inc').read_text())
-            out.write((ROOT/'runtime/image_variant.inc').read_text())
-            out.write((ROOT/'runtime/font_metric.inc').read_text())
+            out.write((ROOT/'crates/runtime/call_trace.inc').read_text())
+            out.write((ROOT/'crates/runtime/image_variant.inc').read_text())
+            out.write((ROOT/'crates/runtime/font_metric.inc').read_text())
         report['status'] = 'native_assembly_emitted'
     except (ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         report['status'] = 'blocked'; report['error'] = str(exc)

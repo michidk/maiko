@@ -18,7 +18,7 @@ from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runti
 
 LINUX_IMAGE = 'redguard-recomp-linux:bookworm'
 
-# Mirrors patcher/src/link.rs. LLD's MinGW driver picks the first match per directory in this order.
+# Mirrors crates/patcher/src/link.rs. LLD's MinGW driver picks the first match per directory in this order.
 WINDOWS_LIBRARIES = sorted(set(
     'SDL2_mixer SDL2 stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
     'user32 shell32 ole32 mingw32 gcc moldname mingwex msvcrt kernel32 pthread'.split()))
@@ -86,7 +86,7 @@ def main():
     name = 'rg-link-' + uuid.uuid4().hex[:10]
     run(['docker', 'run', '-d', '--network', 'none', '--memory', '4g', '--cpus', '2', '--name', name, image, 'sleep', '1800'])
     try:
-        for directory, destination in [('runtime', '/work'), ('glide', '/work'), ('platforms/linux', '/linux')]:
+        for directory, destination in [('crates/runtime', '/work'), ('platforms/linux', '/linux')]:
             run(['docker', 'cp', str(ROOT / directory) + '/.', name + ':' + destination])
         stage_rust_runtime(name, host)
         run(['docker', 'cp', str(launcher), name + ':/work/libmaiko_launcher.a'])

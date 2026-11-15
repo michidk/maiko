@@ -13,7 +13,7 @@ import tempfile
 import time
 from .le_image import Image
 from .pipeline import ROOT, SR_COMMIT, metadata, read_replacements, check_replacements, replacement_text
-from glide.imports import inventory
+from .glide_imports import inventory
 
 
 def sha(data):
@@ -29,7 +29,7 @@ def prepare_host(work, imports):
     Effect: the dispatcher and all service implementations stay shared.
     Why: fastcc guest procedures cannot be called through Rust's C ABI.
     Evidence: tests/llasm_execution.c exercises SR's offset C/guest wrappers;
-    runtime/host/llasm.rs owns register conversion and reentrant host calls.
+    crates/runtime/host/llasm.rs owns register conversion and reentrant host calls.
     """
     declarations = ('funcv rg_llasm_service $, service\n'
                     'func rg_llasm_target $\nfunc rg_llasm_variant\n'
@@ -39,7 +39,7 @@ def prepare_host(work, imports):
     wrappers = ['proc rg_dispatch global c_rg_dispatch',
                 'call rg_llasm_target $', 'tcall tmp0', 'endp']
     services = [(name, int(number), 0) for name, number in re.findall(
-        r'^HOST_SERVICE (\w+), (\d+)', (ROOT / 'runtime/native_services.inc').read_text(), re.M)]
+        r'^HOST_SERVICE (\w+), (\d+)', (ROOT / 'crates/runtime/native_services.inc').read_text(), re.M)]
     services += [(f'host_glide_{entry["index"]}', 0x2000 + entry['index'], entry['bytes'])
                  for entry in imports]
     for name, service, pop in services:
@@ -102,7 +102,7 @@ def main():
     began = time.monotonic()
     try:
         metadata(image, work)
-        for source in (ROOT / 'native-metadata').glob('*.sci'):
+        for source in (ROOT / 'metadata/native').glob('*.sci'):
             if source.name == 'instruction_replacements.sci':
                 continue
             if source.name in ['global_aliases.sci', 'fixup_do_not_interpret_as_code.sci']:
@@ -110,7 +110,7 @@ def main():
                     out.write(source.read_text())
             else:
                 shutil.copyfile(source, work / source.name)
-        for source in (ROOT / 'llasm-metadata').glob('*.sci'):
+        for source in (ROOT / 'metadata/llasm').glob('*.sci'):
             if source.name == 'global_aliases.sci':
                 with (work / source.name).open('a') as out:
                     out.write(source.read_text())
@@ -123,12 +123,12 @@ def main():
         replacements = [line.split(',', 2) for line in (work / 'instruction_replacements.sci').read_text().splitlines()
                         if line.strip() and not line.lstrip().startswith('#')]
         native_sites = {int(entry[0][4:], 16) for entry in read_replacements(
-            ROOT / 'native-metadata/instruction_replacements.sci')}
+            ROOT / 'metadata/native/instruction_replacements.sci')}
         covered_sites = {int(label[4:], 16) for label, _, _ in replacements}
         if native_sites - covered_sites:
             raise ValueError('LLasm is missing native replacements: ' +
                              ', '.join(hex(site) for site in sorted(native_sites - covered_sites)))
-        checks = json.loads((ROOT / 'llasm-metadata/instruction_checks.json').read_text())
+        checks = json.loads((ROOT / 'metadata/llasm/instruction_checks.json').read_text())
         if [(int(label[4:], 16), int(length)) for label, length, _ in replacements] != [
                 (int(check['address'], 16), check['length']) for check in checks]:
             raise ValueError('LLasm replacement inventory differs from byte checks')
@@ -142,8 +142,8 @@ def main():
             out.writelines(f'loc_{address:X}\n' for address in range(0x160000, 0x163000))
         report['metadata_sha256'] = {p.name: sha(p.read_bytes()) for p in sorted(work.glob('*.sci'))}
         report['source_sha256'] = {str(p.relative_to(ROOT)): sha(p.read_bytes()) for p in [
-            Path(__file__), ROOT / 'tools/pipeline.py', ROOT / 'tools/le_image.py', ROOT / 'glide/imports.py',
-            *(ROOT / 'llasm-metadata').glob('*')] if p.is_file()}
+            Path(__file__), ROOT / 'tools/pipeline.py', ROOT / 'tools/le_image.py', ROOT / 'tools/glide_imports.py',
+            *(ROOT / 'metadata/llasm').glob('*')] if p.is_file()}
         raw = bytearray((args.install / 'RGFX.EXE').read_bytes())
         le = struct.unpack_from('<I', raw, 0x3c)[0]
         table = struct.unpack_from('<I', raw, le + 64)[0]

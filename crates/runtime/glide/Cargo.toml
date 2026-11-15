@@ -16,5 +16,5 @@ doctest = false
 llasm = ["maiko-runtime/llasm"]
 
 [dependencies]
-maiko-runtime = { path = "../.." }
+maiko-runtime = { path = ".." }
 rustyglide = "=0.1.0"

@@ -52,7 +52,7 @@ def main():
         p.error(f'Game mount must be under {MOUNT_ROOT}')
     original=json.loads((source/'report.json').read_text())
     if original.get('status')!='native_assembly_emitted':p.error('Requires python3 -m tools.pipeline translate output')
-    variants=json.loads((ROOT/'metadata/image_variants.json').read_text())
+    variants=json.loads((ROOT/'metadata/image/image_variants.json').read_text())
     if original['image']['sha256']!=variants['translated_image_sha256']:p.error('Translation image hash mismatch')
     sr_head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT/'.cache/sr',text=True).strip()
     if sr_head!=original['sr_commit']:p.error('Mounted SR checkout differs from translation report')
@@ -76,7 +76,7 @@ def main():
         run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '1800' if a.keep_container else '480'])
         if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
-        for directory,destination in [('runtime','/work'),('platforms/linux','/work'),('glide','/work'),('platforms/linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]:
+        for directory,destination in [('crates/runtime','/work'),('platforms/linux','/work'),('platforms/linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]:
             run(['docker','cp',str(ROOT/directory)+'/.',name+':'+destination])
         # Generated macros include checked game fixes and must overwrite template includes.
         for file in source.iterdir():

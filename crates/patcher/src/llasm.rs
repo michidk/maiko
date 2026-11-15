@@ -293,7 +293,7 @@ mod tests {
     /// start of region"), and the successor needs an exported label to be reachable.
     #[test]
     fn comparison_successors_have_flags_and_labels() {
-        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../llasm-metadata/");
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../metadata/llasm/");
         let read = |name: &str| std::fs::read_to_string(format!("{dir}{name}")).unwrap();
         let (flags, aliases) = (read("instruction_flags.sci"), read("global_aliases.sci"));
         let listed =

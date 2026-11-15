@@ -14,10 +14,10 @@ class SourceManifest(unittest.TestCase):
     def test_changed_and_added_sources_are_rejected_but_bytecode_is_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ['build.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
+            for name in ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
                          'tools/check_macos_backend.py', 'tools/rust_runtime.py',
                          'tools/sr_heap.py', 'tools/sr_audio.py',
-                         'platforms/macos/test.c', 'runtime/test.h',
+                         'platforms/macos/test.c', 'crates/runtime/test.h',
                          *('patches/' + name for name in backend.PATCHES)]:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -29,7 +29,7 @@ class SourceManifest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Source inputs changed'):
                 backend.verify_source_manifest(expected, root)
             source.write_text('original input\n')
-            added = root / 'runtime/new.h'
+            added = root / 'crates/runtime/new.h'
             added.write_text('new input\n')
             with self.assertRaisesRegex(RuntimeError, 'Source inputs changed'):
                 backend.verify_source_manifest(expected, root)

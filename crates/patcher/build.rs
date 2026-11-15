@@ -1,15 +1,16 @@
 use std::{env, fs, path::Path};
 fn main() {
-    let root = Path::new("..");
+    let root = Path::new("../..");
     let mut source = String::from("pub const SOURCES: &[(&str, &[u8])] = &[\n");
-    for directory in [
-        "metadata",
-        "native-metadata",
-        "llasm-metadata",
-        "build5-metadata",
-        "runtime",
+    // Embedded under the names the patcher looks them up by.
+    for (folder, directory) in [
+        ("metadata/image", "metadata"),
+        ("metadata/native", "native-metadata"),
+        ("metadata/llasm", "llasm-metadata"),
+        ("metadata/build5", "build5-metadata"),
+        ("crates/runtime", "runtime"),
     ] {
-        let mut entries: Vec<_> = fs::read_dir(root.join(directory))
+        let mut entries: Vec<_> = fs::read_dir(root.join(folder))
             .unwrap()
             .map(|entry| entry.unwrap().path())
             .collect();
@@ -22,11 +23,14 @@ fn main() {
                 })
             {
                 println!("cargo:rerun-if-changed={}", path.display());
-                let relative = path.strip_prefix(root).unwrap();
+                let name = format!(
+                    "{directory}/{}",
+                    path.file_name().unwrap().to_str().unwrap()
+                );
                 let full = fs::canonicalize(&path).unwrap();
                 source.push_str(&format!(
                     "({:?}, include_bytes!({:?})),\n",
-                    relative.to_str().unwrap().replace('\\', "/"),
+                    name,
                     full.to_str().unwrap()
                 ));
             }

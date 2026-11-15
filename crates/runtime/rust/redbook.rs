@@ -1,5 +1,5 @@
 //! CD music. The original plays its music from the audio tracks of the game disc through the Miles
-//! `AIL_redbook_*` calls. Here those calls are services (see `native-metadata/external_procedures.sci`)
+//! `AIL_redbook_*` calls. Here those calls are services (see `metadata/native/external_procedures.sci`)
 //! that read the audio tracks of a disc image through its cue sheet (the GOG `game.ins` for
 //! `game.gog`, or a rip of the CD, chosen in `installed_media.rs`) and mix them into the
 //! game's audio output. Without that image the open call fails and the game goes on without music, as

@@ -57,7 +57,7 @@ def stage_rust(container, game=False):
         archive = destination / 'libmaiko_llasm_fixture.a'
         run(rustc, '--crate-type', 'staticlib', '--edition', '2024',
             '-C', 'opt-level=2', '-C', 'panic=abort', '--target', target,
-            str(ROOT / 'runtime/rust/llasm.rs'), '-o', str(archive))
+            str(ROOT / 'crates/runtime/rust/llasm.rs'), '-o', str(archive))
         run('docker', 'cp', str(archive),
             container + f':/results/libmaiko-llasm-{name}.a')
         reports[name] = {'target': target, 'helper_sha256': digest(archive)}
@@ -88,13 +88,13 @@ def run(*args, **kwargs):
 
 
 def source_manifest(root=ROOT):
-    paths = [root / name for name in ['build.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']]
+    paths = [root / name for name in ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']]
     paths += [root / 'tools' / name for name in
               ('check_macos_backend.py', 'rust_runtime.py', 'sr_heap.py', 'sr_audio.py')]
     paths += [root / 'patches' / name for name in PATCHES]
     extensions = {'.c', '.cpp', '.h', '.py', '.sh', '.asm', '.inc', '.cmd', '.command',
                   '.rs', '.toml', '.sci', '.json', '.md'}
-    for directory in ['platforms', 'tests', 'runtime', 'glide', 'audio', 'llasm-metadata']:
+    for directory in ['platforms', 'tests', 'crates/runtime', 'audio', 'metadata/llasm']:
         paths.extend(path for path in (root / directory).rglob('*')
                      if path.is_file() and '__pycache__' not in path.parts
                      and (path.suffix in extensions or path.name == 'Dockerfile'))
@@ -195,8 +195,9 @@ def main():
         report['sr_source_archive_sha256'] = digest(archive)
         for name, path in downloads.items():
             run('docker', 'cp', str(path.resolve()), container + ':/work/' + name)
-        for directory in ['platforms', 'tests', 'runtime', 'glide', 'llasm-metadata']:
-            run('docker', 'cp', str(ROOT / directory), container + ':/work/' + directory)
+        for directory, name in [('platforms', 'platforms'), ('tests', 'tests'), ('crates/runtime', 'runtime'),
+                                ('metadata/llasm', 'llasm-metadata')]:
+            run('docker', 'cp', str(ROOT / directory), container + ':/work/' + name)
         for name in PATCHES:
             run('docker', 'cp', str(ROOT / 'patches' / name), container + ':/work/' + name)
         with (output / 'build-test.log').open('w') as log:

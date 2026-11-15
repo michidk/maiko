@@ -49,7 +49,7 @@ loc_13B461,2,and tmp1, eax, 0xcf89|and eflags, eflags, ~0x8c5|or tmp3, eflags, Z
 # Replacement: calls host service 9 or 10, which clears the same bit in the host's own lock state.
 # Effect: the game keeps its original lock-state logic; a native process cannot write BIOS memory or raise INT 9.
 # Why: the DOS BIOS data area and software interrupts do not exist natively.
-# Evidence: runtime/host/lib.rs services 9 and 10; history:aad2c0c:docs/research/RESEARCH.md keyboard section.
+# Evidence: crates/runtime/host/lib.rs services 9 and 10; history:aad2c0c:docs/research/RESEARCH.md keyboard section.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 6b503dd400ddcfbea3b5262026602b372f091e2252d7dcedcbf295435982bb5b
 loc_20DCD,20,PUSH loc_20000|call rg_llasm_service $, 9|add esp, esp, 4|tcall loc_20DE1|endp
@@ -59,7 +59,7 @@ loc_20DCD,20,PUSH loc_20000|call rg_llasm_service $, 9|add esp, esp, 4|tcall loc
 # Replacement: calls host service 9 or 10, which clears the same bit in the host's own lock state.
 # Effect: the game keeps its original lock-state logic; a native process cannot write BIOS memory or raise INT 9.
 # Why: the DOS BIOS data area and software interrupts do not exist natively.
-# Evidence: runtime/host/lib.rs services 9 and 10; history:aad2c0c:docs/research/RESEARCH.md keyboard section.
+# Evidence: crates/runtime/host/lib.rs services 9 and 10; history:aad2c0c:docs/research/RESEARCH.md keyboard section.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 6c649aedb7444e65b41d586347d927c05fc616e66ceb9b348df75d59077e2708
 loc_20DE1,20,PUSH loc_20000|call rg_llasm_service $, 10|add esp, esp, 4|tcall loc_20DF5|endp
@@ -69,7 +69,7 @@ loc_20DE1,20,PUSH loc_20000|call rg_llasm_service $, 10|add esp, esp, 4|tcall lo
 # Replacement: host services 16 and 17. Service 16 allocates the keyboard stack, sets the extended-handler flag and starts native event delivery; the original key translation tables and handler logic are retained. Service 17 zeroes the three lock variables.
 # Effect: key events reach the original translation code without a DOS interrupt vector.
 # Why: DPMI vector hooks and BIOS memory are unavailable natively.
-# Evidence: runtime/host/lib.rs services 16 and 17 ('original key translation retained').
+# Evidence: crates/runtime/host/lib.rs services 16 and 17 ('original key translation retained').
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 23a74eed5606a4f0e78c1e5c6ab1c0ed392b2a34838003b42d95e0d0f0144700
 loc_D72E5,79,PUSH loc_20000|call rg_llasm_service $, 16|add esp, esp, 4|tcall loc_D7334|endp
@@ -79,7 +79,7 @@ loc_D72E5,79,PUSH loc_20000|call rg_llasm_service $, 16|add esp, esp, 4|tcall lo
 # Replacement: host services 16 and 17. Service 16 allocates the keyboard stack, sets the extended-handler flag and starts native event delivery; the original key translation tables and handler logic are retained. Service 17 zeroes the three lock variables.
 # Effect: key events reach the original translation code without a DOS interrupt vector.
 # Why: DPMI vector hooks and BIOS memory are unavailable natively.
-# Evidence: runtime/host/lib.rs services 16 and 17 ('original key translation retained').
+# Evidence: crates/runtime/host/lib.rs services 16 and 17 ('original key translation retained').
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 7da01710ea56ac54cc3192e10ececb749f783885520e43d70d655b134fab879d
 loc_D734F,94,PUSH loc_20000|call rg_llasm_service $, 17|add esp, esp, 4|tcall loc_D73AD|endp
@@ -119,7 +119,7 @@ loc_3F058F,1,POP tmp1|tcall tmp1|endp
 # Replacement: host service 20, which creates the native 640x480 window that the original Glide initialization then draws into.
 # Effect: the legacy VGA mode switch becomes window preparation; Glide setup is untouched.
 # Why: no BIOS video service natively; the Glide build never displays the VGA mode.
-# Evidence: runtime/host/lib.rs service 20.
+# Evidence: crates/runtime/host/lib.rs service 20.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 93f493d541780ad24ccd3a0fbca1252a1d912cec52a1c995dfa2b31f723fe641
 loc_B9D2F,9,PUSH loc_20000|call rg_llasm_service $, 20|add esp, esp, 4|tcall loc_B9D38|endp
@@ -139,7 +139,7 @@ loc_EB55D,2,ctcallz eax, loc_EB5C3|tcall rg_patch_EB55D_part1|endp|proc rg_patch
 # Replacement: RG_VARIANT_JUMP takes the variant-1 jump only when the executable hash selected variant 1 at startup; otherwise the original instruction runs.
 # Effect: both known executables behave as they do natively in their own builds.
 # Why: both must run. Which one is the unmodified release is not established.
-# Evidence: metadata/image_variants.json; history:aad2c0c:docs/research/RESEARCH.md ('exactly three changed bytes').
+# Evidence: metadata/image/image_variants.json; history:aad2c0c:docs/research/RESEARCH.md ('exactly three changed bytes').
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 57a97cadea0452df11971965cf92e9e279b06b4b5b2806b94dc1174a4fa06871
 loc_55441,2,call rg_llasm_variant|ctcallnz tmp0, loc_5544F|tcall rg_patch_55441_part1|endp|proc rg_patch_55441_part1|and tmp0, eflags, ZF|ctcallnz tmp0, loc_5544F|tcall loc_55443|endp
@@ -149,7 +149,7 @@ loc_55441,2,call rg_llasm_variant|ctcallnz tmp0, loc_5544F|tcall rg_patch_55441_
 # Replacement: RG_VARIANT_JUMP takes the variant-1 jump only when the executable hash selected variant 1 at startup; otherwise the original instruction runs.
 # Effect: both known executables behave as they do natively in their own builds.
 # Why: both must run. Which one is the unmodified release is not established.
-# Evidence: metadata/image_variants.json; history:aad2c0c:docs/research/RESEARCH.md ('exactly three changed bytes').
+# Evidence: metadata/image/image_variants.json; history:aad2c0c:docs/research/RESEARCH.md ('exactly three changed bytes').
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 86c50ee89b1749fd3d78aafa56fe1abe55d39899809d5f2cf0908a56fc213149
 loc_AD96B,5,call rg_llasm_variant|ctcallnz tmp0, loc_AD9E0|tcall rg_patch_AD96B_part1|endp|proc rg_patch_AD96B_part1|mov ecx, 2|tcall loc_AD970|endp
@@ -166,7 +166,7 @@ loc_D5963,3,ctcallz edx, loc_D5726|tcall rg_patch_D5963_part1|endp|proc rg_patch
 
 # == Font style 10 metric from a null source
 # Original: MOV DX,[EAX+0x46] reads a font metric word.
-# Replacement: RG_FONT10_METRIC (runtime/font_metric.inc): the same read for a non-null source; 0xF000 for null. Flags are saved and restored and the upper half of EDX is preserved.
+# Replacement: RG_FONT10_METRIC (crates/runtime/font_metric.inc): the same read for a non-null source; 0xF000 for null. Flags are saved and restored and the upper half of EDX is preserved.
 # Effect: reproduces what the DOS reference showed for this one site.
 # Why: the DOS reference read 0xF000 from the interrupt-table high word at DS:null+0x46; native Windows faults.
 # Evidence: history:aad2c0c:docs/research/decisions.tsv 2026-11-11T17:56:23Z (reference observation); history:aad2c0c:docs/research/RESEARCH.md. This models the observed DOS reference, not every BIOS or every null read.
@@ -179,7 +179,7 @@ loc_BDCAD,4,mov tmp0, 0xf000|ifnz eax|add tmpadr, eax, 70|load16z tmp0, tmpadr, 
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_ABC0A,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_ABC12|endp
@@ -189,7 +189,7 @@ loc_ABC0A,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_AC600,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_AC608|endp
@@ -199,7 +199,7 @@ loc_AC600,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_AC95E,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_AC966|endp
@@ -209,7 +209,7 @@ loc_AC95E,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 1c0b1aa327c4487ece634eab6a0c9decffcf637888e08dc99a884ed0a7cda76a
 loc_B22D2,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpadr, eax, loc_2055C0|load16z tmp0, tmpadr, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B22DA|endp
@@ -219,7 +219,7 @@ loc_B22D2,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpad
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 1c0b1aa327c4487ece634eab6a0c9decffcf637888e08dc99a884ed0a7cda76a
 loc_B25CA,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpadr, eax, loc_2055C0|load16z tmp0, tmpadr, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B25D2|endp
@@ -229,7 +229,7 @@ loc_B25CA,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpad
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_B25D4,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B25DC|endp
@@ -239,7 +239,7 @@ loc_B25D4,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: f11c186b89af21d5eb5bdba4fd3a66c29a9c410285c9f553563a6ede2bed0241
 loc_B25A6,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_205612, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B25AE|endp
@@ -249,7 +249,7 @@ loc_B25A6,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
 loc_B263A,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055F8, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B2642|endp
@@ -259,7 +259,7 @@ loc_B263A,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_C7C88,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_C7C90|endp
@@ -269,7 +269,7 @@ loc_C7C88,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 1c0b1aa327c4487ece634eab6a0c9decffcf637888e08dc99a884ed0a7cda76a
 loc_C7C9B,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpadr, eax, loc_2055C0|load16z tmp0, tmpadr, 1|call x86_compare $, tmp0, 0, 16|tcall loc_C7CA3|endp
@@ -279,7 +279,7 @@ loc_C7C9B,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpad
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 1c0b1aa327c4487ece634eab6a0c9decffcf637888e08dc99a884ed0a7cda76a
 loc_2418D,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpadr, eax, loc_2055C0|load16z tmp0, tmpadr, 1|call x86_compare $, tmp0, 0, 16|tcall loc_24195|endp
@@ -289,7 +289,7 @@ loc_2418D,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|add tmpad
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 8359c8f2ab7af5c7569d43a68ce42c771d8e5c6e1349821ed39c1c0234f3785d
 loc_2419C,2,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|mov eax, 0|call x86_compare $, 0, 0, 32|tcall loc_2419E|endp
@@ -299,7 +299,7 @@ loc_2419C,2,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|mov eax, 
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_B5833,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B583B|endp
@@ -309,7 +309,7 @@ loc_B5833,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_B0769,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B0771|endp
@@ -319,7 +319,7 @@ loc_B0769,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
 loc_B1145,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055F8, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B114D|endp
@@ -329,7 +329,7 @@ loc_B1145,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_B13E6,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B13EE|endp
@@ -339,7 +339,7 @@ loc_B13E6,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
 loc_B13F0,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055F8, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B13F8|endp
@@ -349,7 +349,7 @@ loc_B13F0,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
 loc_B19FD,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055F8, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B1A05|endp
@@ -359,7 +359,7 @@ loc_B19FD,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
 loc_B1A78,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055F8, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B1A80|endp
@@ -369,7 +369,7 @@ loc_B1A78,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
 loc_B43D7,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055F8, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B43DF|endp
@@ -379,7 +379,7 @@ loc_B43D7,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_B43E1,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B43E9|endp
@@ -389,7 +389,7 @@ loc_B43E1,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_B75DB,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C2, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B75E3|endp
@@ -399,7 +399,7 @@ loc_B75DB,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: d9a6fe1789b3f6159580c763c2a94324dcbbe28042dbf504fb44d9f7bf38ea26
 loc_B78E2,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055FC, 1|call x86_compare $, tmp0, 0, 16|tcall loc_B78EA|endp
@@ -409,7 +409,7 @@ loc_B78E2,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 07afa3614870bbe03e6eee74a537b67e877aec406bdf2b35c2cf8cc3c836ed89
 loc_BB498,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055EA, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB4A0|endp
@@ -419,7 +419,7 @@ loc_BB498,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: d9585b14058783abc1da8d85e68f543129697ba2053ed7281cb84acbda18f3c9
 loc_BB4F0,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055D6, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB4F8|endp
@@ -429,7 +429,7 @@ loc_BB4F0,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 6747995e3a8a640303c52ee49a894781f387e297b457909234739cc88ff99bbc
 loc_BB59D,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C4, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB5A5|endp
@@ -439,7 +439,7 @@ loc_BB59D,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 0fc562eb2a3cccc4cdc8ffe8924897ac43ba0ef6ae77dbe6508ad1be7687cebf
 loc_BB616,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C6, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB61E|endp
@@ -449,7 +449,7 @@ loc_BB616,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: bb80298a2e3493019880ca089d6530b932670de2035df6c2b8cd60f2494ce8b4
 loc_BB694,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055C8, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB69C|endp
@@ -459,7 +459,7 @@ loc_BB694,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 6741c5759d7e98eacfc553ef42fec1905f51075ba3ec5cfadca487813a0360d5
 loc_BB70D,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055CA, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB715|endp
@@ -469,7 +469,7 @@ loc_BB70D,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 69e4184ea89bd75abefcf594338a44cc7ddf3c981fab8ccaa5a13359eff2f622
 loc_BB78B,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055CC, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB793|endp
@@ -479,7 +479,7 @@ loc_BB78B,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 6e3a7e1b894c67bfc713b01175eab05884c227484bb5a2c9a107a9b10611dbea
 loc_BB804,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055CE, 1|call x86_compare $, tmp0, 0, 16|tcall loc_BB80C|endp
@@ -489,7 +489,7 @@ loc_BB804,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: c95df8903402275a0cbc31648b00d4cf4975193234be245cee61700a311f95e2
 loc_C6207,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055FE, 1|call x86_compare $, tmp0, 0, 16|tcall loc_C620F|endp
@@ -499,7 +499,7 @@ loc_C6207,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 1513e4ab05730ba6c8cb60032f5514b45e95d1eea925ae2aa1fa18a48c38d444
 loc_C623A,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055EE, 1|call x86_compare $, tmp0, 0, 16|tcall loc_C6242|endp
@@ -509,7 +509,7 @@ loc_C623A,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z t
 # Replacement: CALL host_poll_input immediately before the original compare. The call is a service entry; the host pumps window and keyboard events on every service entry, which updates the flag, then the original compare runs.
 # Effect: waits for a key or a skip now end when the player presses a key. Original timing and control flow are unchanged.
 # Why: no interrupt can update the flag natively, so these loops would never exit.
-# Evidence: runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs (service 23 returns after the pump); docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 1513e4ab05730ba6c8cb60032f5514b45e95d1eea925ae2aa1fa18a48c38d444
 loc_C68BF,8,PUSH loc_20000|call rg_llasm_service $, 23|add esp, esp, 4|load16z tmp0, loc_2055EE, 1|call x86_compare $, tmp0, 0, 16|tcall loc_C68C7|endp
@@ -579,7 +579,7 @@ loc_2FAF8,3,add tmpadr, eax, 37|load eax, tmpadr, 1|ctcallz eax, loc_2FB23|tcall
 # Replacement: host service 24, which registers the host clock reader and shutdown callbacks, then RET.
 # Effect: movie playback reads the native millisecond clock.
 # Why: the VxD timer and real-mode callback do not exist natively.
-# Evidence: runtime/host/lib.rs service 24; runtime/rust/movies.rs.
+# Evidence: crates/runtime/host/lib.rs service 24; crates/runtime/rust/movies.rs.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2b8b9a4b4841057356ece45fcb580732df1e946374777c66ee8b346b325aae99
 loc_11A380,168,PUSH loc_20000|call rg_llasm_service $, 24|add esp, esp, 4|POP tmp1|tcall tmp1|endp
@@ -587,9 +587,9 @@ loc_11A380,168,PUSH loc_20000|call rg_llasm_service $, 24|add esp, esp, 4|POP tm
 # == Audio startup and shutdown
 # Original: loc_C84C0 is the audio initialization routine (305 bytes replaced): after calling loc_C85F4 it calls the Miles startup function at 0xCB580 and further initialization helpers. loc_CB580 is the first instruction (three PUSHes) of that startup function. loc_D03A0 is the first instruction (two PUSHes) of AIL_redbook_open_drive, the CD-audio open.
 # Replacement: loc_C84C0 keeps the original call to loc_C85F4, then calls host_audio_init (service 0x3000) and returns. loc_CB580 becomes host_audio_startup (0x3011) and loc_D03A0 becomes host_redbook_open_drive (0x3100), each followed by RET.
-# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (native-metadata/external_procedures.sci).
+# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (crates/runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (metadata/native/external_procedures.sci).
 # Why: the Miles driver, DOS audio hardware and a CD-ROM device are not available natively.
-# Evidence: runtime/host/lib.rs service 0x3000 and 0x3100; runtime/rust/audio.rs; runtime/rust/redbook.rs; docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs service 0x3000 and 0x3100; crates/runtime/rust/audio.rs; crates/runtime/rust/redbook.rs; docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls.
 # sha256: 0235edcd76b8bb6e428c3fe36bc889a383a502520068e9f2cdaedbbe4643d37e
 loc_C84C0,305,PUSH rg_after_audio_close|tcall loc_C85F4|endp|proc rg_after_audio_close|PUSH loc_20000|call rg_llasm_service $, 12288|add esp, esp, 4|POP tmp1|tcall tmp1|endp
@@ -597,9 +597,9 @@ loc_C84C0,305,PUSH rg_after_audio_close|tcall loc_C85F4|endp|proc rg_after_audio
 # == Audio startup and shutdown
 # Original: loc_C84C0 is the audio initialization routine (305 bytes replaced): after calling loc_C85F4 it calls the Miles startup function at 0xCB580 and further initialization helpers. loc_CB580 is the first instruction (three PUSHes) of that startup function. loc_D03A0 is the first instruction (two PUSHes) of AIL_redbook_open_drive, the CD-audio open.
 # Replacement: loc_C84C0 keeps the original call to loc_C85F4, then calls host_audio_init (service 0x3000) and returns. loc_CB580 becomes host_audio_startup (0x3011) and loc_D03A0 becomes host_redbook_open_drive (0x3100), each followed by RET.
-# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (native-metadata/external_procedures.sci).
+# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (crates/runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (metadata/native/external_procedures.sci).
 # Why: the Miles driver, DOS audio hardware and a CD-ROM device are not available natively.
-# Evidence: runtime/host/lib.rs service 0x3000 and 0x3100; runtime/rust/audio.rs; runtime/rust/redbook.rs; docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs service 0x3000 and 0x3100; crates/runtime/rust/audio.rs; crates/runtime/rust/redbook.rs; docs/architecture.md.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls.
 # sha256: 4b065669e47a4cb45505bace1c278a15421fba8813ffeb939cc9a175f2d7a2b0
 loc_CB580,3,PUSH loc_20000|call rg_llasm_service $, 12305|add esp, esp, 4|POP tmp1|tcall tmp1|endp
@@ -609,7 +609,7 @@ loc_CB580,3,PUSH loc_20000|call rg_llasm_service $, 12305|add esp, esp, 4|POP tm
 # Replacement: CALL host_audio_callbacks_prepare first (service 0x301b), then the original MOV.
 # Effect: the native callback trampolines are ready before the original code reads the pointer.
 # Why: the callbacks are called from the native audio thread, so their state must exist before the game uses them.
-# Evidence: runtime/rust/audio.rs.
+# Evidence: crates/runtime/rust/audio.rs.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: c3958dcdb18f93308f34ec55d5eee53e9da8e26a2e5be66bc29869f51299728c
 loc_F1EE3,6,PUSH loc_20000|call rg_llasm_service $, 12315|add esp, esp, 4|load edx, loc_1AA258, 1|tcall loc_F1EE9|endp
@@ -813,7 +813,7 @@ loc_5F6BC,5,PUSH loc_20000|call rg_llasm_service $, 27|add esp, esp, 4|PUSH loc_
 
 # == Intro movie skip (--skip-intro)
 # Original: CALL 0xB1464 with EAX=0, EDX=0, EBX=1 plays movie 0 (MENU.INI movie_name[0] = INTRO.SMK). 0x2078D is in main()'s New Game command (0x1771); 0x20651 is the MENU.INI ignore_autosave=1 direct start. The result is not used: both are followed by MOV EDX,0xFFFFFF00; XOR EAX,EAX.
-# Replacement: RG_SKIP_CALL makes the call unless the host sets rg_skip_intro (runtime/rust/install.rs, the --skip-intro option).
+# Replacement: RG_SKIP_CALL makes the call unless the host sets rg_skip_intro (crates/runtime/rust/install.rs, the --skip-intro option).
 # Effect: with --skip-intro, New Game goes straight to the ship. Without it the original call runs. Movies the scripts queue later (main() at 0x2095A) still play.
 # Why: players asked to skip the intro without patching their files.
 # Evidence: the Linux New Game probe logs 'MOVIE missing d:\INTRO.SMK' after the New Game command without the option and no INTRO.SMK request with it; the call targets were read from the original bytes (E8 rel32 to 0xB1464).
@@ -823,7 +823,7 @@ loc_20651,5,load tmp1, rg_skip_intro, 4|ctcallnz tmp1, loc_20656|tcall rg_intro_
 
 # == Intro movie skip (--skip-intro)
 # Original: CALL 0xB1464 with EAX=0, EDX=0, EBX=1 plays movie 0 (MENU.INI movie_name[0] = INTRO.SMK). 0x2078D is in main()'s New Game command (0x1771); 0x20651 is the MENU.INI ignore_autosave=1 direct start. The result is not used: both are followed by MOV EDX,0xFFFFFF00; XOR EAX,EAX.
-# Replacement: RG_SKIP_CALL makes the call unless the host sets rg_skip_intro (runtime/rust/install.rs, the --skip-intro option).
+# Replacement: RG_SKIP_CALL makes the call unless the host sets rg_skip_intro (crates/runtime/rust/install.rs, the --skip-intro option).
 # Effect: with --skip-intro, New Game goes straight to the ship. Without it the original call runs. Movies the scripts queue later (main() at 0x2095A) still play.
 # Why: players asked to skip the intro without patching their files.
 # Evidence: the Linux New Game probe logs 'MOVIE missing d:\INTRO.SMK' after the New Game command without the option and no INTRO.SMK request with it; the call targets were read from the original bytes (E8 rel32 to 0xB1464).
@@ -844,9 +844,9 @@ loc_2060A,13,load tmp1, rg_load_save, 4|cmovslt tmp1, 0, tmp2, 1, 0|ctcallnz tmp
 # == Audio startup and shutdown
 # Original: loc_C84C0 is the audio initialization routine (305 bytes replaced): after calling loc_C85F4 it calls the Miles startup function at 0xCB580 and further initialization helpers. loc_CB580 is the first instruction (three PUSHes) of that startup function. loc_D03A0 is the first instruction (two PUSHes) of AIL_redbook_open_drive, the CD-audio open.
 # Replacement: loc_C84C0 keeps the original call to loc_C85F4, then calls host_audio_init (service 0x3000) and returns. loc_CB580 becomes host_audio_startup (0x3011) and loc_D03A0 becomes host_redbook_open_drive (0x3100), each followed by RET.
-# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (native-metadata/external_procedures.sci).
+# Effect: sample audio goes through the native mixer; the CD-audio open succeeds when the GOG disc image and its cue sheet are found (crates/runtime/rust/redbook.rs), and otherwise returns 0, the original no-CD path. The other AIL_redbook_* functions are replaced as external procedures (metadata/native/external_procedures.sci).
 # Why: the Miles driver, DOS audio hardware and a CD-ROM device are not available natively.
-# Evidence: runtime/host/lib.rs service 0x3000 and 0x3100; runtime/rust/audio.rs; runtime/rust/redbook.rs; docs/architecture.md.
+# Evidence: crates/runtime/host/lib.rs service 0x3000 and 0x3100; crates/runtime/rust/audio.rs; crates/runtime/rust/redbook.rs; docs/architecture.md.
 # Replacement: LLasm calls the shared Redbook open service through the CPU-state adapter.
 # sha256: 072f005fc3f2a49f2e29225d116c10a3904c326a1b810a6eb840d9a574526694
 loc_D03A0,2,PUSH loc_20000|call rg_llasm_service $, 12544|add esp, esp, 4|POP tmp1|tcall tmp1|endp

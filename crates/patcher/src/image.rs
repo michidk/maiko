@@ -10,7 +10,7 @@ pub const BUILD5: &str = "900cbfe2d586a7d80796763b1449ba050f8517b7fc7cc4742710c1
 const MAX_IMAGE: usize = 32 * 1024 * 1024;
 
 /// The recognized layout. Maiko's metadata names reference-image (build 1.0) addresses;
-/// build 5.0 inputs are translated through build5-metadata/addresses.sci.
+/// build 5.0 inputs are translated through metadata/build5/addresses.sci.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Build {
     Reference,

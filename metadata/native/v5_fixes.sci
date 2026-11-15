@@ -1,7 +1,7 @@
 # Optional "Version 5 fixes": behavior of the build 5.0 RGFX.EXE on the reference build 1.0 image.
 #
 # The patcher appends this table to instruction_replacements.sci only when the version 5 fixes
-# option is selected (patcher/src/prepare.rs, Options::v5_fixes). The format and the documentation
+# option is selected (crates/patcher/src/prepare.rs, Options::v5_fixes). The format and the documentation
 # rules are those of instruction_replacements.sci; the build refuses an entry without them.
 #
 # The build 5.0 executable ships with the 1998 demo (SHA-256

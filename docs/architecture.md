@@ -6,27 +6,27 @@ Maiko provides native Windows and Linux services for an owned Redguard installat
 
 | Crate | Path | Responsibility |
 |---|---|---|
-| `maiko-runtime` | `runtime/rust/` | Installation checks, files, storage, timing, input, audio, movies, memory, crash reports and the in-game overlay (egui, drawn before each buffer swap) |
-| `maiko-glide` | `runtime/glide/` | The game's Glide calls, drawn by the rustyglide renderer linked into the program |
-| `maiko-host` | `runtime/host/` | Startup and runtime service dispatch |
-| `maiko-patcher` | `patcher/` | Local package builder shared by the CLI and browser |
+| `maiko-runtime` | `crates/runtime/rust/` | Installation checks, files, storage, timing, input, audio, movies, memory, crash reports and the in-game overlay (egui, drawn before each buffer swap) |
+| `maiko-glide` | `crates/runtime/glide/` | The game's Glide calls, drawn by the rustyglide renderer linked into the program |
+| `maiko-host` | `crates/runtime/host/` | Startup and runtime service dispatch |
+| `maiko-patcher` | `crates/patcher/` | Local package builder shared by the CLI and browser |
+| `maiko-launcher` | `crates/launcher/` | The launcher window and the game-folder search shared with the runtime |
 
 SDL supplies windowing, input, timing and audio. [rustyglide](https://github.com/michidk/rustyglide) supplies the renderer, drawing through wgpu with Vulkan, Direct3D 12, Metal or OpenGL. Platform bindings handle memory, folder selection and fatal error reporting. Dependency sources and licences are listed in [THIRD_PARTY.md](../THIRD_PARTY.md).
 
 ## Files and storage
 
-The game installation is read-only. `cap-std` confines save and settings writes to the selected user directory. Installed movies can be read from a selected CD image, a GOG installation or supported loose movie files. Music is read from the audio tracks of the GOG disc image (`game.gog` and its `game.ins` cue sheet) by `runtime/rust/redbook.rs`, which implements the `AIL_redbook_*` calls the game uses and mixes the tracks into the audio output. Maiko does not distribute those files.
+The game installation is read-only. `cap-std` confines save and settings writes to the selected user directory. Installed movies can be read from a selected CD image, a GOG installation or supported loose movie files. Music is read from the audio tracks of the GOG disc image (`game.gog` and its `game.ins` cue sheet) by `crates/runtime/rust/redbook.rs`, which implements the `AIL_redbook_*` calls the game uses and mixes the tracks into the audio output. Maiko does not distribute those files.
 
 ## Source layout
 
-- `runtime/`: shared Rust services, interface headers and CPU backend startup glue.
-- `runtime/rust/os/`: compile-time host OS implementations for Linux, Windows and macOS, with common POSIX operations under `unix/`.
+- `crates/`: the Rust crates. `crates/runtime/` also holds the interface headers and the CPU backend startup glue (`*.h`, `*.inc`, `*.asm`); `crates/runtime/rust/os/` has the compile-time host OS implementations for Linux, Windows and macOS, with common POSIX operations under `unix/`.
+- `metadata/`: the translation tables. `image/` describes the original executable, `native/` and `llasm/` hold the patches for the native (Windows, Linux) and LLasm (macOS) backends, and `build5/` maps build 1.0 addresses to build 5.0 for that executable (`crates/patcher/src/image.rs`).
 - `platforms/linux/`, `platforms/windows/` and `platforms/macos/`: platform build scripts, launchers, native headers and development container definitions.
-- `patcher/` and `web/`: local package creation and the static website.
-- `tools/`, `glide/` and `audio/`: shared build, Glide bridge and packaging support.
+- `web/`: the static website and browser builder.
+- `tools/` and `audio/`: shared build and packaging support.
 - `tests/`: independent fixtures, interface checks and runtime checks.
 - `patches/`: documented changes to licensed upstream dependencies.
-- `build5-metadata/`: build 5.0 addresses and site hashes. The metadata names build 1.0 addresses; for a build 5.0 input the patcher rewrites them through this table (`patcher/src/image.rs`).
 
 See [building.md](building.md) for source checks and [client-builder.md](client-builder.md) for package creation.
 
@@ -48,7 +48,7 @@ shared fixed-size buffer; native handlers and context decoding live under `os/`
 and retain their allocation-free, lock-free fatal path.
 
 CPU translation is independent of host OS. Shared native assembly and ABI files
-stay in `runtime/`; `runtime/host/llasm.rs` and `runtime/rust/llasm.rs` implement
+stay in `runtime/`; `crates/runtime/host/llasm.rs` and `crates/runtime/rust/llasm.rs` implement
 the CPU-state backend selected by Cargo's `llasm` feature. Linux can exercise that
 backend as well as the native assembly backend. SDL continues to provide
 windowing, input, audio and timing.
@@ -60,7 +60,7 @@ validation still applies to every selected installation.
 
 ## Session diagnostics
 
-The native entry point initializes `runtime/rust/logging.rs` before installation
+The native entry point initializes `crates/runtime/rust/logging.rs` before installation
 selection. The OS layer redirects native stdout and stderr to an append-only
 session file, so C diagnostics and the allocation-free fatal handler also reach
 the file without a background logging thread. Rust records additionally mirror
