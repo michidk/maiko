@@ -22,6 +22,10 @@ Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the carto
 
 ## Setup
 
+Watch the video guide first: it shows building, installing and playing.
+
+[![Video guide: playing Redguard with Maiko on Windows, Mac and Linux](https://img.youtube.com/vi/EP6OcLl9wWo/hqdefault.jpg)](https://www.youtube.com/watch?v=EP6OcLl9wWo)
+
 You need the **GOG release** of Redguard (or the original CD): its `RGFX.EXE` is the Glide executable Maiko is built from. The Steam release ships only the software-rendered `RG.EXE` and does not work. Maiko recognizes three builds of `RGFX.EXE` and refuses any other.
 
 **In the browser (easiest):** open the [Maiko builder](https://michidk.github.io/maiko/), select your `RGFX.EXE` and wait a few minutes. The build runs in your browser; nothing is uploaded.
