@@ -37,7 +37,7 @@ def word(memory, name):
 
 with (root / (a.label + '.log')).open('w') as log:
     proc = subprocess.Popen([str(root / 'redguard-native'), '--game-dir', a.game_dir, '--user-dir', str(a.user_dir)],
-                            stdout=log, stderr=subprocess.STDOUT, env=dict(os.environ, LIBGL_ALWAYS_SOFTWARE='1'))
+                            stdout=log, stderr=subprocess.STDOUT, env=dict(os.environ, LIBGL_ALWAYS_SOFTWARE='1', MAIKO_TRACE='1'))
     book = BookMenu(proc, root / 'linux-symbols.txt')
 
     def key(name, hold=0.15):

@@ -94,6 +94,11 @@ fn close_requested() {
         maiko_runtime::host::exit_cleanly(0);
     }
 }
+/// `MAIKO_TRACE=1`: the probes' detailed periodic state and frame-timing records.
+fn trace() -> bool {
+    static TRACE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *TRACE.get_or_init(|| std::env::var_os("MAIKO_TRACE").is_some_and(|value| value == "1"))
+}
 #[derive(Default)]
 struct Observation {
     frames: u32,
@@ -109,7 +114,9 @@ unsafe fn runtime_state() {
         OBSERVATION.with(|state| {
         let mut state=state.borrow_mut();
         let now=rg_clock_milliseconds();let startup=read32(&raw const loc_1A4624);let actor=read32(&raw const loc_1A3865);let ui=read32(&raw const loc_1A824C);state.frames=state.frames.wrapping_add(1);
-        if state.rows>=2048 || (state.frames>16 && actor==state.actor && ui==state.ui && startup==state.startup && now.wrapping_sub(state.last)<250) {return;}
+        // Normal runs log scene, menu and startup changes; MAIKO_TRACE adds a sample every 250 ms.
+        let changed=actor!=state.actor || ui!=state.ui || startup!=state.startup;
+        if state.rows>=2048 || (state.frames>16 && !changed && (!trace() || now.wrapping_sub(state.last)<250)) {return;}
         let mut text=format!("STATE ms={now} frame={} ui={ui} actor={actor:08x} startup={startup} whole={} fine={} scale={} fps={} fly={} vertical_bypass={}",state.frames,rg_tick_delta,read32(&raw const loc_1A4620),read32(&raw const loc_1EEC48),read32(&raw const loc_1EEC54),read32(&raw const loc_1F29C4),read32(&raw const loc_1F29E0));
         let p=guest_ptr::<u8>(actor);
         if rg_host_readable(p.cast(),0x276)!=0 {
@@ -273,7 +280,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     static LAST_LOG: std::sync::atomic::AtomicU32 =
                         std::sync::atomic::AtomicU32::new(0);
                     let last = LAST_LOG.load(std::sync::atomic::Ordering::Relaxed);
-                    if now_ms.wrapping_sub(last) >= 2000 {
+                    if now_ms.wrapping_sub(last) >= if trace() { 2000 } else { 60_000 } {
                         LAST_LOG.store(now_ms, std::sync::atomic::Ordering::Relaxed);
                         maiko_runtime::rg_log!(
                             "event=frame-timing fps={} scale={} calls={} (game had measured {} smoothed {} scale {})",
