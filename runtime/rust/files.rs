@@ -400,7 +400,7 @@ impl Files {
                 frame.success(frame.edx as u32);
                 return true;
             }
-            0x3e | 0x3f | 0x40 | 0x42 | 0x44 => {}
+            0x3e | 0x3f | 0x40 | 0x42 | 0x44 | 0x57 => {}
             _ => return false,
         }
         let Some(open) = self.handles.get_mut(handle).and_then(Option::as_mut) else {
@@ -476,6 +476,19 @@ impl Files {
                 frame.edx = if open.file.is_terminal() { 0x80 } else { 0 };
                 frame.success(frame.edx as u32);
             }
+            // The save list asks for each save's date and time while refreshing.
+            0x57 if frame.eax & 255 == 0 => match open.file.metadata() {
+                Ok(meta) => {
+                    let (time, date) = dos_time(&meta);
+                    frame.ecx = time.into();
+                    frame.edx = date.into();
+                    frame.success(0);
+                }
+                Err(e) => frame.error(dos_error(e)),
+            },
+            // Setting the time is accepted and ignored; the host stamps the file when it is written.
+            0x57 if frame.eax & 255 == 1 => frame.success(0),
+            0x57 => frame.error(1),
             _ => unreachable!(),
         }
         true

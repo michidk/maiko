@@ -161,6 +161,17 @@ fn user_storage_and_dos_file_service() {
     f.ecx = 32;
     ok(&mut f);
     assert_eq!((f.eax, g.bytes(4096, 7)), (7, &b"native "[..]));
+    // The save list reads an open save's date and time; the date's year is 1980 + bits 9-15.
+    f.eax = 0x5700;
+    ok(&mut f);
+    assert!(f.edx >> 9 >= 2026 - 1980, "date {:04x}", f.edx);
+    f.eax = 0x5701;
+    ok(&mut f);
+    let open = f.ebx;
+    f.ebx = 99;
+    f.eax = 0x5700;
+    fails(&mut f, Some(6));
+    f.ebx = open;
     f.eax = 0x3e00;
     ok(&mut f);
 
