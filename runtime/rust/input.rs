@@ -9,7 +9,7 @@ use overlay::Routed;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Scancode;
 use sdl2::mouse::MouseButton;
-use sdl2::video::{GLProfile, Window};
+use sdl2::video::Window;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::ffi::{c_int, c_void};
@@ -65,7 +65,7 @@ impl Default for Input {
     }
 }
 
-// SDL and OpenGLide share process-lifetime window state. Do not run SDL
+// SDL and the renderer's window surface share process-lifetime window state. Do not run SDL
 // destructors before CRT audio callbacks or under the Windows loader lock.
 thread_local! { static INPUT: RefCell<ManuallyDrop<Input>> = RefCell::new(ManuallyDrop::new(Input::default())); }
 
@@ -201,15 +201,12 @@ impl Input {
                 );
                 sdl.video()
             })?;
-            let gl = video.gl_attr();
-            gl.set_context_profile(GLProfile::Compatibility);
-            gl.set_context_version(2, 1);
-            gl.set_double_buffer(true);
-            gl.set_depth_size(24);
             let (fullscreen, size) = *DISPLAY.lock().unwrap_or_else(|e| e.into_inner());
             let (w, h) = size.unwrap_or((width, height));
             let mut builder = video.window("Maiko", w, h);
-            builder.opengl();
+            // The renderer draws through Metal on macOS, which needs a Metal view.
+            #[cfg(target_os = "macos")]
+            builder.metal_view();
             if fullscreen {
                 builder.fullscreen_desktop();
             }
@@ -218,16 +215,14 @@ impl Input {
             self.window = Some(window);
             self.events = Some(events);
             self.sdl = Some(sdl);
-        } else if *DISPLAY.lock().unwrap_or_else(|e| e.into_inner()) == (false, None) {
-            self.window
-                .as_mut()
-                .unwrap()
-                .set_size(width, height)
-                .map_err(|e| e.to_string())?;
+        } else if *DISPLAY.lock().unwrap_or_else(|e| e.into_inner()) == (false, None)
+            && let Some(window) = self.window.as_mut()
+        {
+            window.set_size(width, height).map_err(|e| e.to_string())?;
         }
         self.focused = true;
-        let window = self.window.as_ref().unwrap();
-        crate::os::renderer_window(window)
+        let window = self.window.as_ref().ok_or("the window was not created")?;
+        crate::os::host_window_handle(window)
     }
 
     fn release_game_input(&mut self) {
@@ -439,7 +434,7 @@ fn window_hint(linux: bool, display: bool, wayland: bool) -> &'static str {
             " (WAYLAND_DISPLAY is set but DISPLAY is not: enable XWayland in your compositor, Maiko needs X11 or XWayland)"
         }
         (true, false, false) => " (DISPLAY is not set: Maiko needs an X11 or XWayland session)",
-        (true, true, _) => " (Maiko needs X11 or XWayland and an OpenGL 2.1 driver)",
+        (true, true, _) => " (Maiko needs X11 or XWayland and a Vulkan or OpenGL driver)",
     }
 }
 
@@ -485,17 +480,34 @@ pub extern "C" fn rg_input_pump() -> c_int {
     INPUT.with(|input| input.borrow_mut().pump()) as c_int
 }
 
-/// Paints the overlay over the frame about to be swapped, when it is open.
-/// Call on the game thread after the renderer has flushed its own drawing.
-pub fn draw_overlay() {
+/// Paints the overlay over the presented frame, when it is open.
+pub fn draw_overlay(target: overlay::Target<'_>) {
     INPUT.with(|input| {
-        let input = input.borrow();
-        if let (Some(sdl), Some(window)) = (&input.sdl, &input.window)
-            && let Ok(video) = sdl.video()
-        {
-            overlay::draw(&video, window.size(), window.drawable_size());
+        if let Some(window) = &input.borrow().window {
+            overlay::draw(target, window.size(), window.drawable_size());
         }
     })
+}
+
+/// The game window's raw handles and drawable size, for the renderer.
+pub fn renderer_window() -> Option<(
+    raw_window_handle::RawWindowHandle,
+    raw_window_handle::RawDisplayHandle,
+    (u32, u32),
+)> {
+    use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+    INPUT.with(|input| {
+        let input = input.borrow();
+        let window = input.window.as_ref()?;
+        let handle = window.window_handle().ok()?.as_raw();
+        let display = window.display_handle().ok()?.as_raw();
+        Some((handle, display, window.drawable_size()))
+    })
+}
+
+/// The game window's drawable size in pixels.
+pub fn drawable_size() -> Option<(u32, u32)> {
+    INPUT.with(|input| input.borrow().window.as_ref().map(Window::drawable_size))
 }
 
 #[unsafe(no_mangle)]

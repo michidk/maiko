@@ -8,7 +8,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 
 - **Native, no DOSBox.** The original game code runs as a native program with its own graphics, input, sound, file and timing services.
 - **Windows, Linux and macOS.** 64-bit Windows and Linux; macOS 11 or newer. Intel and Apple Silicon Macs use one universal package.
-- **Hardware rendering.** The Glide version of the game is drawn through OpenGL, in a window of any size or borderless fullscreen.
+- **Hardware rendering.** The Glide version of the game is drawn through Vulkan, Direct3D 12, Metal or OpenGL, in a window of any size or borderless fullscreen.
 - **Original sound, music and movies.** CD music and the intro play from your GOG `game.gog` disc image.
 - **Game controllers.** SDL2 gamepads work alongside keyboard and mouse.
 - **The original launcher.** `maiko.exe` (`maiko` on Linux and macOS) recreates Redguard's own start window: Play Redguard, Game Options, Technical Support. Its artwork and sounds are read from the `REDGUARD.EXE` in your installation; Maiko ships none of them.
@@ -23,7 +23,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 You need:
 
 - A Redguard installation containing `RGFX.EXE`, the Glide version of the game executable. The GOG release is the supported one and includes it. The Steam release does not work: it ships only `RG.EXE`, the software-rendered version, which Maiko cannot use. Maiko recognizes three builds of this file and refuses any other, so it never runs code it was not checked against: the GOG and CD build 1.0, a variant of it, and build 5.0 from the 1998 demo.
-- 64-bit Windows 10 or newer, or a Linux desktop (glibc 2.36 or newer, X11 or XWayland), with a graphics driver that supports OpenGL.
+- 64-bit Windows 10 or newer, or a Linux desktop (glibc 2.36 or newer, X11 or XWayland), with a graphics driver that supports OpenGL (for the launcher) and Vulkan or OpenGL (Direct3D 12 also works on Windows).
 
 Maiko is built from your own executable, which stays on your device. There are two ways to do it.
 
@@ -71,7 +71,7 @@ If you have the build 5.0 `RGFX.EXE` itself, Maiko accepts it directly. It runs 
 
 ## Play on Windows
 
-1. Extract the ZIP into **its own folder**, anywhere you can write to. Do not extract it into the game folder. Keep the extracted files together: `maiko.exe`, `redguard-native.exe`, `SDL2.dll`, `SDL2_mixer.dll`, `redguard-glide.dll`, `libwinpthread-1.dll` and the licence notices.
+1. Extract the ZIP into **its own folder**, anywhere you can write to. Do not extract it into the game folder. Keep the extracted files together: `maiko.exe`, `redguard-native.exe`, `SDL2.dll`, `SDL2_mixer.dll`, `libwinpthread-1.dll` and the licence notices.
 2. Double-click `maiko.exe`, the launcher. It finds the game on its own when it can: the folder it remembered from an earlier start, `REDGUARD_DIR` if you set it, its own folder and the folders around it, and the standard GOG folders such as `C:\GOG Games\Redguard`. Only if none of those holds the game does it ask you to choose the Redguard folder (the one with `RGFX.EXE`, or the GOG folder around it), and it remembers your choice.
 3. The launcher shows Redguard's original start window, drawn from your installation's `REDGUARD.EXE` (without that file it shows plain buttons). **Game Options** sets fullscreen, the window size, skipping the intro and outro, and a disc image for CD music. **Technical Support** shows where the logs are. Click **Play Redguard**.
 4. The original book menu opens in a window. Choose **New Game** to see the intro and start on the ship, or **Continue** to load your last save.
@@ -131,6 +131,8 @@ redguard-native.exe --fullscreen --skip-intro --load-save 1
 | `--texture-filter MODE` | How textures are filtered. `original` (the default) does what the game asks: bilinear filtering, the soft look of the 3dfx original, with point sampling where the game requests it. `smooth` filters every texture bilinearly; `sharp` point-samples every texture for crisp pixels. The launcher offers the same choice under **Textures**. |
 | `--load-save N` | Load save slot `N` (0 to 999; the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message if that save does not exist. |
 
+The renderer picks a graphics backend by itself. To choose one, set **Renderer** in the launcher's Game Options, or set the `WGPU_BACKEND` environment variable to `vulkan`, `dx12` (Windows), `metal` (macOS) or `gl` before starting `redguard-native`. The log names the backend and graphics driver in use (`Renderer: …`).
+
 Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.
 
 The program also reads `REDGUARD_DIR`, the game folder; `--game-dir` takes precedence over it. Two variables help when reporting problems: `RG_FLASH_LOG=1` makes the program log every frame that is a single flat colour, and `RG_CAPTURE_DIR=FOLDER` makes it save a still of the game picture there from time to time. They are not needed to play.
@@ -162,7 +164,7 @@ Typical causes:
 | Message or symptom | What to do |
 |---|---|
 | "The game folder could not be used" | The chosen folder does not contain a recognized `RGFX.EXE`. Choose the inner Redguard folder; if it is right, your `RGFX.EXE` is not one of the builds Maiko recognizes, so report its SHA-256 (the log prints it) and where you got it. |
-| A black window or no window | Check that your graphics driver supports OpenGL, and include the log in a report. |
+| A black window or no window | Choose another **Renderer** in the launcher's Game Options, check that your graphics driver supports Vulkan or OpenGL, and include the log in a report. |
 | The log says `Native audio device failed` | The game could not open a sound device. Check your default Windows playback device and include the log if it persists. |
 | A message beginning `BLOCKED` | The game reached an instruction Maiko cannot run. This is a bug: report it with the log and what you were doing. |
 
@@ -186,7 +188,7 @@ Open an issue and attach the report, or the newest session log. Say what you wer
 
 ## Linux
 
-The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries and require a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Extract the package and run `./maiko`, the launcher (see [Play on Windows](#play-on-windows)). Started directly, `./redguard-native` looks for the game as on Windows (`~/GOG Games/Redguard`, a Wine prefix's `GOG Games/Redguard`, the default Heroic and Lutris folders and the other standard folders), asks in the terminal if it finds nothing and remembers the answer; or pass `--game-dir /path/to/Redguard`. The options above work the same way.
+The [client-side builder](docs/client-builder.md) creates Linux x86-64 packages. They include SDL2 and SDL2_mixer and require a glibc 2.36 or newer desktop with X11/XWayland, an OpenGL driver for the launcher and a Vulkan or OpenGL (EGL) driver for the game. Extract the package and run `./maiko`, the launcher (see [Play on Windows](#play-on-windows)). Started directly, `./redguard-native` looks for the game as on Windows (`~/GOG Games/Redguard`, a Wine prefix's `GOG Games/Redguard`, the default Heroic and Lutris folders and the other standard folders), asks in the terminal if it finds nothing and remembers the answer; or pass `--game-dir /path/to/Redguard`. The options above work the same way.
 
 ## macOS
 

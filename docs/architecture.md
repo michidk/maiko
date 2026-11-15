@@ -7,11 +7,11 @@ Maiko provides native Windows and Linux services for an owned Redguard installat
 | Crate | Path | Responsibility |
 |---|---|---|
 | `maiko-runtime` | `runtime/rust/` | Installation checks, files, storage, timing, input, audio, movies, memory, crash reports and the in-game overlay (egui, drawn before each buffer swap) |
-| `maiko-glide` | `runtime/glide/` | Interface to the separately linked graphics renderer |
+| `maiko-glide` | `runtime/glide/` | The game's Glide calls, drawn by the rustyglide renderer linked into the program |
 | `maiko-host` | `runtime/host/` | Startup and runtime service dispatch |
 | `maiko-patcher` | `patcher/` | Local package builder shared by the CLI and browser |
 
-SDL supplies windowing, input, timing and audio. OpenGLide-ng supplies the renderer. Platform bindings handle memory, folder selection and fatal error reporting. Dependency sources and licences are listed in [THIRD_PARTY.md](../THIRD_PARTY.md).
+SDL supplies windowing, input, timing and audio. [rustyglide](https://github.com/michidk/rustyglide) supplies the renderer, drawing through wgpu with Vulkan, Direct3D 12, Metal or OpenGL. Platform bindings handle memory, folder selection and fatal error reporting. Dependency sources and licences are listed in [THIRD_PARTY.md](../THIRD_PARTY.md).
 
 ## Files and storage
 
@@ -23,7 +23,7 @@ The game installation is read-only. `cap-std` confines save and settings writes 
 - `runtime/rust/os/`: compile-time host OS implementations for Linux, Windows and macOS, with common POSIX operations under `unix/`.
 - `platforms/linux/`, `platforms/windows/` and `platforms/macos/`: platform build scripts, launchers, native headers and development container definitions.
 - `patcher/` and `web/`: local package creation and the static website.
-- `tools/`, `glide/` and `audio/`: shared build, renderer and packaging support.
+- `tools/`, `glide/` and `audio/`: shared build, Glide bridge and packaging support.
 - `tests/`: independent fixtures, interface checks and runtime checks.
 - `patches/`: documented changes to licensed upstream dependencies.
 - `build5-metadata/`: build 5.0 addresses and site hashes. The metadata names build 1.0 addresses; for a build 5.0 input the patcher rewrites them through this table (`patcher/src/image.rs`).
@@ -34,7 +34,7 @@ See [building.md](building.md) for source checks and [client-builder.md](client-
 
 Shared services implement DOS behavior and call the private `os` module for native
 memory queries, locking, disk and clock access, path encoding, atomic rename,
-file metadata, drive enumeration, folder selection, renderer window handles and
+file metadata, drive enumeration, folder selection, window handles and
 fatal error handling. `os/mod.rs` selects the implementation at compile time.
 Linux and macOS share POSIX helpers in `os/unix/`; Linux mapping queries and
 macOS Mach queries remain in their own directories. Windows uses Win32 APIs.

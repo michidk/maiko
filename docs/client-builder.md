@@ -33,20 +33,19 @@ maiko-patcher build --input /path/to/RGFX.EXE --target linux \
 
 The local Wasmtime CLI supports Linux and Windows. Use `--target windows` with `maiko-runtime-kit-windows.zip` for Windows x64. For macOS, use the browser or the [local source build](../platforms/macos/README.md). `--wasmtime PATH` selects a local Wasmtime installation. `--v5-fixes` adds the optional [version 5 fixes](../README.md#version-5-fixes); the browser builder offers the same option as a checkbox. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
 
-Extract the generated ZIP into a separate writable folder. Windows users double-click `maiko.exe`; Linux users run `./maiko`. The launcher looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. The Linux package includes SDL2, SDL2_mixer, GLU and OpenGL dispatch libraries that the program finds beside itself. It needs a glibc 2.36 or newer desktop with X11/XWayland and a working OpenGL driver. Saves and settings go to the package's `user-data` directory. Startup options such as skipping the intro are set in the launcher's Game Options, or given as command-line options to `redguard-native`; see the README.
+Extract the generated ZIP into a separate writable folder. Windows users double-click `maiko.exe`; Linux users run `./maiko`. The launcher looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. The Linux package includes SDL2 and SDL2_mixer, which the program finds beside itself. It needs a glibc 2.36 or newer desktop with X11/XWayland, an OpenGL driver for the launcher and a Vulkan or OpenGL (EGL) driver for the game. Saves and settings go to the package's `user-data` directory. Startup options such as skipping the intro are set in the launcher's Game Options, or given as command-line options to `redguard-native`; see the README.
 
 ## Runtime kits
 
 A kit holds everything needed to turn an owned `RGFX.EXE` into the native game, and no game code:
 
 - **Compilers**, built for WebAssembly: SR (the static recompiler), NASM and LLVM's LLD linker. The Mac kit adds SR's LLasm output, the browser D compiler, LLVM `opt` and `llc`.
-- **Link inputs**: C runtime start files, system import libraries, the Rust host and SR's heap and audio objects. The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
-- **The packaged runtime**: the launcher, the renderer, SDL and (on Linux) GL libraries and licence notices.
-- **Renderer source** in `source/`: OpenGLide is LGPL, so the kit, which is what a release distributes, carries its corresponding source and build files. Generated packages leave it out.
+- **Link inputs**: C runtime start files, system import libraries, the Rust host (which includes the renderer) and SR's heap and audio objects. The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
+- **The packaged runtime**: the launcher, SDL and licence notices.
 
 The browser or CLI checks the executable, translates it with SR, assembles the four engine objects with NASM (Mac: compiles them with LLVM for both architectures) and links them with LLD into the program. Browser and CLI produce byte-identical executables. Changed or unrecognized executables fail validation before anything is built.
 
-The Linux kit includes SDL2 2.30.11, SDL2_mixer 2.8.1, GLU and OpenGL dispatch libraries, and links against glibc 2.36. The mixer supports WAVE playback. Keep the notices with any redistributed support libraries. Game files and generated playable packages must stay out of release uploads.
+The Linux kit includes SDL2 2.30.11 and SDL2_mixer 2.8.1 and links against glibc 2.36. The mixer supports WAVE playback. Keep the notices with any redistributed support libraries. Game files and generated playable packages must stay out of release uploads.
 
 ## Build and deploy the site
 
@@ -75,7 +74,7 @@ This writes `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip`, `mai
 
 With `--exe /path/to/RGFX.EXE` (and Wasmtime), the script also builds a package from every kit through the website's real worker under Bun (`tools/browser_build.mjs`) and through the CLI, as a local end-to-end check.
 
-The SDL, GL and notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, checked against that release's `SHA256SUMS`.
+The SDL and notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, checked against that release's `SHA256SUMS`.
 
 ## Versioned releases
 
@@ -87,7 +86,7 @@ Each release contains:
 
 - `maiko-patcher-linux-x86_64.tar.gz` and `maiko-patcher-windows-x86_64.tar.gz`: standalone CLI, licence and usage instructions. Wasmtime is installed separately. The Linux CLI is statically linked with musl; the runtime kit has its own desktop and glibc requirements above.
 - `maiko-browser.tar.gz`: the complete static builder, including its checked support kits.
-- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`: the kits this release built and the browser serves, with their upstream notices and the renderer's corresponding source. The Linux and Windows kits also work with the CLI's `--kit` option.
+- `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip` and `maiko-runtime-kit-macos.zip`: the kits this release built and the browser serves, with their upstream notices. The Linux and Windows kits also work with the CLI's `--kit` option.
 - `SHA256SUMS`, `LICENSE` and `README.md`.
 
 The workflow stages all assets in a draft and publishes only after uploads succeed. Retrying preserves an already published release. After publication, Pages deploys the browser from that release, so one run of **Bump version and tag** builds, releases and deploys everything.

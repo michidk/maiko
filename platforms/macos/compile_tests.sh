@@ -43,6 +43,7 @@ for arch in x86_64 arm64; do
         -I runtime -I platforms/linux -I platforms/macos tests/macos_memory.c "/results/libmaiko-runtime-$arch.a" \
         -Wl,-dead_strip -F/frameworks -framework SDL2 -framework SDL2_mixer \
         -framework Security -framework CoreFoundation -liconv \
+        -framework Metal -framework QuartzCore -framework CoreGraphics -framework Foundation -lobjc \
         -o "/results/macos-memory-$arch"
     llvm-objdump --macho --private-headers --dylibs-used "/results/llasm-execution-$arch" \
         > "/results/macho-$arch.txt"

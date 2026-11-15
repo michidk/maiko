@@ -11,7 +11,7 @@ pub(crate) use dialog::*;
 pub(crate) use filesystem::*;
 pub(crate) use host::*;
 pub(crate) use memory::*;
-pub(crate) use window::renderer_window;
+pub(crate) use window::host_window_handle;
 
 pub(crate) const NAME: &str = "Windows native x64";
 

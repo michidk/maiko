@@ -14,9 +14,9 @@ g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory
 link() {
     $cc -I/audio $(pkg-config --cflags SDL2_mixer) "$@" -Wl,--gc-sections \
       -Wl,--start-group ${rust_library:-/work/libmaiko_runtime.a} guest_memory.o sr_audio.o -Wl,--end-group \
-      -L/work -Wl,-rpath,'$ORIGIN' -lredguard-glide -lstdc++ $(pkg-config --libs SDL2_mixer) -ldl -pthread -lm
+      -lstdc++ $(pkg-config --libs SDL2_mixer) -ldl -pthread -lm
 }
-rust_library=/work/libmaiko_host.a link -no-pie main.o service.o entry.o rgfx.o -L/work -Wl,-rpath,'$ORIGIN' -lredguard-glide -Wl,-Map,linux.map -o redguard-native
+rust_library=/work/libmaiko_host.a link -no-pie main.o service.o entry.o rgfx.o -Wl,-Map,linux.map -o redguard-native
 nasm -f elf64 -DABI_TEST -I/support/ native_entry.asm -o abi-entry.o
 nasm -f elf64 -I/support/ /tests/linux_abi.asm -o abi-test.o
 link -no-pie /tests/linux_abi.c abi-entry.o abi-test.o -o linux-abi
@@ -37,11 +37,8 @@ link /tests/linux_alloc.c -o linux-alloc
 ./linux-alloc
 link /tests/heap_lifetime.c -o heap-lifetime
 ./heap-lifetime
-g++ -std=c++11 -Wall -Wextra -Werror -O2 -I/src $(pkg-config --cflags sdl2) -no-pie /tests/backend_smoke.cpp -L/work -Wl,-rpath,'$ORIGIN' -lredguard-glide $(pkg-config --libs sdl2) -o linux-glide-smoke
-env LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a ./linux-glide-smoke
-env LIBGL_ALWAYS_SOFTWARE=1 GLIBC_TUNABLES=glibc.malloc.mmap_threshold=0:glibc.malloc.trim_threshold=0:glibc.malloc.top_pad=0 xvfb-run -a ./linux-glide-smoke high
 link /tests/sdl_input.c -o sdl-input-test
-env LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a ./sdl-input-test
+xvfb-run -a ./sdl-input-test
 sh /linux/check_functions.sh
 nm -n redguard-native > linux-symbols.txt
 ldd redguard-native > linux-dependencies.txt

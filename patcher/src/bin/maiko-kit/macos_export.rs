@@ -1,5 +1,5 @@
 //! Export fixed runtime/support inputs, never the accepted translated engine.
-use super::{Result, run};
+use super::Result;
 use maiko_patcher::{
     image::hash,
     kit::{Kit, Manifest, Target, safe_path, zip},
@@ -8,12 +8,11 @@ use maiko_patcher::{
     prepare::Files,
 };
 use serde::Deserialize;
-use std::{collections::BTreeMap, fs, io::Write, path::Path, process::Command};
+use std::{collections::BTreeMap, fs, io::Write, path::Path};
 
 #[derive(Deserialize)]
 struct Report {
     status: String,
-    openglide_commit: String,
     source_sha256: BTreeMap<String, String>,
     artifact_sha256: BTreeMap<String, String>,
 }
@@ -24,34 +23,6 @@ fn checked(build: &Path, report: &Report, name: &str) -> Result<Vec<u8>> {
         return Err(format!("Build artifact changed: {name}").into());
     }
     Ok(bytes)
-}
-
-fn renderer_source(report: &Report) -> Result<Vec<u8>> {
-    if report.openglide_commit != "9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726" {
-        return Err("Unexpected renderer revision".into());
-    }
-    let mut files = Files::new();
-    files.insert(
-        "openglide-ng.tar".into(),
-        run(Command::new("git").args([
-            "-C",
-            ".cache/openglide-ng",
-            "archive",
-            &report.openglide_commit,
-        ]))?,
-    );
-    for path in [
-        "patches/openglide-x64.patch",
-        "patches/openglide-sdl-window.patch",
-        "patches/openglide-macos.patch",
-        "platforms/macos/build_renderer.sh",
-        "platforms/macos/Dockerfile",
-        "tests/backend_smoke.cpp",
-    ] {
-        files.insert(path.into(), fs::read(path)?);
-    }
-    files.insert("README.txt".into(), b"OpenGLide-ng source: https://github.com/eugenenuke/openglide-ng\nExtract openglide-ng.tar to /src and apply the three patches in their listed order: x64, sdl-window, macos, using patch -p1.\nUse the supplied platforms/macos/Dockerfile toolchain. Copy platforms/ and tests/ to /work. Supply the macOS 11.3 SDK at /sdk/MacOSX11.3.sdk and SDL2.framework 2.30.11 at /frameworks. Create /results and run sh /work/platforms/macos/build_renderer.sh.\nCombine the two renderer builds with llvm-lipo-14 -create or replace libredguard-glide.dylib with the matching architecture build. The Apple SDK is not redistributed.\n".to_vec());
-    Ok(zip(&files, None)?)
 }
 
 pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path) -> Result<()> {
@@ -138,8 +109,7 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
                 continue;
             }
             if !safe_path(&name)
-                || !(name == "libredguard-glide.dylib"
-                    || name == "maiko"
+                || !(name == "maiko"
                     || name == "README.md"
                     || name == "LICENSES.txt"
                     || name == "Frameworks"
@@ -184,11 +154,6 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
     if !package_files.iter().any(|name| name == "LICENSES.txt") {
         return Err("Runtime needs complete licence notices".into());
     }
-    // The kit is what we distribute, so the LGPL renderer source travels with it, not the package.
-    files.insert(
-        "source/redguard-macos-renderer-source.zip".into(),
-        renderer_source(&report)?,
-    );
     package_files.sort();
     let manifest = Manifest {
         format: maiko_patcher::kit::FORMAT,

@@ -24,6 +24,16 @@ def generated_mit(package):
             + str(package['repository']) + ')\n\nCopyright (c) ' + holders + '\n\n' + MIT + '\n')
 
 
+def generated_apache(package, packages):
+    """Apache-2.0 text for a crate whose published package carries no license file, taken from
+    another crate in the graph that ships it unchanged."""
+    text = next(path.read_text() for other in packages
+                for path in [Path(other['manifest_path']).parent/'LICENSE-APACHE']
+                if path.is_file() and 'Apache License' in path.read_text()[:200])
+    return ('Apache License 2.0 (the published package has no license file; '
+            + str(package['repository']) + ')\n\n' + text + '\n')
+
+
 def notices(target='x86_64-pc-windows-gnu'):
     cargo = shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo')
     metadata = json.loads(subprocess.check_output([
@@ -60,6 +70,8 @@ def notices(target='x86_64-pc-windows-gnu'):
         generated = None
         if not files and 'MIT' in str(package['license']):
             generated = generated_mit(package)
+        elif not files and 'Apache-2.0' in str(package['license']):
+            generated = generated_apache(package, packages.values())
         elif not files:
             raise ValueError('No installed license notice for '+package['name'])
         label = package['name']+' '+package['version']+' ('+str(package['license'])+')'

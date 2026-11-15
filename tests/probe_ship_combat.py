@@ -119,7 +119,7 @@ def main():
                         return
                 except (FileNotFoundError, ValueError):
                     pass
-                # OpenGLide writes the shared file in place. Retry if the read
+                # The renderer writes the shared file in place. Retry if the read
                 # overlaps its truncation or a partially written frame.
                 time.sleep(.05)
             raise RuntimeError('Original renderer did not export a complete frame')

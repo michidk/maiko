@@ -13,10 +13,9 @@ use crate::{
 const WINDOWS_OBJECTS: [&str; 3] = ["crt2.o", "crtbegin.o", "crtend.o"];
 const WINDOWS_RUNTIME: [&str; 3] = ["libmaiko_host.a", "guest_memory.obj", "sr_audio.obj"];
 /// The library order GCC passes for the native build, including its implicit MinGW libraries.
-pub const WINDOWS_LIBRARIES: [&str; 32] = [
+pub const WINDOWS_LIBRARIES: [&str; 31] = [
     "SDL2_mixer",
     "SDL2",
-    "redguard-glide",
     "stdc++",
     "ws2_32",
     "userenv",
@@ -62,11 +61,7 @@ const LINUX_SYSTEM: [&str; 10] = [
     "crtn.o",
 ];
 /// Libraries the Linux program links against from the package itself.
-const LINUX_PACKAGED: [&str; 3] = [
-    "libredguard-glide.so",
-    "libSDL2_mixer-2.0.so.0",
-    "libSDL2-2.0.so.0",
-];
+const LINUX_PACKAGED: [&str; 2] = ["libSDL2_mixer-2.0.so.0", "libSDL2-2.0.so.0"];
 
 fn support(name: &str) -> String {
     format!("support/link/{name}")
@@ -178,13 +173,8 @@ pub fn command(target: Target) -> Result<(Vec<String>, String)> {
                 "--start-group",
             ]));
             args.extend(LINUX_RUNTIME.iter().map(|name| support(name)));
-            // A search path keeps the library's file name as its DT_NEEDED entry.
-            args.extend(words(&["--end-group", "-Lruntime", "-lredguard-glide"]));
-            args.extend(
-                LINUX_PACKAGED[1..]
-                    .iter()
-                    .map(|name| format!("runtime/{name}")),
-            );
+            args.push("--end-group".into());
+            args.extend(LINUX_PACKAGED.iter().map(|name| format!("runtime/{name}")));
             args.extend(LINUX_SYSTEM.iter().map(|name| support(name)));
         }
         Target::Macos => {

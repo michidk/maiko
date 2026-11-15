@@ -2,13 +2,13 @@
 
 The runtime requires macOS 11 or newer on Apple Silicon or Intel.
 The package contains the universal `maiko` launcher and `redguard-native` game
-executables, the renderer and SDL frameworks. It contains no Redguard installation, game assets or disc media.
+executables and SDL frameworks. It contains no Redguard installation, game assets or disc media.
 You must supply your own copy of Redguard.
 
 ## First launch
 
-1. Extract the whole runtime ZIP. Keep `maiko`, `redguard-native`,
-   `libredguard-glide.dylib` and `Frameworks/` together.
+1. Extract the whole runtime ZIP. Keep `maiko`, `redguard-native` and
+   `Frameworks/` together.
 2. If macOS blocks this trusted test build, dismiss the warning with **Done**
    and run this in Terminal, adjusting the extracted folder path:
 

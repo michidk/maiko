@@ -1,54 +1,33 @@
-//! Translation of the DOS Glide ABI into the external OpenGLide host ABI.
-//! Guest pointer-bearing structures are copied into explicit native layouts.
+//! Translation of the DOS Glide ABI onto rustyglide, the Rust Glide renderer.
+//! Guest pointer-bearing structures are read from guest memory into native values.
 use maiko_runtime::memory::{guest_address, guest_ptr};
 use maiko_runtime::rg_log;
 use maiko_runtime::{
     guest::GuestFrame,
-    input::{draw_overlay, overlay, rg_input_pump, rg_input_window},
+    input::{self, overlay, rg_input_pump, rg_input_window},
     memory::{rg_low_alloc, rg_low_free},
 };
+use rustyglide::texture::{self, NccData, TexInfo};
+use rustyglide::types::*;
+use rustyglide::{Blend, Glide, GrVertex, LockInfo, PresentFrame, Settings, Target};
 use std::cell::RefCell;
-use std::ffi::{c_int, c_void};
+use std::ffi::c_int;
 use std::io::Write;
 use std::time::{Duration, Instant};
-#[repr(C)]
-struct Texture {
-    small: i32,
-    large: i32,
-    aspect: i32,
-    format: i32,
-    data: *const c_void,
-}
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct NativeLfb {
-    size: i32,
-    pointer: *mut c_void,
-    stride: u32,
-    mode: i32,
-    origin: i32,
-}
-impl Default for NativeLfb {
-    fn default() -> Self {
-        Self {
-            size: std::mem::size_of::<Self>() as i32,
-            pointer: std::ptr::null_mut(),
-            stride: 0,
-            mode: 0,
-            origin: 0,
-        }
-    }
-}
+
 #[derive(Default)]
 struct Lock {
     guest: usize,
-    native: NativeLfb,
+    native: Option<LockInfo>,
     bytes: usize,
     buffer: u32,
 }
 struct Bridge {
+    glide: Glide,
     width: u32,
     height: u32,
+    /// The window's drawable size the renderer was last told about.
+    drawable: (u32, u32),
     locks: [Lock; 2],
     seen: [bool; 124],
     frame: u32,
@@ -61,15 +40,29 @@ struct Bridge {
 }
 /// Glide's GR_TEXTURECLAMP_CLAMP.
 const CLAMP: u32 = 1;
+/// Texture memory per TMU, as OpenGLide reported it to the game.
+const TEXTURE_MEMORY: u32 = 16 << 20;
+/// Frame buffer memory reported in MB, as OpenGLide did.
+const FRAME_BUFFER_MB: u32 = 8;
+
+/// Converts a raw Glide value, logging one that is out of range.
+fn typed<T: TryFrom<u32, Error = InvalidValue>>(value: u32) -> Option<T> {
+    T::try_from(value)
+        .inspect_err(|e| rg_log!("Ignored Glide argument: {e}"))
+        .ok()
+}
+
 impl Bridge {
     /// The game sets wrap mode once for everything, including the 256-texel tiles a movie frame is
     /// cut into. At 640x480 a tile edge lands on a pixel centre and filtering never reaches the
     /// tile's unused black side; above that, the left edge of each tile blends with it and shows a
     /// dark vertical line. Clamping while a movie plays keeps the filter inside the tile.
-    fn apply_clamp(&self) {
+    fn apply_clamp(&mut self) {
         let [tmu, s, t] = self.clamp;
         let (s, t) = if self.movie { (CLAMP, CLAMP) } else { (s, t) };
-        unsafe { grTexClampMode(tmu, s, t) };
+        if let (Some(tmu), Some(s), Some(t)) = (typed(tmu), typed(s), typed(t)) {
+            self.glide.tex_clamp_mode(tmu, s, t);
+        }
     }
     /// The original waited for a 60 Hz retrace on every swap, and several animations (flames, the
     /// free-look camera) advance once per drawn frame. Faster displays or disabled vsync would run
@@ -92,9 +85,14 @@ impl Bridge {
 }
 impl Default for Bridge {
     fn default() -> Self {
+        let mut settings = Settings::from_env();
+        settings.core.tmu_memory = TEXTURE_MEMORY;
+        settings.core.fb_memory_mb = FRAME_BUFFER_MB;
         Self {
+            glide: Glide::new(settings),
             width: 640,
             height: 480,
+            drawable: (0, 0),
             locks: Default::default(),
             seen: [false; 124],
             frame: 0,
@@ -107,193 +105,128 @@ impl Default for Bridge {
     }
 }
 thread_local! {static BRIDGE:RefCell<Bridge>=RefCell::new(Bridge::default());}
-/// Draws the overlay at window size over the scaled frame.
-unsafe extern "C" fn present_overlay() {
+/// Draws the overlay at window size over the presented frame.
+fn present_overlay(frame: &mut PresentFrame<'_>) {
     if overlay::is_open() {
-        draw_overlay();
+        input::draw_overlay(overlay::Target {
+            device: frame.device,
+            queue: frame.queue,
+            encoder: frame.encoder,
+            view: frame.view,
+            format: frame.format,
+        });
     }
 }
-unsafe extern "C" {
-    /// OpenGLide (openglide-sdl-window.patch): the game draws offscreen and is scaled into a
-    /// window of any size; the hook runs after scaling, before the frame is shown.
-    fn RgOffscreenActive() -> c_int;
-    fn RgSetPresentHook(hook: Option<unsafe extern "C" fn()>);
-    fn grBufferSwap(interval: u32);
-    fn grSstIdle();
-    fn grSstQueryHardware(info: *mut c_void) -> u32;
-    fn grSstWinOpen(
-        window: usize,
-        resolution: u32,
-        refresh: u32,
-        color: u32,
-        origin: u32,
-        colors: u32,
-        aux: u32,
-    ) -> u32;
-    fn grGammaCorrectionValue(value: f32);
-    fn grTexSource(tmu: u32, address: u32, mask: u32, info: *const Texture);
-    fn grTexDownloadMipMap(tmu: u32, address: u32, mask: u32, info: *const Texture);
-    fn grTexDownloadTable(tmu: u32, kind: u32, data: *const c_void);
-    fn grTexMinAddress(tmu: u32) -> u32;
-    fn grTexMaxAddress(tmu: u32) -> u32;
-    fn grFogTable(data: *const u8);
-    fn grDrawTriangle(a: *const c_void, b: *const c_void, c: *const c_void);
-    fn grDrawLine(a: *const c_void, b: *const c_void);
-    fn grDrawPoint(a: *const c_void);
-    fn grLfbLock(
-        kind: u32,
-        buffer: u32,
-        mode: u32,
-        origin: u32,
-        pipeline: u32,
-        info: *mut NativeLfb,
-    ) -> u32;
-    fn grLfbUnlock(kind: u32, buffer: u32) -> u32;
-    fn grBufferClear(color: u32, alpha: u8, depth: u16);
-    fn grGlideInit();
-    fn grGlideShutdown();
-    fn grSstSelect(a0: u32);
-    fn grRenderBuffer(a0: u32);
-    fn grColorMask(a0: u32, a1: u32);
-    fn grDepthBufferMode(a0: u32);
-    fn grDepthBufferFunction(a0: u32);
-    fn grDepthMask(a0: u32);
-    fn grDepthBiasLevel(a0: u32);
-    fn grTexFilterMode(a0: u32, a1: u32, a2: u32);
-    fn grTexClampMode(a0: u32, a1: u32, a2: u32);
-    fn grTexMipMapMode(a0: u32, a1: u32, a2: u32);
-    fn guTexCombineFunction(a0: u32, a1: u32);
-    fn guColorCombineFunction(a0: u32);
-    fn guAlphaSource(a0: u32);
-    fn grConstantColorValue(a0: u32);
-    fn grAlphaBlendFunction(a0: u32, a1: u32, a2: u32, a3: u32);
-    fn grChromakeyMode(a0: u32);
-    fn grChromakeyValue(a0: u32);
-    fn grDitherMode(a0: u32);
-    fn grFogMode(a0: u32);
-    fn grFogColorValue(a0: u32);
-}
-unsafe fn texture(address: u32) -> Texture {
+unsafe fn texture(address: u32) -> Option<(TexInfo, *const u8)> {
     unsafe {
         let p = guest_ptr::<u32>(address);
-        Texture {
-            small: p.read_unaligned() as i32,
-            large: p.add(1).read_unaligned() as i32,
-            aspect: p.add(2).read_unaligned() as i32,
-            format: p.add(3).read_unaligned() as i32,
-            data: guest_ptr::<c_void>(p.add(4).read_unaligned()),
-        }
+        let info = TexInfo {
+            small_lod: typed(p.read_unaligned())?,
+            large_lod: typed(p.add(1).read_unaligned())?,
+            aspect: typed(p.add(2).read_unaligned())?,
+            format: typed(p.add(3).read_unaligned())?,
+        };
+        Some((info, guest_ptr::<u8>(p.add(4).read_unaligned())))
     }
 }
+/// Bytes of every level of a texture as the game passes them.
+fn host_size(info: &TexInfo) -> usize {
+    (info.large_lod as u32..=info.small_lod as u32)
+        .filter_map(Lod::from_index)
+        .map(|lod| {
+            (texture::level_host_texels(lod, info.aspect) * info.format.bytes_per_texel()) as usize
+        })
+        .sum()
+}
 fn dimensions(resolution: u32) -> (u32, u32) {
-    const SIZES: [(u32, u32); 16] = [
-        (320, 200),
-        (320, 240),
-        (400, 256),
-        (512, 384),
-        (640, 200),
-        (640, 350),
-        (640, 400),
-        (640, 480),
-        (800, 600),
-        (960, 720),
-        (856, 480),
-        (512, 256),
-        (1024, 768),
-        (1280, 1024),
-        (1600, 1200),
-        (400, 300),
-    ];
-    SIZES.get(resolution as usize).copied().unwrap_or((0, 0))
+    Resolution::try_from(resolution)
+        .ok()
+        .and_then(Resolution::size)
+        .unwrap_or((0, 0))
 }
 impl Bridge {
+    /// Reads the back buffer as 565 pixels for host-side diagnostics.
+    fn read_back(&mut self, mut f: impl FnMut(&LockInfo)) -> bool {
+        let Some(info) = self.glide.lfb_lock(
+            lock::READ_ONLY,
+            Buffer::Back,
+            LfbWriteMode::W565,
+            Origin::UpperLeft,
+            false,
+        ) else {
+            return false;
+        };
+        f(&info);
+        self.glide.lfb_unlock(lock::READ_ONLY, Buffer::Back);
+        true
+    }
     /// Diagnostic for the reported one-frame flashes of pure fog colour: with `RG_FLASH_LOG` set,
     /// sample the back buffer at every swap and report frames that are one flat colour while the
     /// frame before was not. Reads the buffer only; never changes what is drawn.
-    unsafe fn log_flat_frame(&mut self) {
-        unsafe {
-            if std::env::var_os("RG_FLASH_LOG").is_none() {
-                return;
-            }
-            let mut info = NativeLfb::default();
-            if grLfbLock(0, 1, 0, 0, 0, &mut info) == 0 {
-                return;
-            }
-            let (w, h) = (self.width.max(1), self.height.max(1));
-            let mut first = None;
-            let mut flat = true;
+    fn log_flat_frame(&mut self) {
+        if std::env::var_os("RG_FLASH_LOG").is_none() {
+            return;
+        }
+        let (w, h) = (self.width.max(1), self.height.max(1));
+        let mut first = None;
+        let mut flat = true;
+        if !self.read_back(|info| {
             for i in 0..4096u32 {
                 let (x, y) = (i * 7919 % w, i * 104_729 % h);
-                let p = info
-                    .pointer
-                    .cast::<u8>()
-                    .add(y as usize * info.stride as usize + x as usize * 2)
-                    .cast::<u16>()
-                    .read_unaligned();
+                // SAFETY: the lock buffer holds height * stride bytes.
+                let p = unsafe { pixel(info, x, y) };
                 if *first.get_or_insert(p) != p {
                     flat = false;
                     break;
                 }
             }
-            grLfbUnlock(0, 1);
-            self.swaps = self.swaps.wrapping_add(1);
-            if flat && !self.was_flat {
-                rg_log!(
-                    "FLASH flat frame swap={} colour={:04x}",
-                    self.swaps,
-                    first.unwrap_or(0)
-                );
-            }
-            self.was_flat = flat;
+        }) {
+            return;
         }
+        self.swaps = self.swaps.wrapping_add(1);
+        if flat && !self.was_flat {
+            rg_log!(
+                "FLASH flat frame swap={} colour={:04x}",
+                self.swaps,
+                first.unwrap_or(0)
+            );
+        }
+        self.was_flat = flat;
     }
     /// Keep this frame as the screenshot for crash and stall reports.
-    unsafe fn snapshot(&self) {
-        unsafe {
-            let mut info = NativeLfb::default();
-            if grLfbLock(0, 1, 0, 0, 0, &mut info) == 0 {
-                return;
-            }
-            maiko_runtime::crash::store_snapshot(self.width, self.height, |x, y| {
-                info.pointer
-                    .cast::<u8>()
-                    .add(y as usize * info.stride as usize + x as usize * 2)
-                    .cast::<u16>()
-                    .read_unaligned()
+    fn snapshot(&mut self) {
+        let (width, height) = (self.width, self.height);
+        self.read_back(|info| {
+            maiko_runtime::crash::store_snapshot(width, height, |x, y| {
+                // SAFETY: the lock buffer holds height * stride bytes.
+                unsafe { pixel(info, x, y) }
             });
-            grLfbUnlock(0, 1);
-        }
+        });
     }
-    unsafe fn capture(&mut self) {
-        unsafe {
-            let Some(directory) = std::env::var_os("RG_CAPTURE_DIR") else {
-                return;
-            };
-            self.frame = self.frame.wrapping_add(1);
-            if self.frame > 3 && !self.frame.is_multiple_of(30) {
-                return;
-            }
-            let mut info = NativeLfb::default();
-            if grLfbLock(0, 1, 0, 0, 0, &mut info) == 0 {
-                return;
-            }
-            let filename = if self.frame == 1 {
-                "game-frame-first.ppm"
-            } else {
-                "game-frame-latest.ppm"
-            };
-            let result = (|| -> std::io::Result<()> {
+    fn capture(&mut self) {
+        let Some(directory) = std::env::var_os("RG_CAPTURE_DIR") else {
+            return;
+        };
+        self.frame = self.frame.wrapping_add(1);
+        if self.frame > 3 && !self.frame.is_multiple_of(30) {
+            return;
+        }
+        let filename = if self.frame == 1 {
+            "game-frame-first.ppm"
+        } else {
+            "game-frame-latest.ppm"
+        };
+        let (width, height, frame) = (self.width, self.height, self.frame);
+        let mut result = Ok(());
+        self.read_back(|info| {
+            result = (|| -> std::io::Result<()> {
                 let file = std::fs::File::create(std::path::Path::new(&directory).join(filename))?;
                 let mut out = std::io::BufWriter::new(file);
-                write!(out, "P6\n{} {}\n255\n", self.width, self.height)?;
-                for y in 0..self.height {
-                    for x in 0..self.width {
-                        let pixel = info
-                            .pointer
-                            .cast::<u8>()
-                            .add(y as usize * info.stride as usize + x as usize * 2)
-                            .cast::<u16>()
-                            .read_unaligned();
+                write!(out, "P6\n{width} {height}\n255\n")?;
+                for y in 0..height {
+                    for x in 0..width {
+                        // SAFETY: the lock buffer holds height * stride bytes.
+                        let pixel = unsafe { pixel(info, x, y) };
                         out.write_all(&[
                             ((u32::from(pixel) >> 11) * 255 / 31) as u8,
                             ((u32::from(pixel) >> 5 & 63) * 255 / 63) as u8,
@@ -303,16 +236,60 @@ impl Bridge {
                 }
                 out.flush()
             })();
-            if result.is_ok() {
-                rg_log!(
-                    "Captured original frame {} {}x{}",
-                    self.frame,
-                    self.width,
-                    self.height
-                );
-            }
-            grLfbUnlock(0, 1);
+        });
+        if result.is_ok() {
+            rg_log!("Captured original frame {frame} {width}x{height}");
         }
+    }
+    /// Tells the renderer the window's new size after the player resized it.
+    fn follow_window_size(&mut self) {
+        if let Some(size) = input::drawable_size()
+            && size != self.drawable
+        {
+            self.drawable = size;
+            self.glide.resize(size.0, size.1);
+        }
+    }
+    unsafe fn open(&mut self, a: &GuestArgs) -> u32 {
+        (self.width, self.height) = dimensions(a[1]);
+        if rg_input_window(self.width, self.height).is_null() {
+            return 0;
+        }
+        let (Some((window, display, size)), Some(resolution), Some(color), Some(origin)) = (
+            input::renderer_window(),
+            typed::<Resolution>(a[1]),
+            typed::<ColorFormat>(a[3]),
+            typed::<Origin>(a[4]),
+        ) else {
+            return 0;
+        };
+        self.drawable = size;
+        let target = Target::Window {
+            window,
+            display,
+            size,
+        };
+        if let Err(error) = self.glide.sst_win_open(target, resolution, color, origin) {
+            rg_log!(
+                "Native Glide renderer failed: {error} (WGPU_BACKEND={})",
+                std::env::var("WGPU_BACKEND").unwrap_or_else(|_| "automatic".into())
+            );
+            return 0;
+        }
+        self.glide.set_present_hook(Some(Box::new(present_overlay)));
+        if let Some(renderer) = self.glide.renderer() {
+            let info = renderer.device().adapter_info();
+            rg_log!(
+                "Renderer: {} via {:?}, driver {} {}",
+                info.name,
+                info.backend,
+                info.driver,
+                info.driver_info
+            );
+        }
+        // The picture scales to any window size, so the player may resize it.
+        input::set_resizable(true);
+        1
     }
     unsafe fn service(&mut self, index: u32, f: &mut GuestFrame) -> bool {
         unsafe {
@@ -327,17 +304,29 @@ impl Bridge {
                 rg_log!("Native Glide entry {index}");
                 self.seen[index as usize] = true;
             }
+            let g = &mut self.glide;
             match index {
-                42 => grGlideInit(),
-                45 => grGlideShutdown(),
-                69 => grSstSelect(a[0]),
-                55 => grRenderBuffer(a[0]),
-                10 => grBufferClear(a[0], a[1] as u8, a[2] as u16),
-                18 => grColorMask(a[0], a[1]),
-                24 => grDepthBufferMode(a[0]),
-                23 => grDepthBufferFunction(a[0]),
-                25 => grDepthMask(a[0]),
-                22 => grDepthBiasLevel(a[0]),
+                42 | 69 => {}
+                45 => g.sst_win_close(),
+                55 => {
+                    if let Some(buffer) = typed(a[0]) {
+                        g.render_buffer(buffer);
+                    }
+                }
+                10 => g.buffer_clear(a[0], a[1] as u8, a[2] as u16),
+                18 => g.color_mask(a[0] != 0, a[1] != 0),
+                24 => {
+                    if let Some(mode) = typed(a[0]) {
+                        g.depth_buffer_mode(mode);
+                    }
+                }
+                23 => {
+                    if let Some(function) = typed(a[0]) {
+                        g.depth_buffer_function(function);
+                    }
+                }
+                25 => g.depth_mask(a[0] != 0),
+                22 => g.depth_bias_level(a[0] as i16),
                 86 => {
                     // --texture-filter: the game's choice, or always bilinear (1) or point (0).
                     use maiko_runtime::install::{TEXTURE_FILTER, TEXTURE_SHARP, TEXTURE_SMOOTH};
@@ -347,40 +336,78 @@ impl Bridge {
                         TEXTURE_SHARP => (0, 0),
                         _ => (a[1], a[2]),
                     };
-                    grTexFilterMode(a[0], min, mag);
+                    if let (Some(tmu), Some(min), Some(mag)) = (typed(a[0]), typed(min), typed(mag))
+                    {
+                        g.tex_filter_mode(tmu, min, mag);
+                    }
                 }
                 77 => {
                     self.clamp = [a[0], a[1], a[2]];
                     self.apply_clamp();
                 }
-                90 => grTexMipMapMode(a[0], a[1], a[2]),
-                120 => guTexCombineFunction(a[0], a[1]),
-                101 => guColorCombineFunction(a[0]),
-                100 => guAlphaSource(a[0]),
-                20 => grConstantColorValue(a[0]),
-                5 => grAlphaBlendFunction(a[0], a[1], a[2], a[3]),
-                14 => grChromakeyMode(a[0]),
-                15 => grChromakeyValue(a[0]),
-                27 => grDitherMode(a[0]),
-                37 => grFogMode(a[0]),
-                36 => grFogColorValue(a[0]),
+                90 => {
+                    if let (Some(tmu), Some(mode)) = (typed(a[0]), typed(a[1])) {
+                        g.tex_mipmap_mode(tmu, mode, a[2] != 0);
+                    }
+                }
+                120 => {
+                    if let (Some(tmu), Some(function)) = (typed(a[0]), typed(a[1])) {
+                        g.gu_tex_combine_function(tmu, function);
+                    }
+                }
+                101 => {
+                    if let Some(function) = typed(a[0]) {
+                        g.gu_color_combine_function(function);
+                    }
+                }
+                100 => {
+                    if let Some(source) = typed(a[0]) {
+                        g.gu_alpha_source(source);
+                    }
+                }
+                20 => g.constant_color(a[0]),
+                5 => {
+                    if let (Some(rgb_src), Some(rgb_dst), Some(alpha_src), Some(alpha_dst)) =
+                        (typed(a[0]), typed(a[1]), typed(a[2]), typed(a[3]))
+                    {
+                        g.alpha_blend_function(Blend {
+                            rgb_src,
+                            rgb_dst,
+                            alpha_src,
+                            alpha_dst,
+                        });
+                    }
+                }
+                14 => {
+                    if let Some(mode) = typed(a[0]) {
+                        g.chromakey_mode(mode);
+                    }
+                }
+                15 => g.chromakey_value(a[0]),
+                27 => {
+                    if let Some(mode) = typed(a[0]) {
+                        g.dither_mode(mode);
+                    }
+                }
+                37 => {
+                    if let Some(mode) = typed(a[0]) {
+                        g.fog_mode(mode);
+                    }
+                }
+                36 => g.fog_color(a[0]),
                 65 => {
-                    f.eax = grSstQueryHardware(guest_ptr::<c_void>(a[0])).into();
+                    // GrHwConfiguration: one Voodoo board with one TMU, as OpenGLide reports.
+                    let config = guest_ptr::<u32>(a[0]);
+                    for (i, value) in [1, 0, FRAME_BUFFER_MB, 2, 1, 0, 1, TEXTURE_MEMORY >> 20]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        config.add(i).write_unaligned(value);
+                    }
+                    f.eax = 1;
                 }
                 75 => {
-                    (self.width, self.height) = dimensions(a[1]);
-                    let window = rg_input_window(self.width, self.height);
-                    if window.is_null() {
-                        return false;
-                    }
-                    f.eax =
-                        grSstWinOpen(window as usize, a[1], a[2], a[3], a[4], a[5], a[6]).into();
-                    let offscreen = RgOffscreenActive() != 0;
-                    if offscreen {
-                        RgSetPresentHook(Some(present_overlay));
-                    }
-                    // Without the offscreen frame the picture would not follow a resize.
-                    maiko_runtime::input::set_resizable(offscreen);
+                    f.eax = self.open(&a).into();
                     rg_log!(
                         "Native Glide window {}x{} opened={}",
                         self.width,
@@ -388,9 +415,7 @@ impl Bridge {
                         f.eax
                     );
                 }
-                39 => {
-                    grGammaCorrectionValue(f32::from_bits(a[0]));
-                }
+                39 => g.gamma_correction(f32::from_bits(a[0])),
                 12 => {
                     if rg_input_pump() == 0 {
                         return false;
@@ -400,108 +425,137 @@ impl Bridge {
                     if maiko_runtime::crash::frame_presented() {
                         self.snapshot();
                     }
-                    if overlay::is_open() && RgOffscreenActive() == 0 {
-                        // grBufferSwap draws the game's batched triangles; draw them first.
-                        grSstIdle();
-                        draw_overlay();
-                    }
-                    grBufferSwap(a[0]);
+                    self.follow_window_size();
+                    self.glide.buffer_swap(a[0]);
                     self.pace_swap();
                 }
-                94 => {
-                    let info = texture(a[3]);
-                    grTexSource(a[0], a[1], a[2], &info);
-                }
-                81 => {
-                    let info = texture(a[3]);
-                    grTexDownloadMipMap(a[0], a[1], a[2], &info);
+                94 | 81 => {
+                    let (Some(tmu), Some((info, data))) = (typed(a[0]), texture(a[3])) else {
+                        return true;
+                    };
+                    if index == 94 {
+                        g.tex_source(tmu, a[1], a[2], info);
+                    } else {
+                        let data = std::slice::from_raw_parts(data, host_size(&info));
+                        g.tex_download_mipmap(tmu, a[1], a[2], info, data);
+                    }
                 }
                 84 => {
-                    grTexDownloadTable(a[0], a[1], guest_ptr::<c_void>(a[2]));
+                    let (Some(tmu), Some(table)) = (typed::<Tmu>(a[0]), typed::<TexTable>(a[1]))
+                    else {
+                        return true;
+                    };
+                    let data = guest_ptr::<u8>(a[2]);
+                    match table {
+                        TexTable::Palette => {
+                            let entries: Vec<u32> = (0..256)
+                                .map(|i| data.cast::<u32>().add(i).read_unaligned())
+                                .collect();
+                            g.tex_download_palette(tmu, &entries, 0);
+                        }
+                        TexTable::Ncc0 | TexTable::Ncc1 => {
+                            let bytes = std::slice::from_raw_parts(data, 112);
+                            let which = if table == TexTable::Ncc0 {
+                                NccTable::Ncc0
+                            } else {
+                                NccTable::Ncc1
+                            };
+                            if let Some(ncc) = NccData::from_bytes(bytes) {
+                                g.tex_download_ncc(tmu, which, &ncc);
+                            }
+                        }
+                    }
                 }
-                89 => {
-                    f.eax = grTexMinAddress(a[0]).into();
-                }
-                88 => {
-                    f.eax = grTexMaxAddress(a[0]).into();
+                89 | 88 => {
+                    let Some(tmu) = typed(a[0]) else { return true };
+                    f.eax = if index == 89 {
+                        g.tex_min_address(tmu)
+                    } else {
+                        g.tex_max_address(tmu)
+                    }
+                    .into();
                 }
                 38 => {
-                    grFogTable(guest_ptr::<u8>(a[0]));
+                    let mut table = [0u8; FOG_TABLE_SIZE];
+                    guest_ptr::<u8>(a[0])
+                        .copy_to_nonoverlapping(table.as_mut_ptr(), FOG_TABLE_SIZE);
+                    g.fog_table(&table);
                 }
-                34 => {
-                    grDrawTriangle(
-                        guest_ptr::<c_void>(a[0]),
-                        guest_ptr::<c_void>(a[1]),
-                        guest_ptr::<c_void>(a[2]),
-                    );
-                }
-                28 => {
-                    grDrawLine(guest_ptr::<c_void>(a[0]), guest_ptr::<c_void>(a[1]));
-                }
-                31 => {
-                    grDrawPoint(guest_ptr::<c_void>(a[0]));
-                }
+                34 => g.draw_triangle(&vertex(a[0]), &vertex(a[1]), &vertex(a[2])),
+                28 => g.draw_line(&vertex(a[0]), &vertex(a[1])),
+                31 => g.draw_point(&vertex(a[0])),
                 49 => {
                     if a[0] > 1 || (a[2] > 2 && a[2] != 255) {
                         return false;
                     }
-                    let lock = &mut self.locks[a[0] as usize];
-                    if lock.guest != 0 {
+                    if self.locks[a[0] as usize].guest != 0 {
                         return false;
                     }
                     let info = guest_ptr::<u32>(a[5]);
                     if info.read_unaligned() != 20 {
                         return false;
                     }
-                    lock.native = NativeLfb::default();
-                    f.eax = grLfbLock(a[0], a[1], a[2], a[3], a[4], &mut lock.native).into();
-                    if f.eax == 0 {
-                        return true;
-                    }
-                    let Some(bytes) =
-                        (self.height as usize).checked_mul(lock.native.stride as usize)
+                    let (Some(buffer), Some(mode), Some(origin)) =
+                        (typed(a[1]), typed(a[2]), typed(a[3]))
                     else {
-                        grLfbUnlock(a[0], a[1]);
                         f.eax = 0;
                         return true;
                     };
-                    lock.bytes = bytes;
-                    lock.guest = rg_low_alloc(bytes) as usize;
-                    lock.buffer = a[1];
-                    if lock.guest == 0 {
-                        grLfbUnlock(a[0], a[1]);
+                    let Some(native) = self.glide.lfb_lock(a[0], buffer, mode, origin, a[4] != 0)
+                    else {
+                        f.eax = 0;
+                        return true;
+                    };
+                    let Some(bytes) = (self.height as usize).checked_mul(native.stride as usize)
+                    else {
+                        self.glide.lfb_unlock(a[0], buffer);
+                        f.eax = 0;
+                        return true;
+                    };
+                    let guest = rg_low_alloc(bytes) as usize;
+                    if guest == 0 {
+                        self.glide.lfb_unlock(a[0], buffer);
                         f.eax = 0;
                         return true;
                     }
-                    (lock.guest as *mut u8)
-                        .copy_from_nonoverlapping(lock.native.pointer.cast(), bytes);
+                    (guest as *mut u8).copy_from_nonoverlapping(native.data, bytes);
                     info.cast::<[u32; 5]>().write_unaligned([
                         20,
-                        guest_address(lock.guest as *const u8),
-                        lock.native.stride,
-                        lock.native.mode as u32,
-                        lock.native.origin as u32,
+                        guest_address(guest as *const u8),
+                        native.stride,
+                        native.write_mode as u32,
+                        native.origin as u32,
                     ]);
+                    self.locks[a[0] as usize] = Lock {
+                        guest,
+                        native: Some(native),
+                        bytes,
+                        buffer: a[1],
+                    };
+                    f.eax = 1;
                 }
                 52 => {
                     if a[0] > 1 {
                         return false;
                     }
-                    let lock = &mut self.locks[a[0] as usize];
-                    if lock.guest == 0 || lock.buffer != a[1] {
+                    let lock = std::mem::take(&mut self.locks[a[0] as usize]);
+                    let Some(native) = lock
+                        .native
+                        .filter(|_| lock.guest != 0 && lock.buffer == a[1])
+                    else {
+                        self.locks[a[0] as usize] = lock;
                         return false;
-                    }
+                    };
                     if a[0] == 1 {
-                        lock.native
-                            .pointer
-                            .cast::<u8>()
+                        native
+                            .data
                             .copy_from_nonoverlapping(lock.guest as *const u8, lock.bytes);
                     }
-                    f.eax = grLfbUnlock(a[0], a[1]).into();
-                    if rg_low_free(lock.guest as *mut c_void) == 0 {
+                    let buffer = typed(a[1]).unwrap_or(Buffer::Back);
+                    f.eax = self.glide.lfb_unlock(a[0], buffer).into();
+                    if rg_low_free(lock.guest as *mut std::ffi::c_void) == 0 {
                         return false;
                     }
-                    *lock = Lock::default();
                 }
                 _ => {
                     rg_log!("Unsupported Glide entry {index}");
@@ -511,6 +565,25 @@ impl Bridge {
             true
         }
     }
+}
+/// A 565 pixel of a locked buffer.
+///
+/// # Safety
+/// `(x, y)` lies inside the locked buffer.
+unsafe fn pixel(info: &LockInfo, x: u32, y: u32) -> u16 {
+    unsafe {
+        info.data
+            .add(y as usize * info.stride as usize + x as usize * 2)
+            .cast::<u16>()
+            .read_unaligned()
+    }
+}
+/// A guest `GrVertex`; its layout is the same in guest and host memory.
+///
+/// # Safety
+/// `address` points to a mapped guest vertex.
+unsafe fn vertex(address: u32) -> GrVertex {
+    unsafe { guest_ptr::<GrVertex>(address).read_unaligned() }
 }
 struct GuestArgs(*const u32);
 impl std::ops::Index<usize> for GuestArgs {

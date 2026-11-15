@@ -15,10 +15,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 SR = 'ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3'
 IMAGE = 'redguard-recomp-macos:bookworm'
-OPENGLIDE = '9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
-PATCHES = ['sr-x64.patch', 'sr-llasm.patch', 'openglide-x64.patch',
-           'openglide-sdl-window.patch', 'openglide-macos.patch',
-           'sr-heap-c-api.patch', 'sr-heap-macos.patch', 'sr-audio.patch']
+PATCHES = ['sr-x64.patch', 'sr-llasm.patch', 'sr-heap-c-api.patch', 'sr-heap-macos.patch', 'sr-audio.patch']
 DOWNLOADS = {
     'MacOSX11.3.sdk.tar.xz': (
         'https://github.com/joseluisq/macosx-sdks/releases/download/11.3/MacOSX11.3.sdk.tar.xz',
@@ -132,7 +129,7 @@ def main():
     parser.add_argument('--reuse-toolchain', action='store_true',
                         help='Use the existing local compiler image instead of rebuilding it')
     parser.add_argument('--kit', action='store_true',
-                        help='Build the game-free Mac kit inputs (runtime objects, renderer, frameworks)')
+                        help='Build the game-free Mac kit inputs (runtime objects, frameworks)')
     parser.add_argument('--translation', type=Path,
                         help='Also cross-link an original-game tools.translate_llasm output for both Macs')
     args = parser.parse_args()
@@ -145,7 +142,7 @@ def main():
     output = ROOT / 'artifacts' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ') + '-macos-backend')
     output.mkdir(parents=True)
     report = dict(status='started', sr_commit=SR, macos_runtime_verified=False,
-                  macos_game_built=False, full_game_verified=False, openglide_commit=OPENGLIDE)
+                  macos_game_built=False, full_game_verified=False)
     translation = args.translation.resolve() if args.translation else None
     if translation:
         original = json.loads((translation / 'report.json').read_text())
@@ -196,11 +193,6 @@ def main():
             run('git', '-C', str(ROOT / '.cache/sr'), 'archive', SR, 'SR', 'llasm', stdout=destination)
         run('docker', 'cp', str(archive), container + ':/work/sr.tar')
         report['sr_source_archive_sha256'] = digest(archive)
-        archive = cache / 'openglide-backend.tar'
-        with archive.open('wb') as destination:
-            run('git', '-C', str(ROOT / '.cache/openglide-ng'), 'archive', OPENGLIDE, stdout=destination)
-        run('docker', 'cp', str(archive), container + ':/work/openglide.tar')
-        report['openglide_source_archive_sha256'] = digest(archive)
         for name, path in downloads.items():
             run('docker', 'cp', str(path.resolve()), container + ':/work/' + name)
         for directory in ['platforms', 'tests', 'runtime', 'glide', 'llasm-metadata']:

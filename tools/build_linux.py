@@ -6,7 +6,6 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
-import tempfile
 import time
 import uuid
 from .toolchain import ROOT,run,ensure_tool_image,is_mountable,MOUNT_ROOT
@@ -16,7 +15,6 @@ from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runti
 from .gog_install import movie_bundle
 
 IMAGE='redguard-recomp-linux:bookworm'
-BACKEND='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -62,7 +60,7 @@ def main():
     output.mkdir(parents=True)
     report=dict(target='linux-x86_64',status='started',sr_commit=original['sr_commit'],
                 translation_image_sha256=original['image']['sha256'],image_variants=variants,full_game_verified=False,
-                backend_commit=BACKEND,wine_used=False,menu_verified=False,native_windows_verified=False)
+                wine_used=False,menu_verified=False,native_windows_verified=False)
     report['patch_sha256']={file.name:hashlib.sha256(file.read_bytes()).hexdigest()
                             for file in sorted((ROOT/'patches').glob('*.patch'))}
     began=time.monotonic();name='rg-linux-'+uuid.uuid4().hex[:10]
@@ -72,21 +70,12 @@ def main():
             with (output/'toolchain-build.log').open('w') as log:
                 run(['docker','build','-t',IMAGE,'-f',str(ROOT/'platforms/linux/Dockerfile'),str(ROOT/'platforms/linux')],stdout=log,stderr=subprocess.STDOUT)
         report['toolchain_image']=subprocess.check_output(['docker','image','inspect',IMAGE,'--format','{{.Id}}'],text=True).strip()
-        backend=ROOT/'.cache/openglide-ng'
-        archive=subprocess.check_output(['git','archive',BACKEND],cwd=backend)
-        with tempfile.TemporaryDirectory(dir=ROOT/'.cache') as directory:
-            subprocess.run(['tar','-x','-C',directory],input=archive,check=True)
-            for patch in ['openglide-x64.patch','openglide-sdl-window.patch']:
-                subprocess.run(['patch','-p1','-d',directory],input=(ROOT/'patches'/patch).read_bytes(),check=True)
-            archive=subprocess.check_output(['tar','-c','-C',directory,'.'])
         # Cargo can wait for another project; do this before the container lease starts.
         rust_runtime=build_rust_runtime('x86_64-unknown-linux-gnu')
         rust_host=build_rust_runtime('x86_64-unknown-linux-gnu',component='host')
         run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '1800' if a.keep_container else '480'])
         if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
-        run(['docker','exec',name,'mkdir','/src'])
-        subprocess.run(['docker','exec','-i',name,'tar','-x','-C','/src'],input=archive,check=True)
         for directory,destination in [('runtime','/work'),('platforms/linux','/work'),('glide','/work'),('platforms/linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]:
             run(['docker','cp',str(ROOT/directory)+'/.',name+':'+destination])
         # Generated macros include checked game fixes and must overwrite template includes.
@@ -101,13 +90,12 @@ def main():
         report['sr_audio']=stage_sr_audio(name)
         setup=time.monotonic()
         with (output/'build.log').open('w') as log:
-            run(['docker','exec',name,'timeout','1800' if a.link_only else '240','sh','-c',('export MAIKO_LINK_ONLY=1; ' if a.link_only else '')+'sh /linux/build_backend.sh && sh /linux/build_runtime.sh'],stdout=log,stderr=subprocess.STDOUT)
+            run(['docker','exec',name,'timeout','1800' if a.link_only else '240','sh','-c',('export MAIKO_LINK_ONLY=1; ' if a.link_only else '')+'sh /linux/build_runtime.sh'],stdout=log,stderr=subprocess.STDOUT)
         report['build_test_seconds']=round(time.monotonic()-setup,3)
         report['original_function_tests_verified']=True
-        for file in ['redguard-native','libredguard-glide.so','linux.map','linux-symbols.txt','linux-dependencies.txt']:
+        for file in ['redguard-native','linux.map','linux-symbols.txt','linux-dependencies.txt']:
             run(['docker','cp',name+':/work/'+file,str(output/file)])
         report['exe_sha256']=hashlib.sha256((output/'redguard-native').read_bytes()).hexdigest()
-        report['renderer_sha256']=hashlib.sha256((output/'libredguard-glide.so').read_bytes()).hexdigest()
         if a.link_only:
             report['status']='linked'
             return
@@ -186,7 +174,7 @@ def main():
                 run(['docker','cp',name+':/work/movie-pcm-reference.json',str(output/'movie-pcm-reference.json')])
                 report['original_movie_pcm_reference_verified']=True
 
-        report['tool_versions']=subprocess.check_output(['docker','exec',name,'dpkg-query','-W','gcc','g++','nasm','libsdl2-dev','libsdl2-mixer-dev','libssl-dev','libgl1-mesa-dri'],text=True).splitlines()
+        report['tool_versions']=subprocess.check_output(['docker','exec',name,'dpkg-query','-W','gcc','g++','nasm','libsdl2-dev','libsdl2-mixer-dev','libssl-dev','mesa-vulkan-drivers'],text=True).splitlines()
     except Exception:
         report['status']='failed'
         # Preserve the real game boundary even when the menu assertion fails.

@@ -16,7 +16,7 @@ const OBJECTS: [&str; 12] = [
     "llasm_scas.o",
     "llasm_stos.o",
 ];
-const LIBRARIES: [(&str, &str); 6] = [
+const LIBRARIES: [(&str, &str); 11] = [
     ("System", "/usr/lib/libSystem.B.dylib"),
     (
         "Security",
@@ -29,9 +29,26 @@ const LIBRARIES: [(&str, &str); 6] = [
     ("iconv", "/usr/lib/libiconv.2.dylib"),
     ("resolv", "/usr/lib/libresolv.9.dylib"),
     ("c++", "/usr/lib/libc++.1.dylib"),
+    // The wgpu Metal renderer built into the Rust host.
+    ("objc", "/usr/lib/libobjc.A.dylib"),
+    (
+        "Foundation",
+        "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+    ),
+    (
+        "CoreGraphics",
+        "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+    ),
+    (
+        "QuartzCore",
+        "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+    ),
+    (
+        "Metal",
+        "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+    ),
 ];
-const RUNTIME: [&str; 3] = [
-    "libredguard-glide.dylib",
+const RUNTIME: [&str; 2] = [
     "Frameworks/SDL2.framework/Versions/A/SDL2",
     "Frameworks/SDL2_mixer.framework/Versions/A/SDL2_mixer",
 ];

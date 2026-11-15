@@ -1,5 +1,5 @@
-//! Window handle contract expected by the separately linked renderer.
-pub(crate) fn renderer_window(
+//! The window handle `rg_input_window` returns to the C host and tests.
+pub(crate) fn host_window_handle(
     window: &sdl2::video::Window,
 ) -> Result<*mut std::ffi::c_void, String> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};

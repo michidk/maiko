@@ -16,13 +16,6 @@ grep -q '^#define OUTPUT_TYPE OUT_LLASM$' SR/SR_defs.h
 scons -C SR -j2 > /results/sr-build.log 2>&1
 gdc -O2 -Wall llasm/llasm.d -o /usr/local/bin/llasm
 sh /work/platforms/macos/compile_tests.sh
-mkdir -p /src
-tar -xf /work/openglide.tar -C /src
-cd /src
-patch -p1 < /work/openglide-x64.patch
-patch -p1 < /work/openglide-sdl-window.patch
-patch -p1 < /work/openglide-macos.patch
-sh /work/platforms/macos/build_renderer.sh
 
 # Kit mode builds the game-free link inputs; a translation adds the real engine.
 if [ -f /game/rgfx.llasm ] || [ -n "${MAIKO_KIT:-}" ]; then
@@ -66,10 +59,10 @@ fi
                 -stdlib=libc++ --ld-path=/usr/lib/llvm-14/bin/ld64.lld \
                 -Wl,-platform_version,macos,11.0,11.3 \
                 -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path \
-                "$directory"/*.o "$@" \
-                "/results/libredguard-glide-$arch.dylib" -F/frameworks \
+                "$directory"/*.o "$@" -F/frameworks \
                 -framework SDL2 -framework SDL2_mixer -framework Security \
                 -framework CoreFoundation -liconv -lresolv \
+                -framework Metal -framework QuartzCore -framework CoreGraphics -framework Foundation -lobjc \
                 -o "/results/redguard-native-$arch"
         }
         if [ -f "$directory/engine.o" ]; then
@@ -97,9 +90,6 @@ fi
     llvm-lipo-14 -create /results/redguard-native-x86_64 /results/redguard-native-arm64 \
         -output /results/runtime/redguard-native
     chmod +x /results/runtime/redguard-native
-    llvm-lipo-14 -create /results/libredguard-glide-x86_64.dylib \
-        /results/libredguard-glide-arm64.dylib \
-        -output /results/runtime/libredguard-glide.dylib
     cp -a /frameworks/SDL2.framework /frameworks/SDL2_mixer.framework \
         /results/runtime/Frameworks/
     # The launcher (maiko-launcher) is a Rust static library; this is its whole C side.

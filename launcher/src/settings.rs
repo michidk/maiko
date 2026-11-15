@@ -20,6 +20,8 @@ pub struct Settings {
     pub skip_outro: bool,
     /// `--texture-filter` value; empty for the game's own choice.
     pub texture_filter: String,
+    /// Graphics backend for the renderer (`WGPU_BACKEND`); empty lets it choose.
+    pub renderer: String,
     /// A disc image (cue sheet) for CD music when the game folder has none beside it.
     pub cd_image: Option<PathBuf>,
 }
@@ -49,6 +51,12 @@ impl Settings {
     /// Whether `window_size` is empty or a usable `WIDTHxHEIGHT`.
     pub fn window_size_valid(&self) -> bool {
         self.window_size.is_empty() || parse_size(&self.window_size).is_some()
+    }
+
+    /// The `WGPU_BACKEND` value for the game, when a known backend is chosen.
+    pub fn renderer_backend(&self) -> Option<&str> {
+        matches!(self.renderer.as_str(), "vulkan" | "dx12" | "metal" | "gl")
+            .then_some(self.renderer.as_str())
     }
 
     /// The game's arguments for `game`, with saves in `user`.
@@ -156,6 +164,17 @@ mod tests {
         );
         settings.texture_filter = "sharp".into();
         assert!(args(&settings).ends_with("--skip-intro --texture-filter sharp"));
+    }
+
+    #[test]
+    fn only_known_renderers_reach_the_game() {
+        let renderer = |name: &str| Settings {
+            renderer: name.into(),
+            ..Settings::default()
+        };
+        assert_eq!(renderer("").renderer_backend(), None);
+        assert_eq!(renderer("vulkan").renderer_backend(), Some("vulkan"));
+        assert_eq!(renderer("dx12,gl").renderer_backend(), None);
     }
 
     #[test]

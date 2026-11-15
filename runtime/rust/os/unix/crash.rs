@@ -29,7 +29,7 @@ pub(crate) fn install_crash() {
             libc::_exit(3);
         }
         let mut action: libc::sigaction = std::mem::zeroed();
-        action.sa_sigaction = fault as usize;
+        action.sa_sigaction = fault as *const () as usize;
         action.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
         libc::sigemptyset(&mut action.sa_mask);
         for signal in [

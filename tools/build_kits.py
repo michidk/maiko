@@ -13,6 +13,7 @@ import concurrent.futures
 import hashlib
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -22,15 +23,12 @@ import zipfile
 from pathlib import Path
 
 from .toolchain import ROOT
-from .build_link_inputs import OPENGLIDE
 
 MACOS_TARGETS = ['aarch64-unknown-linux-gnu', 'aarch64-apple-darwin', 'x86_64-apple-darwin', 'wasm32-unknown-unknown']
 TARGETS = ['linux', 'windows', 'macos']
 MACOS_TOOLCHAIN = ROOT / '.cache/client-macos-toolchain'
 # Release assets are named by platform so a tag explains what it holds.
 ASSET = 'maiko-runtime-kit-{}.zip'
-KIT_SOURCE = ('corresponding source and build files are in the source/ folder of the runtime kit this '
-              'package was built from, published with every release at https://github.com/michidk/maiko/releases.')
 RELEASE = 'https://github.com/michidk/maiko/releases/latest/download'
 
 
@@ -52,7 +50,7 @@ def sha256(data):
 
 
 def fetch_seed(target):
-    """The curated SDL, GL and notice files have no source here; they come from the latest release's kit."""
+    """The curated SDL and notice files have no source here; they come from the latest release's kit."""
     def download(name):
         with urllib.request.urlopen(f'{RELEASE}/{name}', timeout=300) as response:
             return response.read()
@@ -64,56 +62,49 @@ def fetch_seed(target):
     return zipfile.ZipFile(io.BytesIO(data))
 
 
-def notices(text):
-    """Point the renderer's source notice at the kit, which carries the source; the package does not."""
-    # shortcut: rewrites the notices carried forward from the release; drop once a release has the new text.
-    for old in ['corresponding source and build scripts accompany this package.',
-                'corresponding source and build files\nare in redguard-macos-renderer-source.zip inside this package.']:
-        text = text.replace(old, KIT_SOURCE)
-    return text
+RUST_NOTICES = '\n===== Rust standard library and bundled dependencies =====\n'
+RUST_TARGETS = {'windows': 'x86_64-pc-windows-gnu', 'linux': 'x86_64-unknown-linux-gnu', 'macos': 'aarch64-apple-darwin'}
 
 
-def runtime_directory(target, glide, destination):
+def notices(text, target):
+    """The seed's notices without OpenGLide, GLU and GL dispatch (the renderer is now built into the
+    program), followed by fresh notices for the Rust standard library and the target's crates."""
+    from .rust_licenses import notices as crate_notices
+    text = text.split(RUST_NOTICES)[0]
+    # shortcut: edits the notices carried forward from the release; drop once a release ships without OpenGLide.
+    text = re.sub(r'OpenGLide-ng[^\n]*\n', '', text)
+    text = re.sub(r'===== OpenGLide LGPL 2\.1 =====\n.*?(?====== )', '', text, flags=re.S)
+    # GLU and libglvnd are the last two Linux notices.
+    text = text.split('\n\ncopyright\nFormat: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n'
+                      'Upstream-Name: glu\n')[0]
+    sysroot = Path(subprocess.check_output(['rustc', '--print', 'sysroot'], cwd=ROOT, text=True).strip())
+    library = (sysroot / 'share/doc/rust/COPYRIGHT-library.html').read_text()
+    return text.rstrip('\n') + '\n' + RUST_NOTICES + library + '\n\n' + crate_notices(RUST_TARGETS[target]) + '\n'
+
+
+def runtime_directory(target, built, destination):
     destination.mkdir(parents=True)
     with fetch_seed(target) as seed:
         for name in seed.namelist():
             if name.startswith('runtime/') and not name.endswith('/'):
                 leaf = name.removeprefix('runtime/')
-                # shortcut: skips the launcher's old name in the seed; drop once a release ships maiko.exe.
-                if leaf.startswith('RUN') or leaf.endswith('.tar.gz') or leaf in ('README.txt', 'Maiko.exe'):
+                # shortcut: skips the launcher's old name, the OpenGLide renderer and its GL libraries in the seed;
+                # drop once a release ships without them.
+                if (leaf.startswith(('RUN', 'libGL', 'libOpenGL', 'libredguard-', 'redguard-')) or leaf.endswith('.tar.gz')
+                        or leaf in ('README.txt', 'Maiko.exe')):
                     continue
                 data = seed.read(name)
-                (destination / leaf).write_bytes(notices(data.decode()).encode() if leaf == 'LICENSES.txt' else data)
-    # The renderer and the launcher, both built beside it, are the parts that change per release.
-    shutil.copyfile(glide, destination / glide.name)
+                (destination / leaf).write_bytes(notices(data.decode(), target).encode() if leaf == 'LICENSES.txt' else data)
+    # The launcher is the part that changes per release.
     shutil.copyfile(ROOT / 'platforms' / target / 'README.txt', destination / 'README.txt')
     launcher = 'maiko.exe' if target == 'windows' else 'maiko'
-    shutil.copyfile(glide.parent / launcher, destination / launcher)
-
-
-def source_tarball(destination):
-    """OpenGLide as built (pinned tree plus Maiko's patches) and the Maiko files it was built with."""
-    with tempfile.TemporaryDirectory(dir=ROOT / '.cache') as directory:
-        root = Path(directory)
-        (root / 'upstream').mkdir()
-        (root / 'maiko').mkdir()
-        archive = subprocess.check_output(['git', 'archive', OPENGLIDE], cwd=ROOT / '.cache/openglide-ng')
-        subprocess.run(['tar', '-x', '-C', root / 'upstream'], input=archive, check=True)
-        for patch in ['openglide-x64', 'openglide-sdl-window']:
-            subprocess.run(['patch', '-s', '-p1', '-d', root / 'upstream'],
-                           input=(ROOT / f'patches/{patch}.patch').read_bytes(), check=True)
-        archive = subprocess.check_output(['git', 'archive', 'HEAD', 'Cargo.toml', 'Cargo.lock', 'LICENSE', 'patches',
-                                           'glide', 'platforms/linux', 'platforms/windows', 'runtime', 'tools'], cwd=ROOT)
-        subprocess.run(['tar', '-x', '-C', root / 'maiko'], input=archive, check=True)
-        sh(['tar', '--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner',
-            '-czf', destination, '-C', root, 'upstream', 'maiko'])
+    shutil.copyfile(built / launcher, destination / launcher)
 
 
 def sources():
-    """The pinned SR and OpenGLide checkouts the tools, link inputs and source tarball are built from."""
+    """The pinned SR checkout the tools and link inputs are built from."""
     from .pipeline import SR_COMMIT
-    for repository, url, commit in [('sr', 'https://github.com/M-HT/SR.git', SR_COMMIT),
-                                    ('openglide-ng', 'https://github.com/eugenenuke/openglide-ng', OPENGLIDE)]:
+    for repository, url, commit in [('sr', 'https://github.com/M-HT/SR.git', SR_COMMIT)]:
         directory = ROOT / '.cache' / repository
         if not directory.exists():
             sh(['git', 'clone', '--no-checkout', url, directory])
@@ -133,11 +124,11 @@ def browser_build(target, kit, exe, output, scratch, kit_tool):
 
 
 def macos_kit(scratch, revision, kit_tool, output):
-    """Mac link inputs, renderer and frameworks from the backend check; no game translation."""
+    """Mac link inputs and frameworks from the backend check; no game translation."""
     backend = last_folder([sys.executable, '-m', 'tools.check_macos_backend', '--kit'])
     runtime = backend / 'runtime'
     with fetch_seed('macos') as seed:
-        (runtime / 'LICENSES.txt').write_text(notices(seed.read('runtime/LICENSES.txt').decode()))
+        (runtime / 'LICENSES.txt').write_text(notices(seed.read('runtime/LICENSES.txt').decode(), 'macos'))
     sh([kit_tool, 'export-macos', backend, runtime, revision, output])
     return backend
 
@@ -158,6 +149,8 @@ def main():
     sources()
     sh(['rustup', 'target', 'add', *MACOS_TARGETS, 'x86_64-pc-windows-gnu'])
     sh(['cargo', 'build', '--locked', '--release', '-p', 'maiko-patcher', '--bin', 'maiko-kit', '--bin', 'maiko-patcher'])
+    # The licence notices read every target's crates from the local registry.
+    sh(['cargo', 'fetch', '--locked'])
     target_dir = Path(json.loads(subprocess.check_output(['cargo', 'metadata', '--no-deps', '--format-version', '1'],
                                                           cwd=ROOT))['target_directory'])
     kit_tool, patcher = target_dir / 'release/maiko-kit', target_dir / 'release/maiko-patcher'
@@ -165,24 +158,21 @@ def main():
         sh([kit_tool, 'tools'])
     if not (MACOS_TOOLCHAIN / 'ld64.wasm').exists():
         sh([kit_tool, 'tools-macos'])
-    tarball = scratch / 'openglide-source.tar.gz'
-    source_tarball(tarball)
     args.output.mkdir(parents=True)
 
-    def kit(target, renderer):
+    def kit(target):
         inputs = scratch / f'inputs-{target}'
         sh([sys.executable, '-m', 'tools.build_link_inputs', '--target', target, '--output', inputs])
         runtime = scratch / f'runtime-{target}'
-        runtime_directory(target, inputs / 'runtime' / renderer, runtime)
-        sh([kit_tool, 'export', target, inputs / 'link', runtime, tarball, revision, args.output / ASSET.format(target)])
+        runtime_directory(target, inputs / 'runtime', runtime)
+        sh([kit_tool, 'export', target, inputs / 'link', runtime, revision, args.output / ASSET.format(target)])
 
     def macos():
         shutil.rmtree(macos_kit(scratch, revision, kit_tool, args.output / ASSET.format('macos')), ignore_errors=True)
 
     # The three kits use separate containers and output files; Cargo's own lock orders their Rust builds.
     with concurrent.futures.ThreadPoolExecutor(3) as pool:
-        for job in [pool.submit(kit, 'windows', 'redguard-glide.dll'), pool.submit(kit, 'linux', 'libredguard-glide.so'),
-                    pool.submit(macos)]:
+        for job in [pool.submit(kit, 'windows'), pool.submit(kit, 'linux'), pool.submit(macos)]:
             job.result()
     if args.exe:
         sh(['cargo', 'build', '--locked', '--release', '-p', 'maiko-patcher', '--lib', '--target', 'wasm32-unknown-unknown'])

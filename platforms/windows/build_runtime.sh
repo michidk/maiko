@@ -2,13 +2,14 @@
 set -eu
 ulimit -c 0
 cd /work
+cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll /work/
 sh /tests/init_wine.sh /tmp/rg-wine
 cc='x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work -I/audio -I/sdl/include/SDL2 -DRG_USE_SDL_AUDIO -DSDL_MAIN_HANDLED'
 x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.obj
 $cc -Wno-unused-parameter -c /audio/Albion-sound.c -o sr_audio.obj
 link() {
     $cc "$@" -Wl,--gc-sections -Wl,--start-group ${rust_library:-/work/libmaiko_runtime.a} guest_memory.obj sr_audio.obj -Wl,--end-group \
-      -L/sdl/lib -lSDL2_mixer -lSDL2 -L/work -lredguard-glide -lstdc++ \
+      -L/sdl/lib -lSDL2_mixer -lSDL2 -lstdc++ \
       -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -lwinpthread -luser32 -lshell32 -lole32 \
       -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp
 }

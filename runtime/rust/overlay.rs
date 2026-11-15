@@ -1,12 +1,9 @@
 //! In-game overlay drawn over the finished Glide frame, toggled with the backtick key.
 //! While it is open the game receives no keyboard, mouse or controller input.
-use crate::rg_log;
 use sdl2::event::Event;
 use sdl2::keyboard::Scancode;
 use sdl2::mouse::MouseButton;
 use std::cell::RefCell;
-use std::ffi::c_void;
-use std::sync::Arc;
 use std::time::Instant;
 
 pub use egui;
@@ -18,8 +15,7 @@ pub type Panel = fn(&mut egui::Ui);
 struct Overlay {
     open: bool,
     context: egui::Context,
-    painter: Option<(egui_glow::Painter, AttribStack)>,
-    failed: bool,
+    painter: Option<egui_wgpu::Renderer>,
     events: Vec<egui::Event>,
     panel: Option<Panel>,
     started: Instant,
@@ -30,19 +26,10 @@ thread_local! {
         open: false,
         context: egui::Context::default(),
         painter: None,
-        failed: false,
         events: Vec::new(),
         panel: None,
         started: Instant::now(),
     });
-}
-
-/// glPushAttrib/glPopAttrib and the client variants are legacy entry points glow does not load.
-struct AttribStack {
-    push: extern "system" fn(u32),
-    pop: extern "system" fn(),
-    push_client: extern "system" fn(u32),
-    pop_client: extern "system" fn(),
 }
 
 pub fn set_panel(panel: Panel) {
@@ -117,6 +104,7 @@ pub(crate) fn route(event: &Event) -> Routed {
             } => Some(egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Line,
                 delta: egui::vec2(precise_x, precise_y),
+                phase: egui::TouchPhase::Move,
                 modifiers: egui::Modifiers::NONE,
             }),
             Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => None,
@@ -127,28 +115,30 @@ pub(crate) fn route(event: &Event) -> Routed {
     })
 }
 
-/// Paints the open overlay into the current OpenGL context. The caller must
-/// have flushed the game's pending triangles; the game's GL state is restored.
-pub(crate) fn draw(video: &sdl2::VideoSubsystem, points: (u32, u32), pixels: (u32, u32)) {
+/// The frame being presented, which the overlay draws on top of.
+pub struct Target<'a> {
+    pub device: &'a egui_wgpu::wgpu::Device,
+    pub queue: &'a egui_wgpu::wgpu::Queue,
+    pub encoder: &'a mut egui_wgpu::wgpu::CommandEncoder,
+    pub view: &'a egui_wgpu::wgpu::TextureView,
+    pub format: egui_wgpu::wgpu::TextureFormat,
+}
+
+/// Paints the open overlay over the presented frame, at window size.
+pub(crate) fn draw(target: Target<'_>, points: (u32, u32), pixels: (u32, u32)) {
     OVERLAY.with(|overlay| {
         let mut overlay = overlay.borrow_mut();
         let overlay = &mut *overlay;
-        if !overlay.open || overlay.failed {
+        if !overlay.open || points.0 == 0 || points.1 == 0 {
             return;
         }
-        if overlay.painter.is_none() {
-            match unsafe { painter(video) } {
-                Ok(painter) => overlay.painter = Some(painter),
-                Err(error) => {
-                    rg_log!("Native overlay unavailable: {error}");
-                    overlay.failed = true;
-                    return;
-                }
-            }
-        }
-        if points.0 == 0 || points.1 == 0 {
-            return;
-        }
+        let renderer = overlay.painter.get_or_insert_with(|| {
+            egui_wgpu::Renderer::new(
+                target.device,
+                target.format,
+                egui_wgpu::RendererOptions::default(),
+            )
+        });
         overlay
             .context
             .set_pixels_per_point(pixels.0 as f32 / points.0 as f32);
@@ -162,11 +152,11 @@ pub(crate) fn draw(video: &sdl2::VideoSubsystem, points: (u32, u32), pixels: (u3
             ..Default::default()
         };
         let panel = overlay.panel;
-        let output = overlay.context.run(input, |context| {
+        let output = overlay.context.run_ui(input, |ui| {
             egui::Window::new("Maiko")
                 .default_pos([16.0, 16.0])
                 .resizable(false)
-                .show(context, |ui| {
+                .show(ui.ctx(), |ui| {
                     if let Some(panel) = panel {
                         panel(ui);
                     }
@@ -176,60 +166,53 @@ pub(crate) fn draw(video: &sdl2::VideoSubsystem, points: (u32, u32), pixels: (u3
         let primitives = overlay
             .context
             .tessellate(output.shapes, output.pixels_per_point);
-        let (painter, attrib) = overlay.painter.as_mut().unwrap();
-        // GL_ALL_ATTRIB_BITS and GL_CLIENT_ALL_ATTRIB_BITS.
-        (attrib.push)(0x000f_ffff);
-        (attrib.push_client)(0xffff_ffff);
-        painter.paint_and_update_textures(
-            [pixels.0, pixels.1],
-            output.pixels_per_point,
-            &primitives,
-            &output.textures_delta,
-        );
-        // OpenGLide draws with fixed-function client arrays and no program or buffers.
-        unsafe {
-            use glow::HasContext;
-            let gl = painter.gl();
-            gl.use_program(None);
-            gl.bind_buffer(glow::ARRAY_BUFFER, None);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
+        let screen = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [pixels.0, pixels.1],
+            pixels_per_point: output.pixels_per_point,
+        };
+        for (id, deltas) in &output.textures_delta.set {
+            for delta in deltas {
+                renderer.update_texture(target.device, target.queue, *id, delta);
+            }
         }
-        (attrib.pop_client)();
-        (attrib.pop)();
+        let extra = renderer.update_buffers(
+            target.device,
+            target.queue,
+            target.encoder,
+            &primitives,
+            &screen,
+        );
+        if !extra.is_empty() {
+            target.queue.submit(extra);
+        }
+        {
+            use egui_wgpu::wgpu;
+            let mut pass = target
+                .encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("overlay"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: target.view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                })
+                .forget_lifetime();
+            renderer.render(&mut pass, &primitives, &screen);
+        }
+        for id in &output.textures_delta.free {
+            renderer.free_texture(id);
+        }
     });
 }
-
-unsafe fn painter(
-    video: &sdl2::VideoSubsystem,
-) -> Result<(egui_glow::Painter, AttribStack), String> {
-    let load = |name: &str| video.gl_get_proc_address(name).cast::<std::ffi::c_void>();
-    let legacy = |name: &str| {
-        let function = load(name);
-        (!function.is_null())
-            .then_some(function)
-            .ok_or_else(|| format!("{name} is not available"))
-    };
-    // SAFETY: these are the OpenGL 1.1 entry points of the current context.
-    let attrib = unsafe {
-        AttribStack {
-            push: std::mem::transmute::<*const c_void, extern "system" fn(u32)>(legacy(
-                "glPushAttrib",
-            )?),
-            pop: std::mem::transmute::<*const c_void, extern "system" fn()>(legacy("glPopAttrib")?),
-            push_client: std::mem::transmute::<*const c_void, extern "system" fn(u32)>(legacy(
-                "glPushClientAttrib",
-            )?),
-            pop_client: std::mem::transmute::<*const c_void, extern "system" fn()>(legacy(
-                "glPopClientAttrib",
-            )?),
-        }
-    };
-    let gl = unsafe { glow::Context::from_loader_function(load) };
-    let painter =
-        egui_glow::Painter::new(Arc::new(gl), "", None, false).map_err(|e| e.to_string())?;
-    Ok((painter, attrib))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

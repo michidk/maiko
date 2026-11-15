@@ -237,10 +237,14 @@ impl App {
             .user_directory()
             .ok_or_else(|| std::io::Error::other("no folder for saves"))
             .and_then(|user| {
-                std::process::Command::new(&executable)
+                let mut command = std::process::Command::new(&executable);
+                command
                     .args(self.settings.arguments(&game, &user))
-                    .current_dir(&self.program)
-                    .spawn()
+                    .current_dir(&self.program);
+                if let Some(backend) = self.settings.renderer_backend() {
+                    command.env("WGPU_BACKEND", backend);
+                }
+                command.spawn()
             });
         match result {
             Ok(child) => self.game_process = Some(child),
@@ -487,6 +491,14 @@ impl App {
                                 &mut draft.texture_filter,
                                 &TEXTURE_FILTERS,
                             );
+                        },
+                    );
+                    row(
+                        ui,
+                        "Renderer",
+                        "Try another if the game shows nothing or runs badly",
+                        |ui| {
+                            choice(ui, "renderer", &mut draft.renderer, RENDERERS);
                         },
                     );
                     section(ui, "Movies");
@@ -874,6 +886,20 @@ const TEXTURE_FILTERS: [(&str, &str); 3] = [
     ("sharp", "Sharp pixels"),
 ];
 
+/// The graphics backends the renderer can use on this system; Automatic lets it pick.
+const RENDERERS: &[(&str, &str)] = if cfg!(windows) {
+    &[
+        ("", "Automatic"),
+        ("dx12", "Direct3D 12"),
+        ("vulkan", "Vulkan"),
+        ("gl", "OpenGL"),
+    ]
+} else if cfg!(target_os = "macos") {
+    &[("", "Automatic"), ("metal", "Metal")]
+} else {
+    &[("", "Automatic"), ("vulkan", "Vulkan"), ("gl", "OpenGL")]
+};
+
 /// A drop-down of `(setting value, label)` choices; an unknown stored value is shown as itself.
 fn choice(ui: &mut egui::Ui, id: &str, value: &mut String, choices: &[(&str, &str)]) {
     let current = choices
@@ -974,8 +1000,10 @@ fn run() -> Result<(), String> {
         .opengl()
         .allow_highdpi()
         .position_centered()
+        .resizable()
         .build()
         .map_err(|e| e.to_string())?;
+    let _ = window.set_minimum_size(WIDTH / 2, HEIGHT / 2);
     let _gl_context = window.gl_create_context()?;
     let _ = video.gl_set_swap_interval(1);
     let gl = unsafe {
@@ -1008,14 +1036,20 @@ fn run() -> Result<(), String> {
             continue;
         }
         let mut input = Vec::new();
+        // The 640x480 screen is scaled to fit the window and centred with black bars.
+        let (points, pixels) = (window.size(), window.drawable_size());
+        let zoom = (points.0 as f32 / WIDTH as f32).min(points.1 as f32 / HEIGHT as f32);
+        let offset = Vec2::new(
+            (points.0 as f32 / zoom - WIDTH as f32) / 2.0,
+            (points.1 as f32 / zoom - HEIGHT as f32) / 2.0,
+        );
+        let at = |x: i32, y: i32| Pos2::new(x as f32, y as f32) / zoom - offset;
         // Wait for input instead of spinning; egui asks for a repaint when it animates.
         let first = events.wait_event_timeout(100);
         for event in first.into_iter().chain(events.poll_iter()) {
             match event {
                 Event::Quit { .. } => app.quit = true,
-                Event::MouseMotion { x, y, .. } => {
-                    input.push(egui::Event::PointerMoved(Pos2::new(x as f32, y as f32)))
-                }
+                Event::MouseMotion { x, y, .. } => input.push(egui::Event::PointerMoved(at(x, y))),
                 Event::MouseButtonDown {
                     mouse_btn: MouseButton::Left,
                     x,
@@ -1028,7 +1062,7 @@ fn run() -> Result<(), String> {
                     y,
                     ..
                 } => input.push(egui::Event::PointerButton {
-                    pos: Pos2::new(x as f32, y as f32),
+                    pos: at(x, y),
                     button: egui::PointerButton::Primary,
                     pressed: matches!(event, Event::MouseButtonDown { .. }),
                     modifiers: egui::Modifiers::NONE,
@@ -1073,19 +1107,24 @@ fn run() -> Result<(), String> {
                 _ => {}
             }
         }
-        let (points, pixels) = (window.size(), window.drawable_size());
-        context.set_pixels_per_point(pixels.0 as f32 / points.0.max(1) as f32);
+        context.set_pixels_per_point(zoom * pixels.0 as f32 / points.0.max(1) as f32);
         let raw = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(
                 Pos2::ZERO,
-                Vec2::new(points.0 as f32, points.1 as f32),
+                Vec2::new(WIDTH as f32, HEIGHT as f32),
             )),
             time: Some(started.elapsed().as_secs_f64()),
             events: input,
             ..Default::default()
         };
         let output = context.run(raw, |context| app.ui(context));
-        let primitives = context.tessellate(output.shapes, output.pixels_per_point);
+        let mut primitives = context.tessellate(output.shapes, output.pixels_per_point);
+        for clipped in &mut primitives {
+            clipped.clip_rect = clipped.clip_rect.translate(offset);
+            if let egui::epaint::Primitive::Mesh(mesh) = &mut clipped.primitive {
+                mesh.translate(offset);
+            }
+        }
         painter.clear([pixels.0, pixels.1], [0.0, 0.0, 0.0, 1.0]);
         painter.paint_and_update_textures(
             [pixels.0, pixels.1],

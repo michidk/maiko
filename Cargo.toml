@@ -7,7 +7,7 @@ resolver = "3"
 name = "maiko-runtime"
 version = "0.5.1"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.95"
 license = "MIT"
 publish = false
 
@@ -28,9 +28,8 @@ libc = "=0.2.191"
 cap-std = "=3.4.5"
 cap-fs-ext = "=3.4.5"
 sha2 = "=0.11.1"
-egui = { version = "=0.33.3", default-features = false, features = ["default_fonts"] }
-egui_glow = { version = "=0.33.3", default-features = false }
-glow = "=0.16.0"
+egui = { version = "=0.36.2", default-features = false, features = ["default_fonts"] }
+egui-wgpu = { version = "=0.36.2", default-features = false }
 
 [profile.release]
 panic = "abort"
@@ -48,3 +47,4 @@ windows-sys = { version = "=0.61.2", features = ["Win32_Globalization", "Win32_F
 
 [dev-dependencies]
 tempfile = "=3.23.0"
+

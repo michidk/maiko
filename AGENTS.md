@@ -16,7 +16,7 @@ Only our own work: source, tests, build tooling, documentation for users and con
 
 ## Rust first
 
-New first-party code is Rust. Do not add production C, C++ or Python. The existing build and test tooling in `tools/` and `tests/` is Python and the ABI and original-function tests are C and C++; these are to be ported to Rust over time, starting with the build, package and verify tool, then the probes. Vendored upstream code (SR, OpenGLide-ng, SDL) and the generated translated engine assembly stay as they are. `python3 -m tools.audit_runtime --check` rejects owned production C/C++ in the runtime directories.
+New first-party code is Rust. Do not add production C, C++ or Python. The existing build and test tooling in `tools/` and `tests/` is Python and the ABI and original-function tests are C and C++; these are to be ported to Rust over time, starting with the build, package and verify tool, then the probes. Vendored upstream code (SR, SDL) and the generated translated engine assembly stay as they are. `python3 -m tools.audit_runtime --check` rejects owned production C/C++ in the runtime directories.
 
 ## Validation rules
 

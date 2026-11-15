@@ -340,13 +340,11 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 );
                 return;
             }
-            20 => {
-                if !rg_input_window(640, 480).is_null() {
-                    rg_log!(
-                        "Native window prepared for original Glide initialization; VGA mode13 unavailable"
-                    );
-                    return;
-                }
+            20 if !rg_input_window(640, 480).is_null() => {
+                rg_log!(
+                    "Native window prepared for original Glide initialization; VGA mode13 unavailable"
+                );
+                return;
             }
             19 => {
                 CRITICAL_VECTOR = f.eax as u32;
@@ -507,11 +505,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 let _ = io::stderr().write_all(&[f.eax as u8]);
                 return;
             }
-            0x1010 => {
-                if rg_video_service(f) != 0 {
-                    return;
-                }
-            }
+            0x1010 if rg_video_service(f) != 0 => return,
             0x1021 => {
                 if (f.eax >> 8) & 255 == 0x36 {
                     let (mut available, mut total) = (0, 0);

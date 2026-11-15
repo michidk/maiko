@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Package an observed native test with separate Wine and Windows acceptance."""
 import argparse
-import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -12,7 +11,6 @@ from .package_media import movie_evidence
 from .rust_licenses import notices as rust_dependency_notices
 
 ROOT=Path(__file__).resolve().parents[1]
-BACKEND='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -38,23 +36,18 @@ def main():
     executable=work/'redguard-native.exe'
     if hashlib.sha256(executable.read_bytes()).hexdigest()!=report.get('native_exe_sha256'):
         parser.error('Executable does not match the observed build')
-    if hashlib.sha256((work/'redguard-glide.dll').read_bytes()).hexdigest()!=report['glide_backend']['dll_sha256']:
-        parser.error('Renderer does not match the observed build')
     if not report.get('wine_original_audio_tests_verified'):
         parser.error('Requires the native sample-audio regression')
     for project,prefix in [('SDL','SDL2'),('SDL_mixer','SDL2_mixer')]:
         if hashlib.sha256((work/(prefix+'.dll')).read_bytes()).hexdigest()!=report['sdl_audio'][project]['dll_sha256']:
             parser.error('SDL runtime differs from the observed build')
-    source=ROOT/'.cache/openglide-ng'
-    archive=subprocess.check_output(['git','archive',BACKEND],cwd=source)
     args.output.mkdir(parents=True,exist_ok=True)
     destination=args.output/'redguard-native-startup-test.zip'
     notices=sorted((work/'notices').glob('*.txt'))
     if len(notices)!=6:
         parser.error('Expected the complete SR, GCC/MinGW and LGPL notices')
     licence='Maiko, a native port of Redguard. Personal test; requires original game assets.\n'
-    licence+='OpenGLide-ng '+BACKEND+' is a replaceable LGPL library.\n'
-    licence+='Its corresponding source and build files are provided alongside this ZIP in redguard-development.zip.\n\n'
+    licence+='\n'
     for notice in notices:
         licence+='===== '+notice.name+' =====\n'+notice.read_text()+'\n\n'
     for project in ['SDL2','SDL2_mixer']:
@@ -73,7 +66,7 @@ def main():
     shipped=args.output/'.stripped'
     shipped.mkdir(exist_ok=True)
     with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as package:
-        for filename in ['redguard-native.exe','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
+        for filename in ['redguard-native.exe','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
             source=work/filename
             if strip:
                 subprocess.run([strip,'-s','-o',str(shipped/filename),str(source)],check=True)
@@ -86,14 +79,6 @@ def main():
         package.write(work/'native-wine.log','wine-reference.log')
         package.writestr('build-report.json',json.dumps(report,indent=2)+'\n')
         package.writestr('LICENSES.txt',licence)
-        package.writestr('sources/openglide-ng-'+BACKEND+'.tar.gz',gzip.compress(archive,mtime=0))
-        for filename in ['patches/openglide-x64.patch','glide/build_backend.sh','tests/backend_smoke.cpp','platforms/windows/Dockerfile']:
-            package.write(ROOT/filename,'sources/'+filename)
-        package.writestr('sources/README.txt','OpenGLide-ng upstream: https://github.com/eugenenuke/openglide-ng\n'
-                         'Extract the source archive to /src, apply patches/openglide-x64.patch with patch -p1,\n'
-                         'copy glide/build_backend.sh and tests/backend_smoke.cpp into /work, then run\n'
-                         'sh /work/build_backend.sh\n'
-                         'inside the supplied platforms/windows/Dockerfile toolchain. The build script creates the SDK header.\n')
     digest=hashlib.sha256(destination.read_bytes()).hexdigest()
     source_digest=hashlib.sha256(development.read_bytes()).hexdigest()
     (args.output/'SHA256SUMS.txt').write_text(f'{digest}  {destination.name}\n{source_digest}  {development.name}\n')
@@ -102,7 +87,7 @@ def main():
 <h1>Maiko for Windows</h1><p><a href="redguard-native-startup-test.zip" download>Download the Windows x64 ZIP</a> (<a href="SHA256SUMS.txt">SHA-256</a>)</p>
 <p>Extract it into its own writable folder and double-click <code>redguard-native.exe</code>. It looks for your Redguard folder itself (its own folder, the folders around it, the standard GOG folders) and asks only if it finds nothing; it remembers the answer. Saves and settings go into a <code>user-data</code> folder beside the program. You need your own copy of Redguard; the ZIP contains no game files.</p>
 <p>For fullscreen, a window size, skipping the intro or loading a save, add options to a shortcut to <code>redguard-native.exe</code>, for example <code>--fullscreen</code> or <code>--skip-intro --load-save 1</code>.</p>
-<p><a href="redguard-development.zip">Renderer source and build evidence</a></p>''')
+<p><a href="redguard-development.zip">Build evidence</a></p>''')
     (args.output/'movie-evidence.json').write_text(json.dumps(media,indent=2)+'\n')
     print(destination)
     print(digest)

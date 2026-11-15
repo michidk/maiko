@@ -18,15 +18,9 @@ fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
                 .strip_prefix(root)
                 .map_err(|_| invalid("Input outside runtime directory"))?;
             let first = relative.components().next().unwrap().as_os_str();
-            if ![
-                "redguard-native",
-                "libredguard-glide.dylib",
-                "Frameworks",
-                "README.md",
-                "LICENSES.txt",
-            ]
-            .iter()
-            .any(|name| first == *name)
+            if !["redguard-native", "Frameworks", "README.md", "LICENSES.txt"]
+                .iter()
+                .any(|name| first == *name)
             {
                 return Err(invalid(
                     "Runtime directory contains an unexpected file, game installation or launcher",
@@ -56,7 +50,6 @@ fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
     }
     for name in [
         "redguard-native",
-        "libredguard-glide.dylib",
         "README.md",
         "LICENSES.txt",
         "Frameworks/SDL2.framework/SDL2",
@@ -64,7 +57,7 @@ fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
     ] {
         if !root.join(name).is_file() {
             return Err(invalid(
-                "Incomplete runtime: executable, renderer, frameworks and notices are required",
+                "Incomplete runtime: executable, frameworks and notices are required",
             ));
         }
     }
@@ -128,7 +121,6 @@ mod tests {
     fn runtime(root: &Path) {
         for name in [
             "redguard-native",
-            "libredguard-glide.dylib",
             "README.md",
             "LICENSES.txt",
             "Frameworks/SDL2.framework/SDL2",
@@ -160,7 +152,7 @@ mod tests {
         fs::remove_file(&output).unwrap();
         package(source.path(), &output).unwrap();
         let mut archive = zip::ZipArchive::new(File::open(&output).unwrap()).unwrap();
-        assert_eq!(archive.len(), 6);
+        assert_eq!(archive.len(), 5);
         assert_eq!(
             archive
                 .by_name("Maiko Mac Runtime/redguard-native")

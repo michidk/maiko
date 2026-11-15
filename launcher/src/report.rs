@@ -68,9 +68,6 @@ fn archive(sources: &Sources, exit: Option<&Exit>, created: &str) -> io::Result<
             add("screenshot.bmp", &screenshot)?;
         }
     }
-    if let Some(renderer) = sources.game.and_then(renderer_log) {
-        add("logs/OpenGLid.log", renderer.as_bytes())?;
-    }
     add(
         "launcher.json",
         &serde_json::to_vec_pretty(sources.settings).map_err(io::Error::other)?,
@@ -109,19 +106,6 @@ fn session_log(logs: &Path, pid: Option<u32>) -> Option<PathBuf> {
                 }
         })
         .max()
-}
-
-/// OpenGLide appends its graphics-driver details to `OpenGLid.log` in the game folder on every
-/// start; keep the last block, capped so a long-grown file stays small.
-fn renderer_log(game: &Path) -> Option<String> {
-    let text =
-        String::from_utf8_lossy(&std::fs::read(named(game, "OpenGLid.log")?).ok()?).into_owned();
-    let start = text
-        .rfind("** OpenGL Information **")
-        .map_or(0, |at| text[..at].rfind('\n').map_or(0, |line| line + 1));
-    let start = start.max(text.len().saturating_sub(64 * 1024));
-    let start = (start..=text.len()).find(|&at| text.is_char_boundary(at))?;
-    Some(text[start..].to_owned())
 }
 
 fn newest_slot(saves: &Path) -> Option<PathBuf> {
@@ -300,11 +284,6 @@ mod tests {
         std::fs::write(logs.join("maiko-01-7.bmp"), "BM").unwrap();
         std::fs::write(logs.join("maiko-02-8.log"), "later run").unwrap();
         std::fs::write(game.join("RGFX.EXE"), "game file").unwrap();
-        std::fs::write(
-            game.join("OpenGLid.log"),
-            "-----\n** OpenGL Information **\nRenderer: old\n-----\n** OpenGL Information **\nRenderer: x\n",
-        )
-        .unwrap();
         std::fs::write(user.join("SYSTEM.INI"), "ini").unwrap();
         std::fs::write(user.join("SAVEGAME/SAVEGAME.002/SAVEGAME.SAV"), "save").unwrap();
         let settings = Settings::default();
@@ -334,10 +313,6 @@ mod tests {
         };
         assert_eq!(read("logs/maiko-01-7.log"), "crashed run");
         assert_eq!(read("screenshot.bmp"), "BM");
-        assert_eq!(
-            read("logs/OpenGLid.log"),
-            "** OpenGL Information **\nRenderer: x\n"
-        );
         assert_eq!(read("user/SYSTEM.INI"), "ini");
         assert_eq!(read("user/SAVEGAME/SAVEGAME.002/SAVEGAME.SAV"), "save");
         let system = read("system.txt");

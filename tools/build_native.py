@@ -70,17 +70,10 @@ def main():
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '600'])
         for file in work.glob('*'):
             if file.suffix in ['.asm','.inc','.h']: run(['docker','cp',str(file),name+':/work/'+file.name])
-        for directory,destination in [(ROOT/'runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support'),(ROOT/'glide','/work'),(ROOT/'.cache/glide/include','/glide-sdk')]:
+        for directory,destination in [(ROOT/'runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support'),(ROOT/'glide','/work')]:
             run(['docker','cp',str(directory)+'/.',name+':'+destination])
         for include in ['extern.inc','macros.inc']:
             run(['docker','cp',str(work/include),name+':/work/'+include])
-        backend=ROOT/'.cache/glide'
-        backend_report=json.loads((backend/'report.json').read_text())
-        if backend_report['status']!='smoke_and_guest_bridge_passed':
-            raise ValueError('Run python3 -m tools.build_glide before linking the game')
-        for file in ['redguard-glide.dll','libredguard-glide.a','libwinpthread-1.dll']:
-            run(['docker','cp',str(backend/file),name+':/work/'+file])
-        report['glide_backend']=backend_report
         collect_tool_notices(name,ROOT/'.cache/sr/SR/x64-support',work/'notices')
         report['rust_runtime']=stage_rust_runtime(name,rust_runtime)
         report['rust_host']=stage_rust_runtime(name,rust_host)
@@ -97,7 +90,7 @@ def main():
         report['wine_original_gameplay_function_tests_verified']=True
         report['wine_original_audio_tests_verified']=True
         report['native_setup_build_test_seconds']=round(time.monotonic()-began,3)
-        for filename in ['redguard-native.exe','native.map','native-symbols.txt','redguard-glide.dll','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
+        for filename in ['redguard-native.exe','native.map','native-symbols.txt','libwinpthread-1.dll','SDL2.dll','SDL2_mixer.dll']:
             run(['docker','cp',name+':/work/'+filename,str(work/filename)])
         report['native_exe_sha256']=hashlib.sha256((work/'redguard-native.exe').read_bytes()).hexdigest()
         if a.link_only:

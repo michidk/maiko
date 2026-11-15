@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: '1.90.0'
+          toolchain: '1.95.0'
           targets: wasm32-unknown-unknown,x86_64-pc-windows-gnu,aarch64-unknown-linux-gnu,aarch64-apple-darwin,x86_64-apple-darwin
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build patch
@@ -70,7 +70,6 @@ jobs:
             .cache/client-macos-toolchain/*.js
             .cache/client-macos-toolchain/*LICENSE*.txt
             .cache/client-macos-toolchain/llasm-support
-          # Only the SR and LLVM patches go into these compilers; the OpenGLide ones do not.
           key: wasm-compilers-${{ hashFiles('patcher/src/bin/maiko-kit/tools.rs', 'patcher/src/bin/maiko-kit/macos_tools.rs', 'patches/sr-*.patch', 'patches/llvm-*.patch') }}
       - name: Build, export and check the runtime kits
         env:
@@ -110,7 +109,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: '1.90.0'
+          toolchain: '1.95.0'
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
