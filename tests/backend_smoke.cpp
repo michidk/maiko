@@ -144,6 +144,33 @@ static void check_alpha_texture() {
     puts("PASS alpha-only texture opacity and bilinear edge preserve white RGB");
 }
 
+// LFB writes outside the pixel pipeline are not fogged, whatever fog the last triangle used.
+static void check_lfb_write_unfogged() {
+    guColorCombineFunction(GR_COLORCOMBINE_CCRGB);
+    grConstantColorValue(0xffffffff);
+    grFogColorValue(0);
+    grFogMode(GR_FOG_WITH_TABLE);
+    GrFog_t fog[GR_FOG_TABLE_SIZE];
+    for (auto &entry:fog) entry=255;
+    grFogTable(fog);
+    unsigned fogged=fogged_white(200);
+    GrLfbInfo_t info={}; info.size=sizeof info;
+    assert(grLfbLock(GR_LFB_WRITE_ONLY,GR_BUFFER_BACKBUFFER,GR_LFBWRITEMODE_565,
+                     GR_ORIGIN_UPPER_LEFT,FXFALSE,&info));
+    for (int y=80;y<120;++y) for (int x=80;x<120;++x)
+        ((uint16_t*)((char*)info.lfbPtr+y*info.strideInBytes))[x]=0xffff;
+    assert(grLfbUnlock(GR_LFB_WRITE_ONLY,GR_BUFFER_BACKBUFFER));
+    assert(grLfbLock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER,GR_LFBWRITEMODE_565,
+                     GR_ORIGIN_UPPER_LEFT,FXFALSE,&info));
+    auto row=(const uint16_t*)((const char*)info.lfbPtr+100*info.strideInBytes);
+    unsigned red=(row[100]>>11)*255/31;
+    assert(grLfbUnlock(GR_LFB_READ_ONLY,GR_BUFFER_BACKBUFFER));
+    grFogMode(GR_FOG_DISABLE);
+    fprintf(stderr,"LFB write over fog: triangle red=%u written red=%u expected=255\n",fogged,red);
+    assert(fogged<16 && red==255);
+    puts("PASS LFB writes bypass fog");
+}
+
 int main(int argc,char **) {
 #ifdef _WIN32
     if (argc>1) assert(SetCurrentDirectoryA("Z:\\readonly"));
@@ -220,6 +247,7 @@ int main(int argc,char **) {
     check_fog_interpolation();
     check_per_pixel_fog();
     check_alpha_texture();
+    check_lfb_write_unfogged();
     grGlideShutdown();
     puts("PASS native x64 Glide textured triangle, framebuffer readback and swap");
 }
