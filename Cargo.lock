@@ -968,7 +968,7 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "maiko-glide"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "maiko-runtime",
  "rustyglide",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-host"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "maiko-glide",
  "maiko-runtime",
@@ -984,7 +984,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-launcher"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "directories",
  "egui 0.33.3",
@@ -1000,7 +1000,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-patcher"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "js-sys",
  "object",
@@ -1015,7 +1015,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-runtime"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
