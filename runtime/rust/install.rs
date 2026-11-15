@@ -365,9 +365,9 @@ mod tests {
         )
         .unwrap();
         assert!(selected.skip_intro && selected.skip_outro);
+        assert_eq!(selected.load_save, Some(7));
         let selected = Selection::parse(["--texture-filter", "sharp"].map(OsString::from)).unwrap();
         assert_eq!(selected.texture_filter, Some(TEXTURE_SHARP));
-        assert_eq!(selected.load_save, Some(7));
     }
 
     #[test]
