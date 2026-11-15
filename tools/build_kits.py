@@ -78,14 +78,15 @@ def runtime_directory(target, glide, destination):
         for name in seed.namelist():
             if name.startswith('runtime/') and not name.endswith('/'):
                 leaf = name.removeprefix('runtime/')
-                if leaf.startswith('RUN') or leaf.endswith('.tar.gz') or leaf == 'README.txt':
+                # shortcut: skips the launcher's old name in the seed; drop once a release ships maiko.exe.
+                if leaf.startswith('RUN') or leaf.endswith('.tar.gz') or leaf in ('README.txt', 'Maiko.exe'):
                     continue
                 data = seed.read(name)
                 (destination / leaf).write_bytes(notices(data.decode()).encode() if leaf == 'LICENSES.txt' else data)
     # The renderer and the launcher, both built beside it, are the parts that change per release.
     shutil.copyfile(glide, destination / glide.name)
     shutil.copyfile(ROOT / 'platforms' / target / 'README.txt', destination / 'README.txt')
-    launcher = 'Maiko.exe' if target == 'windows' else 'maiko'
+    launcher = 'maiko.exe' if target == 'windows' else 'maiko'
     shutil.copyfile(glide.parent / launcher, destination / launcher)
 
 

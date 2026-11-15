@@ -10,7 +10,7 @@ const MAX_KIT: u64 = 384 * 1024 * 1024;
 const MAX_ENTRY: u64 = 256 * 1024 * 1024;
 /// Format 2 kits carry link inputs instead of a prebuilt executable template.
 /// The launcher executables a runtime kit may carry (Windows; Linux and macOS).
-pub const LAUNCHERS: [&str; 2] = ["Maiko.exe", "maiko"];
+pub const LAUNCHERS: [&str; 2] = ["maiko.exe", "maiko"];
 pub const FORMAT: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]

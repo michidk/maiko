@@ -11,7 +11,7 @@ Maiko contains no game files. **You need your own copy of Redguard.** The GOG re
 - **Hardware rendering.** The Glide version of the game is drawn through OpenGL, in a window of any size or borderless fullscreen.
 - **Original sound, music and movies.** CD music and the intro play from your GOG `game.gog` disc image.
 - **Game controllers.** SDL2 gamepads work alongside keyboard and mouse.
-- **The original launcher.** `Maiko.exe` (`maiko` on Linux and macOS) recreates Redguard's own start window: Play Redguard, Game Options, Technical Support. Its artwork and sounds are read from the `REDGUARD.EXE` in your installation; Maiko ships none of them.
+- **The original launcher.** `maiko.exe` (`maiko` on Linux and macOS) recreates Redguard's own start window: Play Redguard, Game Options, Technical Support. Its artwork and sounds are read from the `REDGUARD.EXE` in your installation; Maiko ships none of them.
 - **Finds your game itself.** It looks in the usual GOG, Wine, Heroic and Lutris folders and only asks if it finds nothing. Your installation is never modified.
 - **Separate saves and settings**, kept in a `user-data` folder next to the program, plus session logs for bug reports.
 - **Startup shortcuts:** `--skip-intro`, `--skip-outro` and `--load-save N`.
@@ -71,8 +71,8 @@ If you have the build 5.0 `RGFX.EXE` itself, Maiko accepts it directly. It runs 
 
 ## Play on Windows
 
-1. Extract the ZIP into **its own folder**, anywhere you can write to. Do not extract it into the game folder. Keep the extracted files together: `Maiko.exe`, `redguard-native.exe`, `SDL2.dll`, `SDL2_mixer.dll`, `redguard-glide.dll`, `libwinpthread-1.dll` and the licence notices.
-2. Double-click `Maiko.exe`, the launcher. It finds the game on its own when it can: the folder it remembered from an earlier start, `REDGUARD_DIR` if you set it, its own folder and the folders around it, and the standard GOG folders such as `C:\GOG Games\Redguard`. Only if none of those holds the game does it ask you to choose the Redguard folder (the one with `RGFX.EXE`, or the GOG folder around it), and it remembers your choice.
+1. Extract the ZIP into **its own folder**, anywhere you can write to. Do not extract it into the game folder. Keep the extracted files together: `maiko.exe`, `redguard-native.exe`, `SDL2.dll`, `SDL2_mixer.dll`, `redguard-glide.dll`, `libwinpthread-1.dll` and the licence notices.
+2. Double-click `maiko.exe`, the launcher. It finds the game on its own when it can: the folder it remembered from an earlier start, `REDGUARD_DIR` if you set it, its own folder and the folders around it, and the standard GOG folders such as `C:\GOG Games\Redguard`. Only if none of those holds the game does it ask you to choose the Redguard folder (the one with `RGFX.EXE`, or the GOG folder around it), and it remembers your choice.
 3. The launcher shows Redguard's original start window, drawn from your installation's `REDGUARD.EXE` (without that file it shows plain buttons). **Game Options** sets fullscreen, the window size, skipping the intro and outro, and a disc image for CD music. **Technical Support** shows where the logs are. Click **Play Redguard**.
 4. The original book menu opens in a window. Choose **New Game** to see the intro and start on the ship, or **Continue** to load your last save.
 

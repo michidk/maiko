@@ -43,7 +43,9 @@ resolve() {{
 }}
 for library in {' '.join(WINDOWS_LIBRARIES)}; do resolve $library; done
 cp redguard-glide.dll /out/runtime/
-x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/Maiko.exe launcher_main.c libmaiko_launcher.a -L/sdl/lib \\
+echo '1 ICON "maiko.ico"' > maiko.rc
+x86_64-w64-mingw32-windres maiko.rc -O coff -o maiko-icon.o
+x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/maiko.exe launcher_main.c maiko-icon.o libmaiko_launcher.a -L/sdl/lib \\
   -lSDL2_mixer -lSDL2 -lshell32 -lole32 -luser32 -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp
 '''
 LINUX = '''set -e
@@ -114,6 +116,7 @@ def main():
         stage_sr_audio(name)
         if windows:
             stage_windows_sdl(name)
+            run(['docker', 'cp', str(ROOT / 'platforms/windows/maiko.ico'), name + ':/work/maiko.ico'])
             for file in ['redguard-glide.dll', 'libredguard-glide.a']:
                 run(['docker', 'cp', str(ROOT / '.cache/glide' / file), name + ':/work/' + file])
         else:
