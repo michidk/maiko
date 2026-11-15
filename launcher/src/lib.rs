@@ -9,4 +9,6 @@ pub mod artwork;
 pub mod font;
 pub mod locate;
 pub mod picker;
+#[cfg(feature = "app")]
+pub mod report;
 pub mod settings;

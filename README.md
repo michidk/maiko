@@ -171,9 +171,18 @@ Typical causes:
 Every launch writes a session log under `%LOCALAPPDATA%/Maiko/logs` on Windows,
 `$XDG_STATE_HOME/maiko/logs` or `~/.local/state/maiko/logs` on Linux, and
 `~/Library/Logs/Maiko/` on macOS. The newest seven logs are kept. Set
-`MAIKO_LOG_DIR` to choose a different directory.
+`MAIKO_LOG_DIR` to choose a different directory. The log records scene and menu changes;
+`MAIKO_TRACE=1` adds the detailed state samples the developer tests use.
 
-Open an issue and attach the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
+When the game was started from the launcher and crashes, freezes and has to be closed, or fails
+to start, the launcher saves `Maiko-crash-DATE_TIME.zip` (UTC) beside itself and offers to open
+an issue. It holds the run's log, the last screenshot, the system details (OS, CPU, graphics
+driver, Maiko version, the names and sizes of the files in the game folder), the launcher
+settings, your INI files and your newest save; never any game files. **Technical Support ›
+Create report** makes the same ZIP at any time. A game that stops drawing for 15 seconds logs
+`event=stall` with where it was, so a freeze leaves evidence too.
+
+Open an issue and attach the report, or the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
 
 ## Linux
 

@@ -90,6 +90,7 @@ pub fn initialize_in(directory: &Path) -> io::Result<PathBuf> {
     logs.sort();
     let old = logs.len().saturating_sub(KEPT_LOGS);
     for path in logs.into_iter().take(old) {
+        let _ = std::fs::remove_file(path.with_extension("bmp"));
         let _ = std::fs::remove_file(path);
     }
     crate::rg_log!(
@@ -147,6 +148,11 @@ fn os_version() -> String {
         "Windows {}.{}.{}",
         info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber
     )
+}
+
+/// This run's log file, once logging is initialized.
+pub fn session_path() -> Option<&'static Path> {
+    SESSION.get().map(|session| session.path.as_path())
 }
 
 /// Normal records may allocate and lock. Fatal handlers use raw OS writes.

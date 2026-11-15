@@ -237,6 +237,23 @@ impl Bridge {
             self.was_flat = flat;
         }
     }
+    /// Keep this frame as the screenshot for crash and stall reports.
+    unsafe fn snapshot(&self) {
+        unsafe {
+            let mut info = NativeLfb::default();
+            if grLfbLock(0, 1, 0, 0, 0, &mut info) == 0 {
+                return;
+            }
+            maiko_runtime::crash::store_snapshot(self.width, self.height, |x, y| {
+                info.pointer
+                    .cast::<u8>()
+                    .add(y as usize * info.stride as usize + x as usize * 2)
+                    .cast::<u16>()
+                    .read_unaligned()
+            });
+            grLfbUnlock(0, 1);
+        }
+    }
     unsafe fn capture(&mut self) {
         unsafe {
             let Some(directory) = std::env::var_os("RG_CAPTURE_DIR") else {
@@ -364,6 +381,9 @@ impl Bridge {
                     }
                     self.capture();
                     self.log_flat_frame();
+                    if maiko_runtime::crash::frame_presented() {
+                        self.snapshot();
+                    }
                     if overlay::is_open() {
                         // grBufferSwap draws the game's batched triangles; draw them first.
                         grSstIdle();

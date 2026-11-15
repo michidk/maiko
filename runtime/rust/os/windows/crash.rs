@@ -61,6 +61,7 @@ unsafe extern "system" fn fault(
     );
     report.calls();
     report.output();
+    crate::crash::write_snapshot();
     unsafe {
         TerminateProcess(GetCurrentProcess(), 3);
     }

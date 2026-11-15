@@ -2,7 +2,7 @@
 //! player's `REDGUARD.EXE`. Without that file it shows plain buttons instead.
 use crate::artwork::{Artwork, BUTTON_POSITIONS, Image};
 use crate::font::Font;
-use crate::{locate, picker, settings};
+use crate::{locate, picker, report, settings};
 use egui::{Align2, Color32, Pos2, Rect, Sense, TextureHandle, TextureOptions, Vec2};
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::{Keycode, Mod};
@@ -60,6 +60,8 @@ enum Dialog {
     },
     Options(Settings),
     Support,
+    /// A report was written (or failed); `true` when the game had stopped unexpectedly.
+    Report(bool, Result<PathBuf, String>),
     Error(String),
 }
 
@@ -84,6 +86,8 @@ struct App {
     focus: Option<usize>,
     rattle: usize,
     quit: bool,
+    /// The running game; the launcher stays hidden until it ends.
+    game_process: Option<std::process::Child>,
 }
 
 fn texture(context: &egui::Context, name: &str, image: &Image) -> TextureHandle {
@@ -92,6 +96,14 @@ fn texture(context: &egui::Context, name: &str, image: &Image) -> TextureHandle 
         &image.rgba,
     );
     context.load_texture(name, pixels, TextureOptions::NEAREST)
+}
+
+/// Where the game writes its logs (`MAIKO_LOG_DIR` overrides it for the game too).
+fn log_folder() -> Option<PathBuf> {
+    std::env::var_os("MAIKO_LOG_DIR")
+        .map(PathBuf::from)
+        .map_or_else(settings::log_directory, Ok)
+        .ok()
 }
 
 /// Open a web page or folder with the system's default program.
@@ -128,6 +140,7 @@ impl App {
             focus: Some(0),
             rattle: 0,
             quit: false,
+            game_process: None,
         };
         match game {
             Some(game) => app.use_game(game),
@@ -229,7 +242,7 @@ impl App {
                     .spawn()
             });
         match result {
-            Ok(_) => self.quit = true,
+            Ok(child) => self.game_process = Some(child),
             Err(error) => {
                 self.dialog = Dialog::Error(format!(
                     "Redguard could not be started from {}:\n{error}",
@@ -237,6 +250,44 @@ impl App {
                 ))
             }
         }
+    }
+
+    /// Once the game ends: close the launcher after a normal quit, or write a crash report
+    /// beside the launcher and show it after a crash, a freeze the player ended, or a failed start.
+    fn watch_game(&mut self) {
+        let Some(child) = &mut self.game_process else {
+            return;
+        };
+        let status = match child.try_wait() {
+            Ok(None) => return,
+            Ok(Some(status)) => status,
+            Err(error) => {
+                self.game_process = None;
+                self.dialog = Dialog::Error(format!("Lost track of the game: {error}"));
+                return;
+            }
+        };
+        let pid = child.id();
+        self.game_process = None;
+        if status.success() {
+            self.quit = true;
+            return;
+        }
+        let exit = report::Exit {
+            pid,
+            status: status.to_string(),
+        };
+        self.dialog = Dialog::Report(true, self.report(Some(&exit)));
+    }
+
+    fn report(&self, exit: Option<&report::Exit>) -> Result<PathBuf, String> {
+        let sources = report::Sources {
+            logs: log_folder(),
+            game: self.game.as_deref(),
+            user: self.user_directory(),
+            settings: &self.settings,
+        };
+        report::create(&self.program, &sources, exit).map_err(|error| error.to_string())
     }
 
     fn ui(&mut self, context: &egui::Context) {
@@ -340,6 +391,8 @@ impl App {
             Dialog::ChooseGame { .. } => "Find Redguard",
             Dialog::Options(_) => "Game Options",
             Dialog::Support => "Technical Support",
+            Dialog::Report(true, _) => "Redguard stopped",
+            Dialog::Report(false, _) => "Report saved",
             Dialog::Error(_) => "Something went wrong",
         };
         if let Some(font) = &self.title_font
@@ -354,6 +407,7 @@ impl App {
         };
         let mut close = false;
         let mut choose = None;
+        let mut make_report = false;
         match &mut self.dialog {
             Dialog::None => {}
             Dialog::ChooseGame { typed, error } => {
@@ -490,12 +544,9 @@ impl App {
                 }
             }
             Dialog::Support => {
-                let logs = std::env::var_os("MAIKO_LOG_DIR")
-                    .map(PathBuf::from)
-                    .map_or_else(settings::log_directory, Ok)
-                    .ok();
+                let logs = log_folder();
                 dialog(context, &title, |ui| {
-                    ui.label("Every start of the game writes a log. If something goes wrong, open an issue and attach the newest log.");
+                    ui.label("Every start of the game writes a log. If something goes wrong, create a report and attach it to an issue. When the game crashes, the launcher creates one by itself.");
                     if let Some(logs) = &logs {
                         ui.add_space(8.0);
                         path(ui, &logs.display().to_string());
@@ -504,8 +555,8 @@ impl App {
                         if secondary(ui, "Close").clicked() {
                             close = true;
                         }
-                        if primary(ui, "Report an issue").clicked() {
-                            let _ = open(ISSUES.as_ref());
+                        if primary(ui, "Create report").clicked() {
+                            make_report = true;
                         }
                         if let Some(logs) = &logs
                             && ui
@@ -516,6 +567,47 @@ impl App {
                                 .clicked()
                         {
                             let _ = open(logs.as_os_str());
+                        }
+                    });
+                });
+            }
+            Dialog::Report(crashed, result) => {
+                dialog(context, &title, |ui| {
+                    if *crashed {
+                        ui.label("Redguard stopped unexpectedly. Maiko saved a report with the game's log, its last screenshot, your system details, your settings and newest save (no game files).");
+                    } else {
+                        ui.label("Maiko saved a report with the newest log and screenshot, your system details, your settings and newest save (no game files).");
+                    }
+                    ui.add_space(8.0);
+                    match result {
+                        Ok(path) => {
+                            self::path(ui, &path.display().to_string());
+                            ui.add_space(6.0);
+                            ui.label(muted(
+                                "Attach it to an issue so the problem can be looked into.",
+                            ));
+                        }
+                        Err(error) => {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "The report could not be written: {error}"
+                                ))
+                                .color(ERROR),
+                            );
+                        }
+                    }
+                    footer(ui, |ui| {
+                        if secondary(ui, "Close").clicked() {
+                            close = true;
+                        }
+                        if primary(ui, "Report an issue").clicked() {
+                            let _ = open(ISSUES.as_ref());
+                        }
+                        if let Ok(path) = result
+                            && let Some(folder) = path.parent()
+                            && secondary(ui, "Show report").clicked()
+                        {
+                            let _ = open(folder.as_os_str());
                         }
                     });
                 });
@@ -546,6 +638,9 @@ impl App {
         }
         if close {
             self.dialog = Dialog::None;
+        }
+        if make_report {
+            self.dialog = Dialog::Report(false, self.report(None));
         }
     }
 
@@ -856,7 +951,7 @@ fn run() -> Result<(), String> {
         sdl2::mixer::allocate_channels(4);
         Some(audio)
     });
-    let window = video
+    let mut window = video
         .window("Maiko", WIDTH, HEIGHT)
         .opengl()
         .allow_highdpi()
@@ -876,7 +971,24 @@ fn run() -> Result<(), String> {
     let mut events = sdl.event_pump()?;
     let started = Instant::now();
     video.text_input().start();
+    let mut hidden = false;
     while !app.quit {
+        app.watch_game();
+        if app.game_process.is_some() != hidden {
+            hidden = !hidden;
+            if hidden {
+                window.hide();
+            } else {
+                window.show();
+                window.raise();
+            }
+        }
+        if hidden {
+            // Nothing to draw; keep the event queue drained and check on the game twice a second.
+            for _ in events.poll_iter() {}
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            continue;
+        }
         let mut input = Vec::new();
         // Wait for input instead of spinning; egui asks for a repaint when it animates.
         let first = events.wait_event_timeout(100);

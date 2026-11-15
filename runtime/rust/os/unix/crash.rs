@@ -13,6 +13,7 @@ extern "C" fn fault(signal: i32, info: *mut libc::siginfo_t, context: *mut std::
     crate::os::report_context(&mut report, signal, info, context);
     report.calls();
     report.output();
+    crate::crash::write_snapshot();
     unsafe {
         libc::_exit(3);
     }
