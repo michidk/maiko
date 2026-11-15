@@ -2,7 +2,7 @@
 
 The runtime requires macOS 11 or newer on Apple Silicon or Intel.
 The package contains the universal `maiko` launcher and `redguard-native` game
-executables and SDL frameworks. It contains no Redguard installation, game assets or disc media.
+executables. It contains no Redguard installation, game assets or disc media.
 You must supply your own copy of Redguard.
 
 ## First launch

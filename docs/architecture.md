@@ -12,7 +12,7 @@ Maiko provides native Windows and Linux services for an owned Redguard installat
 | `maiko-patcher` | `crates/patcher/` | Local package builder shared by the CLI and browser |
 | `maiko-launcher` | `crates/launcher/` | The launcher window and the game-folder search shared with the runtime |
 
-SDL supplies windowing, input, timing and audio. [rustyglide](https://github.com/michidk/rustyglide) supplies the renderer, drawing through wgpu with Vulkan, Direct3D 12, Metal or OpenGL. Platform bindings handle memory, folder selection and fatal error reporting. Dependency sources and licences are listed in [THIRD_PARTY.md](../THIRD_PARTY.md).
+Cross-platform Rust crates supply the rest: winit the window, keyboard and mouse, gilrs the gamepads, cpal the sound output. [rustyglide](https://github.com/michidk/rustyglide) supplies the renderer, drawing through wgpu with Vulkan, Direct3D 12, Metal or OpenGL. Platform bindings handle memory, folder selection and fatal error reporting. Dependency sources and licences are listed in [THIRD_PARTY.md](../THIRD_PARTY.md).
 
 ## Files and storage
 
@@ -48,10 +48,9 @@ shared fixed-size buffer; native handlers and context decoding live under `os/`
 and retain their allocation-free, lock-free fatal path.
 
 CPU translation is independent of host OS. Shared native assembly and ABI files
-stay in `runtime/`; `crates/runtime/host/llasm.rs` and `crates/runtime/rust/llasm.rs` implement
+stay in `crates/runtime/`; `crates/runtime/host/llasm.rs` and `crates/runtime/rust/llasm.rs` implement
 the CPU-state backend selected by Cargo's `llasm` feature. Linux can exercise that
-backend as well as the native assembly backend. SDL continues to provide
-windowing, input, audio and timing.
+backend as well as the native assembly backend.
 
 Without an explicit game-directory argument, startup checks `game/RGFX.EXE`
 beside the executable, then `RGFX.EXE` directly beside it, before requesting a

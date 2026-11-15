@@ -20,9 +20,6 @@ DOWNLOADS = {
     'MacOSX11.3.sdk.tar.xz': (
         'https://github.com/joseluisq/macosx-sdks/releases/download/11.3/MacOSX11.3.sdk.tar.xz',
         '9adc1373d3879e1973d28ad9f17c9051b02931674a3ec2a2498128989ece2cb1'),
-    'SDL2-2.30.11.dmg': (
-        'https://github.com/libsdl-org/SDL/releases/download/release-2.30.11/SDL2-2.30.11.dmg',
-        '7b9daa7b8440e5a15f1a596df5a1ba326e3f6bf805a0307ce68ba2876192235f'),
 }
 
 FIXTURE_TARGETS = {

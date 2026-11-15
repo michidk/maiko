@@ -137,7 +137,6 @@ fn zip_with_links(
         let mode = if Some(name.as_str()) == executable
             || LAUNCHERS.contains(&name.as_str())
             || name.ends_with(".dylib")
-            || name.ends_with("/SDL2")
         {
             0o755
         } else {
@@ -213,15 +212,9 @@ impl Kit {
                 return Err(format!("Missing runtime package file {name}"));
             }
         }
-        for (name, link) in &manifest.package_links {
-            if target != Target::Macos
-                || !name.starts_with("Frameworks/SDL2.framework/")
-                || !safe_path(name)
-                || !safe_path(link)
-                || manifest.package_files.contains(name)
-            {
-                return Err("Unsafe or duplicate framework link".into());
-            }
+        // Packages hold only regular files; links were for the SDL framework, which is gone.
+        if !manifest.package_links.is_empty() {
+            return Err("Runtime kit lists package links".into());
         }
         for name in crate::link::required(target) {
             if !files.contains_key(&name) {
@@ -292,7 +285,7 @@ impl Kit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn macos_kit(link: &str) -> (Vec<u8>, Vec<u8>) {
+    fn macos_kit(links: &[(&str, &str)]) -> (Vec<u8>, Vec<u8>) {
         let thin = |cpu, subtype| {
             [0xfeedfacfu32, cpu, subtype, 2, 0, 0, 0, 0]
                 .into_iter()
@@ -328,13 +321,10 @@ mod tests {
                 .map(|(name, bytes)| (name.clone(), hash(bytes)))
                 .collect(),
             package_files,
-            package_links: std::collections::BTreeMap::from([
-                ("Frameworks/SDL2.framework/SDL2".into(), link.into()),
-                (
-                    "Frameworks/SDL2.framework/Versions/Current".into(),
-                    "A".into(),
-                ),
-            ]),
+            package_links: links
+                .iter()
+                .map(|(name, link)| ((*name).to_owned(), (*link).to_owned()))
+                .collect(),
         };
         files.insert(
             "manifest.json".into(),
@@ -344,8 +334,8 @@ mod tests {
     }
 
     #[test]
-    fn macos_package_contains_both_architectures_framework_links_and_no_compiler() {
-        let (bytes, executable) = macos_kit("Versions/Current/SDL2");
+    fn macos_package_contains_both_architectures_and_no_compiler() {
+        let (bytes, executable) = macos_kit(&[]);
         let kit = Kit::load(&bytes, Target::Macos).unwrap();
         assert!(kit.package(b"").is_err());
         let package = kit.package(&executable).unwrap();
@@ -372,21 +362,16 @@ mod tests {
                 & 0o777,
             0o755
         );
-        let mut link = archive.by_name("Frameworks/SDL2.framework/SDL2").unwrap();
-        assert_eq!(link.unix_mode().unwrap() & 0o170000, 0o120000);
-        let mut target = String::new();
-        link.read_to_string(&mut target).unwrap();
-        assert_eq!(target, "Versions/Current/SDL2");
     }
 
     #[test]
-    fn macos_kit_refuses_framework_links_outside_the_archive() {
-        let (bytes, _) = macos_kit("../../outside");
+    fn kits_with_package_links_are_refused() {
+        let (bytes, _) = macos_kit(&[("Frameworks/X.framework/X", "../../outside")]);
         assert!(
             Kit::load(&bytes, Target::Macos)
                 .err()
                 .unwrap()
-                .contains("framework link")
+                .contains("package links")
         );
     }
 
@@ -395,7 +380,7 @@ mod tests {
         for name in ["../x", "/x", "x/../y", "C:/x", "x\\y", "", "x//y", "x\0y"] {
             assert!(!safe_path(name), "{name}");
         }
-        assert!(safe_path("link/libSDL2.so.0"));
+        assert!(safe_path("link/libasound.so.2"));
     }
     #[test]
     fn zip_roundtrip_retains_files_and_executable_permissions() {

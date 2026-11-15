@@ -85,6 +85,8 @@ impl Bridge {
 }
 impl Default for Bridge {
     fn default() -> Self {
+        // RUSTYGLIDE_LOG=FILE (or stderr) records rustyglide's and wgpu's own messages.
+        rustyglide::logging::init_from_env();
         let mut settings = Settings::from_env();
         settings.core.tmu_memory = TEXTURE_MEMORY;
         settings.core.fb_memory_mb = FRAME_BUFFER_MB;

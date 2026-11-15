@@ -4,11 +4,11 @@ ulimit -c 0
 cd /work
 cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll /work/
 sh /tests/init_wine.sh /tmp/rg-wine
-cc='x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work -I/sdl/include/SDL2 -DSDL_MAIN_HANDLED'
+cc='x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work'
 x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.obj
 link() {
     $cc "$@" -Wl,--gc-sections -Wl,--start-group ${rust_library:-/work/libmaiko_runtime.a} guest_memory.obj -Wl,--end-group \
-      -L/sdl/lib -L/work -lSDL2 -lstdc++ $CRATE_LIBRARIES \
+      -L/work -lstdc++ $CRATE_LIBRARIES -lopengl32 \
       -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -lwinpthread -luser32 -lshell32 -lole32 \
       -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp
 }
@@ -31,8 +31,6 @@ link /tests/runtime_io.c -o io-test.exe
 needs_game sh -c 'cd /game && WINEPREFIX=/tmp/rg-wine WINEDEBUG=-all SDL_AUDIODRIVER=dummy /usr/lib/wine/wine64 /work/io-test.exe'
 link /tests/platform_services.c -o platform-test.exe
 wine_run platform-test.exe
-link /tests/sdl_input.c -o input-test.exe
-env WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine xvfb-run -a /usr/lib/wine/wine64 input-test.exe
 link /tests/native_timing.c -o timing-test.exe
 wine_run timing-test.exe
 nasm -f win64 /tests/image_variant.asm -o variant_test.obj

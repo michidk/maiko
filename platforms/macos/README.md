@@ -16,7 +16,7 @@ From the repository root:
 python3 -m tools.check_macos_backend
 ```
 
-Requires Python 3.11 or newer, Docker, Rust 1.95 and the pinned SR checkout under `.cache/`. Install Rust's `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-apple-darwin` targets with `rustup target add`. The script downloads the SDK and SDL frameworks if absent. The SDK comes from the third-party joseluisq/macosx-sdks mirror; its hash matches that mirror's published checksum, not an Apple-signed checksum. SDL downloads use official release URLs with locally pinned content hashes. These checks detect changed bytes; they do not independently authenticate the initial downloads. The SDK stays in local build tooling and is excluded from runtime packages.
+Requires Python 3.11 or newer, Docker, Rust 1.95 and the pinned SR checkout under `.cache/`. Install Rust's `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-apple-darwin` targets with `rustup target add`. The script downloads the SDK if absent. The SDK comes from the third-party joseluisq/macosx-sdks mirror; its hash matches that mirror's published checksum, not an Apple-signed checksum. These checks detect changed bytes; they do not independently authenticate the initial downloads. The SDK stays in local build tooling and is excluded from runtime packages.
 
 The script builds pinned upstream source archives without modifying the existing Windows translator. The Debian image tag and package versions are recorded, but apt package resolution is not fully pinned. Every build records content hashes of its local source inputs in `source-manifest.json` and the report, and rejects a source change during the build. Upstream archives, patches and output artifacts are hashed separately.
 
@@ -37,14 +37,14 @@ Both complete engine binaries have cross-linked. The same CPU-state/offset backe
 
 With the original disc image present, the Linux offset backend decodes movie PCM, skips the intro's configured frame points, detects CD music tracks and reaches initialized ship gameplay. A missing zero-flag producer for absent Smacker audio tracks previously sent a zero sample rate to the audio service; the flag metadata now preserves that producer at the shared branch. The longer movie probe still times out at its final Quit step, which also reproduces on the existing native Linux backend. It does not pass the complete movie acceptance check.
 
-Full-game builds stage `runtime/redguard-native` as a universal executable,
-SDL frameworks and launch instructions. No command launcher,
+Full-game builds stage `runtime/redguard-native` as a universal executable
+and launch instructions. No command launcher,
 original installation, disc image, SDK or compiler belongs in that runtime ZIP.
 The executable discovers an adjacent or remembered owned installation and uses
 macOS's built-in folder picker when necessary. Saves and logs use the user's
 standard directories. See [launch instructions](LAUNCH.md).
 
-After adding complete `LICENSES.txt` notices for Maiko, SR, SDL
+After adding complete `LICENSES.txt` notices for Maiko, SR
 and Rust dependencies, package the runtime with:
 
 ```sh
@@ -52,7 +52,7 @@ cargo run --locked -p maiko-patcher --bin maiko-macos-package -- \
   artifacts/<timestamp>-macos-backend/runtime redguard-macos-runtime.zip
 ```
 
-The packager accepts only the executable, the SDL framework,
+The packager accepts only the executable,
 `README.md` and `LICENSES.txt`. It rejects extra top-level files, game folders,
 disc media and command launchers. Framework symlinks must stay inside the runtime
 directory; the archive preserves them and executable permissions. Original game

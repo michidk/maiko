@@ -172,7 +172,7 @@ def main():
                 run(['docker','cp',name+':/work/movie-pcm-reference.json',str(output/'movie-pcm-reference.json')])
                 report['original_movie_pcm_reference_verified']=True
 
-        report['tool_versions']=subprocess.check_output(['docker','exec',name,'dpkg-query','-W','gcc','g++','nasm','libsdl2-dev','libsdl2-mixer-dev','libssl-dev','mesa-vulkan-drivers'],text=True).splitlines()
+        report['tool_versions']=subprocess.check_output(['docker','exec',name,'dpkg-query','-W','gcc','g++','nasm','libasound2-dev','libudev-dev','libssl-dev','mesa-vulkan-drivers'],text=True).splitlines()
     except Exception:
         report['status']='failed'
         # Preserve the real game boundary even when the menu assertion fails.

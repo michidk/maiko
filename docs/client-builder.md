@@ -33,7 +33,7 @@ maiko-patcher build --input /path/to/RGFX.EXE --target linux \
 
 The local Wasmtime CLI supports Linux and Windows. Use `--target windows` with `maiko-runtime-kit-windows.zip` for Windows x64. For macOS, use the browser or the [local source build](../platforms/macos/README.md). `--wasmtime PATH` selects a local Wasmtime installation. `--v5-fixes` adds the optional [version 5 fixes](playing.md#version-5-fixes); the browser builder offers the same option as a checkbox. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
 
-Extract the generated ZIP into a separate writable folder. Windows users double-click `maiko.exe`; Linux users run `./maiko`. The launcher looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. The Linux package includes SDL2, which the program finds beside itself. It needs a glibc 2.36 or newer desktop with X11/XWayland, an OpenGL driver for the launcher and a Vulkan or OpenGL (EGL) driver for the game. Saves and settings go to the package's `user-data` directory. Startup options such as skipping the intro are set in the launcher's Game Options, or given as command-line options to `redguard-native`; see the README.
+Extract the generated ZIP into a separate writable folder. Windows users double-click `maiko.exe`; Linux users run `./maiko`. The launcher looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. It needs a glibc 2.36 or newer X11 or Wayland desktop with a Vulkan or OpenGL (EGL) driver and the system's ALSA and udev libraries. Saves and settings go to the package's `user-data` directory. Startup options such as skipping the intro are set in the launcher's Game Options, or given as command-line options to `redguard-native`; see the README.
 
 ## Runtime kits
 
@@ -41,11 +41,11 @@ A kit holds everything needed to turn an owned `RGFX.EXE` into the native game, 
 
 - **Compilers**, built for WebAssembly: SR (the static recompiler), NASM and LLVM's LLD linker. The Mac kit adds SR's LLasm output, the browser D compiler, LLVM `opt` and `llc`.
 - **Link inputs**: C runtime start files, system import libraries, the Rust host (which includes the renderer) and SR's heap and audio objects. The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
-- **The packaged runtime**: the launcher, SDL and licence notices.
+- **The packaged runtime**: the launcher and licence notices.
 
 The browser or CLI checks the executable, translates it with SR, assembles the four engine objects with NASM (Mac: compiles them with LLVM for both architectures) and links them with LLD into the program. Browser and CLI produce byte-identical executables. Changed or unrecognized executables fail validation before anything is built.
 
-The Linux kit includes SDL2 2.30.11 and links against glibc 2.36 and the system's ALSA library (`libasound.so.2`). Keep the notices with any redistributed support libraries. Game files and generated playable packages must stay out of release uploads.
+The Linux kit links against glibc 2.36 and the system's ALSA and udev libraries (`libasound.so.2`, `libudev.so.1`). Keep the notices with any redistributed support libraries. Game files and generated playable packages must stay out of release uploads.
 
 ## Build and deploy the site
 
@@ -74,7 +74,7 @@ This writes `maiko-runtime-kit-linux.zip`, `maiko-runtime-kit-windows.zip`, `mai
 
 With `--exe /path/to/RGFX.EXE` (and Wasmtime), the script also builds a package from every kit through the website's real worker under Bun (`tools/browser_build.mjs`) and through the CLI, as a local end-to-end check.
 
-The SDL and notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, checked against that release's `SHA256SUMS`.
+The notice files that have no source in the repository, and the Mac notices (`LICENSES.txt`), are carried forward from the latest release's kits, checked against that release's `SHA256SUMS`.
 
 ## Versioned releases
 

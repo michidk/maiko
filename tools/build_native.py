@@ -12,7 +12,6 @@ import uuid
 import sys
 from .toolchain import IMAGE, ROOT, run, ensure_tool_image, collect_tool_notices, is_mountable, MOUNT_ROOT
 from .sr_heap import stage_sr_heap
-from .windows_sdl import stage_windows_sdl
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime, CRATE_IMPORT_LIBRARIES, crate_import_libraries
 from .gog_install import movie_bundle
 
@@ -69,7 +68,7 @@ def main():
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '600'])
         for file in work.glob('*'):
             if file.suffix in ['.asm','.inc','.h']: run(['docker','cp',str(file),name+':/work/'+file.name])
-        for directory,destination in [(ROOT/'crates/runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support'),(ROOT/'glide','/work')]:
+        for directory,destination in [(ROOT/'crates/runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support')]:
             run(['docker','cp',str(directory)+'/.',name+':'+destination])
         for include in ['extern.inc','macros.inc']:
             run(['docker','cp',str(work/include),name+':/work/'+include])
@@ -80,7 +79,6 @@ def main():
         # The runtime's crates link MinGW import libraries their -sys crates ship.
         for library in crate_import_libraries():
             run(['docker','cp',str(library),name+':/work/'])
-        report['sdl_audio']=stage_windows_sdl(name)
         commands = ('MAIKO_LINK_ONLY=1 ' if a.link_only else '')+"CRATE_LIBRARIES='"+' '.join('-l'+n for n in CRATE_IMPORT_LIBRARIES)+"' sh /work/build_runtime.sh"
         with (work/'native-build.log').open('w') as log:
             run(['docker','exec',name,'timeout','1800' if a.link_only else '360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
@@ -91,7 +89,7 @@ def main():
         report['wine_original_gameplay_function_tests_verified']=True
         report['wine_original_audio_tests_verified']=True
         report['native_setup_build_test_seconds']=round(time.monotonic()-began,3)
-        for filename in ['redguard-native.exe','native.map','native-symbols.txt','libwinpthread-1.dll','SDL2.dll']:
+        for filename in ['redguard-native.exe','native.map','native-symbols.txt','libwinpthread-1.dll']:
             run(['docker','cp',name+':/work/'+filename,str(work/filename)])
         report['native_exe_sha256']=hashlib.sha256((work/'redguard-native.exe').read_bytes()).hexdigest()
         if a.link_only:

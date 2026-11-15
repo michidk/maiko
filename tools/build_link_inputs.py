@@ -13,14 +13,13 @@ import uuid
 
 from .toolchain import ROOT, IMAGE, run, ensure_tool_image
 from .sr_heap import stage_sr_heap
-from .windows_sdl import stage_windows_sdl
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime, CRATE_IMPORT_LIBRARIES, crate_import_libraries
 
 LINUX_IMAGE = 'redguard-recomp-linux:bookworm'
 
 # Mirrors crates/patcher/src/link.rs. LLD's MinGW driver picks the first match per directory in this order.
 WINDOWS_LIBRARIES = sorted(set(
-    'SDL2 stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
+    'opengl32 stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
     'user32 shell32 ole32 mingw32 gcc moldname mingwex msvcrt kernel32 pthread'.split() + CRATE_IMPORT_LIBRARIES))
 WINDOWS = f'''set -e
 cd /work
@@ -30,7 +29,7 @@ cp libmaiko_host.a guest_memory.obj /out/link/
 gcc=/usr/lib/gcc/x86_64-w64-mingw32/12-posix; mingw=/usr/x86_64-w64-mingw32/lib
 cp $mingw/crt2.o $gcc/crtbegin.o $gcc/crtend.o /out/link/
 resolve() {{
-  for directory in /sdl/lib /work $gcc $mingw; do
+  for directory in /work $gcc $mingw; do
     for file in lib$1.dll.a $1.dll.a lib$1.a $1.lib; do
       if [ -f $directory/$file ]; then cp -L $directory/$file /out/link/; return; fi
     done
@@ -53,7 +52,7 @@ for file in /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o /u
     /usr/lib/gcc/x86_64-linux-gnu/12/crtbegin.o /usr/lib/gcc/x86_64-linux-gnu/12/crtend.o /usr/lib/gcc/x86_64-linux-gnu/12/libgcc.a \\
     /lib/x86_64-linux-gnu/libgcc_s.so.1 /lib/x86_64-linux-gnu/libc.so.6 /usr/lib/x86_64-linux-gnu/libc_nonshared.a \\
     /lib64/ld-linux-x86-64.so.2 /lib/x86_64-linux-gnu/libm.so.6 /lib/x86_64-linux-gnu/libstdc++.so.6 \\
-    /usr/lib/x86_64-linux-gnu/libasound.so.2; do
+    /usr/lib/x86_64-linux-gnu/libasound.so.2 /usr/lib/x86_64-linux-gnu/libudev.so.1; do
   cp -L $file /out/link/
 done
 gcc -O2 -s -o /out/runtime/maiko launcher_main.c libmaiko_launcher.a \\
@@ -92,7 +91,6 @@ def main():
                        input=LAUNCHER_MAIN)
         stage_sr_heap(name)
         if windows:
-            stage_windows_sdl(name)
             # The launcher's crates link import libraries that their -sys crates ship for MinGW.
             for library in crate_import_libraries():
                 run(['docker', 'cp', str(library), name + ':/work/'])

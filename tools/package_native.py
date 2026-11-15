@@ -38,9 +38,6 @@ def main():
         parser.error('Executable does not match the observed build')
     if not report.get('wine_original_audio_tests_verified'):
         parser.error('Requires the native sample-audio regression')
-    for project,prefix in [('SDL','SDL2')]:
-        if hashlib.sha256((work/(prefix+'.dll')).read_bytes()).hexdigest()!=report['sdl_audio'][project]['dll_sha256']:
-            parser.error('SDL runtime differs from the observed build')
     args.output.mkdir(parents=True,exist_ok=True)
     destination=args.output/'redguard-native-startup-test.zip'
     notices=sorted((work/'notices').glob('*.txt'))
@@ -50,9 +47,6 @@ def main():
     licence+='\n'
     for notice in notices:
         licence+='===== '+notice.name+' =====\n'+notice.read_text()+'\n\n'
-    for project in ['SDL2']:
-        notice=ROOT/'.cache/sdl-windows'/(project+'-LICENSE.txt')
-        licence+='===== '+project+' =====\n'+notice.read_text()+'\n\n'
     if report.get('rust_runtime'):
         rustc=shutil.which('rustc') or str(Path.home()/'.cargo/bin/rustc')
         sysroot=Path(subprocess.check_output([rustc,'--print','sysroot'],cwd=ROOT,text=True).strip())
@@ -66,7 +60,7 @@ def main():
     shipped=args.output/'.stripped'
     shipped.mkdir(exist_ok=True)
     with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as package:
-        for filename in ['redguard-native.exe','libwinpthread-1.dll','SDL2.dll']:
+        for filename in ['redguard-native.exe','libwinpthread-1.dll']:
             source=work/filename
             if strip:
                 subprocess.run([strip,'-s','-o',str(shipped/filename),str(source)],check=True)

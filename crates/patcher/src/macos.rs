@@ -15,7 +15,7 @@ const OBJECTS: [&str; 11] = [
     "llasm_scas.o",
     "llasm_stos.o",
 ];
-const LIBRARIES: [(&str, &str); 13] = [
+const LIBRARIES: [(&str, &str); 18] = [
     ("System", "/usr/lib/libSystem.B.dylib"),
     (
         "Security",
@@ -55,8 +55,28 @@ const LIBRARIES: [(&str, &str); 13] = [
         "AudioToolbox",
         "/System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox",
     ),
+    // The window and input (winit) and gamepads (gilrs).
+    (
+        "AppKit",
+        "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+    ),
+    (
+        "ApplicationServices",
+        "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
+    ),
+    (
+        "Carbon",
+        "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
+    ),
+    (
+        "CoreVideo",
+        "/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo",
+    ),
+    (
+        "IOKit",
+        "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+    ),
 ];
-const RUNTIME: [&str; 1] = ["Frameworks/SDL2.framework/Versions/A/SDL2"];
 
 fn architecture(arch: &str) -> Result<()> {
     if !ARCHITECTURES.contains(&arch) {
@@ -72,7 +92,6 @@ pub fn linker_inputs(arch: &str) -> Result<Vec<String>> {
         .map(|name| format!("support/link/{arch}/{name}"))
         .collect();
     inputs.push(format!("support/link/{arch}/host.a"));
-    inputs.extend(RUNTIME.iter().map(|name| format!("runtime/{name}")));
     inputs.extend(
         LIBRARIES
             .iter()
