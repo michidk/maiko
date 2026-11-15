@@ -64,15 +64,16 @@ jobs:
             echo '::error::Version tag already exists.'
             exit 1
           fi
-          files='[]'
-          # Every workspace member's manifest, so a new crate is versioned with the others.
+          # Every workspace member's manifest, so a new crate is versioned with the others. Contents go
+          # through files: Cargo.lock in base64 is longer than a command-line argument may be.
           manifests=$(cargo metadata --no-deps --locked --format-version 1 | jq -r --arg root "$PWD/" '.packages[].manifest_path | ltrimstr($root)')
+          : > "$RUNNER_TEMP/files.jsonl"
           for file in Cargo.lock $manifests; do
-            content=$(base64 -w0 "$file")
-            files=$(jq -c --arg path "$file" --arg contents "$content" '. + [{path:$path,contents:$contents}]' <<< "$files")
+            base64 -w0 "$file" > "$RUNNER_TEMP/contents.b64"
+            jq -cn --arg path "$file" --rawfile contents "$RUNNER_TEMP/contents.b64" '{path:$path,contents:$contents}' >> "$RUNNER_TEMP/files.jsonl"
           done
           body=$'Co-authored-by: Michael Lohr <michael@lohr.dev>\nCo-authored-by: Codex <codex@openai.com>'
-          jq -n --arg repository "$GITHUB_REPOSITORY" --arg head "$head" --arg title "chore(release): $tag" --arg body "$body" --argjson additions "$files" \
+          jq -n --arg repository "$GITHUB_REPOSITORY" --arg head "$head" --arg title "chore(release): $tag" --arg body "$body" --slurpfile additions "$RUNNER_TEMP/files.jsonl" \
             '{query:"mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",variables:{input:{branch:{repositoryNameWithOwner:$repository,branchName:"main"},expectedHeadOid:$head,message:{headline:$title,body:$body},fileChanges:{additions:$additions}}}}' > "$RUNNER_TEMP/commit.json"
           oid=$(gh api graphql --input "$RUNNER_TEMP/commit.json" --jq '.data.createCommitOnBranch.commit.oid')
           [[ "$oid" =~ ^[a-f0-9]{40}$ ]]
