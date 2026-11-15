@@ -44,6 +44,15 @@ loc_D7524,16,RET
 # sha256: 0264c2fa6cb654ab416fc87960181d5d7ab098d8c50306a170c1c19d1163025c
 loc_D7589,16,RET
 
+# == Keyboard-controller drain on the Save page
+# Original: loc_3F058F reads the 8042 status port (IN AL,0x64) until the output-buffer bit clears, draining raw keyboard bytes before the Save page takes a name.
+# Replacement: RET in place of its opening PUSHAD.
+# Effect: the routine returns at once; key events keep arriving through the host's keyboard delivery, so the Save page goes on to name entry.
+# Why: a native process has no keyboard controller or port access; the IN instruction stopped the game with a blocked host service when <NEW SAVE GAME> was chosen.
+# Evidence: the routine's only caller is the Save page (loc_B110D); a manual save on Linux reached the blocked service at this site before the change.
+# sha256: 8d33f520a3c4cef80d2453aef81b612bfe1cb44c8b2025630ad38662763f13d3
+loc_3F058F,1,RET
+
 # == VGA mode 13h request
 # Original: PUSHA; INT 10h with AX=0x13 (320x200 VGA mode); POPA.
 # Replacement: host service 20, which creates the native 640x480 window that the original Glide initialization then draws into.
@@ -134,6 +143,48 @@ loc_2418D,8,CALL host_poll_input|cmp word [eax+loc_2055C0],0
 loc_2419C,2,CALL host_poll_input|xor eax,eax
 # sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
 loc_B5833,8,CALL host_poll_input|cmp word [loc_2055C2],0
+# sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
+loc_B0769,8,CALL host_poll_input|cmp word [loc_2055C2],0
+# sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
+loc_B1145,8,CALL host_poll_input|cmp word [loc_2055F8],0
+# sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
+loc_B13E6,8,CALL host_poll_input|cmp word [loc_2055C2],0
+# sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
+loc_B13F0,8,CALL host_poll_input|cmp word [loc_2055F8],0
+# sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
+loc_B19FD,8,CALL host_poll_input|cmp word [loc_2055F8],0
+# sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
+loc_B1A78,8,CALL host_poll_input|cmp word [loc_2055F8],0
+# sha256: 59003b473ded936542904e1f9cc1b4b2c9e11c5cc326f32098840bae1d83b7dc
+loc_B43D7,8,CALL host_poll_input|cmp word [loc_2055F8],0
+# sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
+loc_B43E1,8,CALL host_poll_input|cmp word [loc_2055C2],0
+# sha256: 2ae4f835c954a9eb89db264142786e0993493be52da561bc0137fd6d38e71c61
+loc_B75DB,8,CALL host_poll_input|cmp word [loc_2055C2],0
+# sha256: d9a6fe1789b3f6159580c763c2a94324dcbbe28042dbf504fb44d9f7bf38ea26
+loc_B78E2,8,CALL host_poll_input|cmp word [loc_2055FC],0
+# sha256: 07afa3614870bbe03e6eee74a537b67e877aec406bdf2b35c2cf8cc3c836ed89
+loc_BB498,8,CALL host_poll_input|cmp word [loc_2055EA],0
+# sha256: d9585b14058783abc1da8d85e68f543129697ba2053ed7281cb84acbda18f3c9
+loc_BB4F0,8,CALL host_poll_input|cmp word [loc_2055D6],0
+# sha256: 6747995e3a8a640303c52ee49a894781f387e297b457909234739cc88ff99bbc
+loc_BB59D,8,CALL host_poll_input|cmp word [loc_2055C4],0
+# sha256: 0fc562eb2a3cccc4cdc8ffe8924897ac43ba0ef6ae77dbe6508ad1be7687cebf
+loc_BB616,8,CALL host_poll_input|cmp word [loc_2055C6],0
+# sha256: bb80298a2e3493019880ca089d6530b932670de2035df6c2b8cd60f2494ce8b4
+loc_BB694,8,CALL host_poll_input|cmp word [loc_2055C8],0
+# sha256: 6741c5759d7e98eacfc553ef42fec1905f51075ba3ec5cfadca487813a0360d5
+loc_BB70D,8,CALL host_poll_input|cmp word [loc_2055CA],0
+# sha256: 69e4184ea89bd75abefcf594338a44cc7ddf3c981fab8ccaa5a13359eff2f622
+loc_BB78B,8,CALL host_poll_input|cmp word [loc_2055CC],0
+# sha256: 6e3a7e1b894c67bfc713b01175eab05884c227484bb5a2c9a107a9b10611dbea
+loc_BB804,8,CALL host_poll_input|cmp word [loc_2055CE],0
+# sha256: c95df8903402275a0cbc31648b00d4cf4975193234be245cee61700a311f95e2
+loc_C6207,8,CALL host_poll_input|cmp word [loc_2055FE],0
+# sha256: 1513e4ab05730ba6c8cb60032f5514b45e95d1eea925ae2aa1fa18a48c38d444
+loc_C623A,8,CALL host_poll_input|cmp word [loc_2055EE],0
+# sha256: 1513e4ab05730ba6c8cb60032f5514b45e95d1eea925ae2aa1fa18a48c38d444
+loc_C68BF,8,CALL host_poll_input|cmp word [loc_2055EE],0
 
 # == Object-file buffer check
 # Original: CMP BYTE [EAX],0 tests the first byte of a freshly allocated buffer.
