@@ -288,4 +288,33 @@ mod tests {
                 .contains("Missing rgfx.llasm")
         );
     }
+
+    /// SR rejects a replacement whose tail-called successor has no flags entry ("unknown flags on
+    /// start of region"), and the successor needs an exported label to be reachable.
+    #[test]
+    fn comparison_successors_have_flags_and_labels() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../llasm-metadata/");
+        let read = |name: &str| std::fs::read_to_string(format!("{dir}{name}")).unwrap();
+        let (flags, aliases) = (read("instruction_flags.sci"), read("global_aliases.sci"));
+        let listed =
+            |table: &str, label: &str| table.lines().any(|l| l.starts_with(&format!("{label},")));
+        for line in read("instruction_replacements.sci").lines() {
+            let Some(rest) = line.strip_suffix("|endp") else {
+                continue;
+            };
+            let Some((body, successor)) = rest.rsplit_once("|tcall ") else {
+                continue;
+            };
+            if body.contains("x86_compare") {
+                assert!(
+                    listed(&flags, successor),
+                    "{successor} missing from instruction_flags.sci"
+                );
+                assert!(
+                    listed(&aliases, successor),
+                    "{successor} missing from global_aliases.sci"
+                );
+            }
+        }
+    }
 }

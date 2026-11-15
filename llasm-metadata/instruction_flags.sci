@@ -612,6 +612,27 @@ loc_C7CA3,0,0x3f ; successor consumes flags from byte-checked replacement compar
 loc_24195,0,0x3f ; successor consumes flags from byte-checked replacement comparison
 loc_2419E,0,0x3f ; successor consumes flags from byte-checked replacement comparison
 loc_B583B,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B0771,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B114D,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B13EE,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B13F8,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B1A05,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B1A80,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B43DF,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B43E9,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B75E3,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_B78EA,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB4A0,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB4F8,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB5A5,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB61E,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB69C,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB715,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB793,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_BB80C,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_C620F,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_C6242,0,0x3f ; successor consumes flags from byte-checked replacement comparison
+loc_C68C7,0,0x3f ; successor consumes flags from byte-checked replacement comparison
 loc_117C5E,0,0x3f ; successor consumes flags from byte-checked replacement comparison
 loc_46685,0,0x3f ; successor consumes flags from byte-checked replacement comparison
 loc_5543A,0x8,0 ; variant-aware replacement consumes original CMP equality
