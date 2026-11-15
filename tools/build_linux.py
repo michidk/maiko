@@ -72,7 +72,7 @@ def main():
         # Cargo can wait for another project; do this before the container lease starts.
         rust_runtime=build_rust_runtime('x86_64-unknown-linux-gnu')
         rust_host=build_rust_runtime('x86_64-unknown-linux-gnu',component='host')
-        run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
+        run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2','--name',name,
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '1800' if a.keep_container else '480'])
         if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
         for directory,destination in [('crates/runtime','/work'),('platforms/linux','/work'),('platforms/linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]:

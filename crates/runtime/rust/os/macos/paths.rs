@@ -22,9 +22,6 @@ pub(crate) fn default_game() -> Option<PathBuf> {
     let path = unsafe { crate::os::path_from_c(path.as_ptr()) }.ok()?;
     path.join("RGFX.EXE").is_file().then_some(path)
 }
-pub(crate) fn default_user_directory() -> Option<PathBuf> {
-    state_directory().ok().map(|path| path.join("user-data"))
-}
 pub(crate) fn remember_game(game: &std::path::Path) -> io::Result<()> {
     let directory = state_directory()?;
     std::fs::create_dir_all(&directory)?;

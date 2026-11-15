@@ -111,24 +111,6 @@ impl Selection {
         Ok(result)
     }
 }
-/// Where saves and settings go when the game is started without `--user-dir`: beside the program, or
-/// in the user's data folder when the program sits inside the game folder, where the game's own files
-/// must stay untouched.
-fn default_user_dir(game: &Path) -> io::Result<PathBuf> {
-    let beside = std::env::current_exe()?
-        .parent()
-        .ok_or_else(storage::absent)?
-        .join("user-data");
-    if !beside.starts_with(game) {
-        return Ok(beside);
-    }
-    let data = directories::ProjectDirs::from("", "", "maiko")
-        .map(|dirs| dirs.data_dir().to_path_buf())
-        .ok_or_else(storage::absent)?;
-    // The storage layer creates the saves folder but not the folders above it.
-    std::fs::create_dir_all(&data)?;
-    Ok(data.join("user-data"))
-}
 
 /// Ask the user, then accept the game folder, a folder inside it or the GOG folder around it.
 fn choose() -> io::Result<PathBuf> {
@@ -214,15 +196,8 @@ fn select(selection: Selection) -> io::Result<()> {
             None => choose()?,
         }
     };
-    let user = match (&selection.user, interactive) {
-        (Some(user), _) => Some(user.clone()),
-        (None, true) => {
-            crate::os::default_user_directory().or_else(|| default_user_dir(&game).ok())
-        }
-        (None, false) => crate::os::default_user_directory(),
-    };
-    // Resolve the game root and its case-insensitive asset names before making
-    // it current. Writes remain confined to the independently opened user root.
+    // Resolve the game root and its case-insensitive asset names before making it current. The
+    // game writes its own files there unless `--user-dir` names a separate folder.
     storage::select_game(&game)?;
     let (image, game) = {
         let guard = storage::STORAGE.lock().unwrap_or_else(|e| e.into_inner());
@@ -230,13 +205,13 @@ fn select(selection: Selection) -> io::Result<()> {
         (root.resolved("C:\\RGFX.EXE")?, root.game.path.clone())
     };
     validate(&image)?;
-    if let Some(user) = &user {
-        storage::STORAGE
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .as_mut()
-            .ok_or_else(storage::absent)?
-            .initialize_user(user)?;
+    {
+        let mut guard = storage::STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let root = guard.as_mut().ok_or_else(storage::absent)?;
+        match &selection.user {
+            Some(user) => root.initialize_user(user)?,
+            None => root.use_game_folder()?,
+        }
     }
     if interactive && let Err(error) = crate::locate::remember(&game) {
         rg_log!("Could not remember the game folder: {error}");
@@ -368,16 +343,5 @@ mod tests {
         assert_eq!(selected.load_save, Some(7));
         let selected = Selection::parse(["--texture-filter", "sharp"].map(OsString::from)).unwrap();
         assert_eq!(selected.texture_filter, Some(TEXTURE_SHARP));
-    }
-
-    #[test]
-    fn saves_default_to_a_folder_beside_the_program() {
-        let user = default_user_dir(Path::new("/somewhere/else")).unwrap();
-        assert_eq!(user.file_name().unwrap(), "user-data");
-        assert_eq!(user.parent(), std::env::current_exe().unwrap().parent());
-        // Inside the game folder the saves go to the user's data folder instead.
-        let program = std::env::current_exe().unwrap();
-        let moved = default_user_dir(program.parent().unwrap()).unwrap();
-        assert!(!moved.starts_with(program.parent().unwrap()));
     }
 }

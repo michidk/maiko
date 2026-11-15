@@ -31,8 +31,8 @@ opening the picker. Only recognized original `RGFX.EXE` images are accepted.
 Use `--choose-game-dir` to choose a different installation, or
 `--game-dir /path/to/Redguard` to select one explicitly.
 
-Saves and settings go to `~/Library/Application Support/Maiko/user-data/`,
-separate from the installation. The selected game folder is remembered under
+The game keeps its saves and settings in the game folder, shared with the
+GOG/DOSBox version. The selected game folder is remembered under
 `~/Library/Application Support/Maiko/`. Original disc media is optional; Maiko
 reads `game.gog` and `game.ins` from your installation or its parent when present.
 Do not copy those files into a runtime download.

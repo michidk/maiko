@@ -8,9 +8,6 @@ pub(crate) fn log_directory() -> io::Result<PathBuf> {
 pub(crate) fn default_game() -> Option<PathBuf> {
     None
 }
-pub(crate) fn default_user_directory() -> Option<PathBuf> {
-    None
-}
 pub(crate) fn remember_game(_game: &std::path::Path) -> io::Result<()> {
     Ok(())
 }

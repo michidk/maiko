@@ -215,7 +215,7 @@ fn mix_voices(output: &mut [i16]) {
             let Some(pcm) = voice.pcm.clone() else {
                 continue;
             };
-            // As SDL_mixer was driven: volume 0-128, and a 0-255 gain per side from the pan.
+            // The original's mixer scale: volume 0-128, and a 0-255 gain per side from the pan.
             let volume = (voice.volume * master * 521) >> 16;
             let side = |pan: i32| if pan >= 63 { 255 } else { (pan * 265265) >> 16 };
             let (mut left, mut right) = (side(127 - voice.pan), side(voice.pan));

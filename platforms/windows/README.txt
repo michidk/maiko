@@ -6,7 +6,7 @@ Double-click maiko.exe, the launcher. It looks for your game by itself: the fold
 
 You can also start redguard-native.exe directly. Options such as --fullscreen or --window-size 1600x1200 can be given on a Command Prompt line; the list is in the project README.
 
-Saves and settings go into the user-data folder next to the program; your game folder is never changed.
+The game keeps its saves and settings in the game folder, shared with the GOG/DOSBox version.
 A log of every start is kept under %LOCALAPPDATA%\Maiko\logs. Attach the newest one when you report a problem.
 
 No DOSBox is needed. Reports are welcome at https://github.com/michidk/maiko/issues

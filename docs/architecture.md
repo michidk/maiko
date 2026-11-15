@@ -1,6 +1,6 @@
 # Runtime structure
 
-Maiko provides native Windows and Linux services for an owned Redguard installation. The runtime reads game assets from that installation and stores saves and settings in a separate user directory.
+Maiko provides native Windows and Linux services for an owned Redguard installation. The runtime reads game assets from that installation and, like the original, writes the game's own files (INI files, saves, the logbook and map states) back into it.
 
 ## Rust workspace
 
@@ -16,7 +16,7 @@ Cross-platform Rust crates supply the rest: winit the window, keyboard and mouse
 
 ## Files and storage
 
-The game installation is read-only. `cap-std` confines save and settings writes to the selected user directory. Installed movies can be read from a selected CD image, a GOG installation or supported loose movie files. Music is read from the audio tracks of the GOG disc image (`game.gog` and its `game.ins` cue sheet) by `crates/runtime/rust/redbook.rs`, which implements the `AIL_redbook_*` calls the game uses and mixes the tracks into the audio output. Maiko does not distribute those files.
+Game data is read-only: `cap-std` confines writes to the files the original game writes itself (`*.INI`, `SAVEGAME`, `LOGBOOK.TXT`, `MAPS/*.TSG`), in the game folder or, with `--user-dir`, in a separate folder. Installed movies can be read from a selected CD image, a GOG installation or supported loose movie files. Music is read from the audio tracks of the GOG disc image (`game.gog` and its `game.ins` cue sheet) by `crates/runtime/rust/redbook.rs`, which implements the `AIL_redbook_*` calls the game uses and mixes the tracks into the audio output. Maiko does not distribute those files.
 
 ## Source layout
 

@@ -218,6 +218,19 @@ impl Storage {
             .map(|(_, _, path)| path)
     }
 
+    /// The game writes its own files (INI files, saves, the logbook, map states) into its folder,
+    /// as the original does, so DOSBox and Maiko share them.
+    pub(crate) fn use_game_folder(&mut self) -> io::Result<()> {
+        self.user = Some(Root::open(self.game.path.clone())?);
+        rg_log!(
+            "Game files are written to the game folder: {}",
+            self.game.path.display()
+        );
+        Ok(())
+    }
+
+    /// Writes those files into a separate folder instead (`--user-dir`), seeded from the game's
+    /// own copies the first time.
     pub(crate) fn initialize_user(&mut self, path: &Path) -> io::Result<()> {
         let target = if path.exists() {
             canonical(path)?
@@ -553,6 +566,32 @@ pub unsafe extern "C" fn rg_host_chdir(path: *const c_char) -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn by_default_the_game_writes_its_own_files_in_its_folder() {
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::write(folder.path().join("RGFX.EXE"), "game").unwrap();
+        std::fs::write(folder.path().join("SYSTEM.INI"), "[screen]").unwrap();
+        let mut storage = Storage::select(folder.path()).unwrap();
+        storage.use_game_folder().unwrap();
+        let game = canonical(folder.path()).unwrap();
+        let (_, _, ini) = storage.parent("SYSTEM.INI", true, false).unwrap();
+        assert_eq!(
+            ini,
+            game.join("SYSTEM.INI"),
+            "the game folder's own INI is used"
+        );
+        let (_, _, logbook) = storage.parent("LOGBOOK.TXT", true, true).unwrap();
+        assert_eq!(logbook, game.join("LOGBOOK.TXT"));
+        assert_eq!(
+            storage
+                .parent("RGFX.EXE", true, false)
+                .err()
+                .unwrap()
+                .kind(),
+            io::ErrorKind::PermissionDenied,
+            "game data stays read-only"
+        );
+    }
     #[test]
     fn namespaces_and_parent_traversal_are_shared() {
         for path in [

@@ -222,38 +222,28 @@ impl App {
         }
     }
 
-    fn user_directory(&self) -> Option<PathBuf> {
-        settings::user_directory(&self.program, self.game.as_ref()?).ok()
-    }
-
     fn play(&mut self) {
         let Some(game) = self.game.clone() else {
             return;
         };
         self.play_sound("SCRAPE2");
         let executable = self.program.join(settings::GAME);
-        let result = self
-            .user_directory()
-            .ok_or_else(|| std::io::Error::other("no folder for saves"))
-            .and_then(|user| {
-                let mut command = std::process::Command::new(&executable);
-                command
-                    .args(self.settings.arguments(&game, &user))
-                    .current_dir(&self.program);
-                if let Some(backend) = self.settings.renderer_backend() {
-                    command.env("WGPU_BACKEND", backend);
-                }
-                // The game is a console program; without the setting it runs without a window
-                // for its log (the log file is written either way).
-                #[cfg(windows)]
-                if !self.settings.console {
-                    use std::os::windows::process::CommandExt;
-                    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-                    command.creation_flags(CREATE_NO_WINDOW);
-                }
-                command.spawn()
-            });
-        match result {
+        let mut command = std::process::Command::new(&executable);
+        command
+            .args(self.settings.arguments(&game))
+            .current_dir(&self.program);
+        if let Some(backend) = self.settings.renderer_backend() {
+            command.env("WGPU_BACKEND", backend);
+        }
+        // The game is a console program; without the setting it runs without a window for its
+        // log (the log file is written either way).
+        #[cfg(windows)]
+        if !self.settings.console {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        match command.spawn() {
             Ok(child) => self.game_process = Some(child),
             Err(error) => {
                 self.dialog = Dialog::Error(format!(
@@ -296,7 +286,8 @@ impl App {
         let sources = report::Sources {
             logs: log_folder(),
             game: self.game.as_deref(),
-            user: self.user_directory(),
+            // The game keeps its INI files and saves in its own folder.
+            user: self.game.clone(),
             settings: &self.settings,
         };
         report::create(&self.program, &sources, exit).map_err(|error| error.to_string())

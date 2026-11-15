@@ -1,6 +1,6 @@
 #ifndef RG_INPUT_H
 #define RG_INPUT_H
-#if defined(_WIN32) && !defined(RG_USE_SDL)
+#if defined(_WIN32)
 #include <windows.h>
 typedef HWND RgWindow;
 #else

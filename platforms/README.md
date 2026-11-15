@@ -14,6 +14,6 @@ compiler image defined by `windows/Dockerfile`; it includes the common native
 assembler and compiler tools as well as MinGW and Wine.
 
 Native Rust implementations live under `crates/runtime/rust/os/`. Shared DOS services,
-CPU backend glue, SDL services and renderer bindings remain in `runtime/`.
+CPU backend glue and the Rust host services remain in `crates/runtime/`.
 See [the runtime architecture](../docs/architecture.md) and
 [source checks](../docs/building.md).

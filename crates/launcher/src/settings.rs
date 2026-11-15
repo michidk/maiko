@@ -61,14 +61,10 @@ impl Settings {
             .then_some(self.renderer.as_str())
     }
 
-    /// The game's arguments for `game`, with saves in `user`.
-    pub fn arguments(&self, game: &Path, user: &Path) -> Vec<OsString> {
-        let mut args: Vec<OsString> = vec![
-            "--game-dir".into(),
-            game.into(),
-            "--user-dir".into(),
-            user.into(),
-        ];
+    /// The game's arguments for `game`. The game reads and writes its own files (INI files,
+    /// saves) in that folder, like the original.
+    pub fn arguments(&self, game: &Path) -> Vec<OsString> {
+        let mut args: Vec<OsString> = vec!["--game-dir".into(), game.into()];
         if self.fullscreen {
             args.push("--fullscreen".into());
         } else if parse_size(&self.window_size).is_some() {
@@ -116,28 +112,6 @@ pub fn log_directory() -> std::io::Result<PathBuf> {
     directory.ok_or_else(|| std::io::ErrorKind::NotFound.into())
 }
 
-/// Where saves and settings go: `user-data` beside the program, or, when the program sits inside
-/// the game folder (which is never written), `user-data` in Maiko's data folder.
-pub fn user_directory(program: &Path, game: &Path) -> std::io::Result<PathBuf> {
-    // A downloaded Mac program may run from a read-only, translocated folder; the Mac game keeps
-    // its saves in Application Support (crates/runtime/rust/os/macos/paths.rs).
-    if cfg!(target_os = "macos") {
-        return std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join("Library/Application Support/Maiko/user-data"))
-            .ok_or_else(|| std::io::ErrorKind::NotFound.into());
-    }
-    let beside = program.join("user-data");
-    if !beside.starts_with(game) {
-        return Ok(beside);
-    }
-    let data = directories::ProjectDirs::from("", "", "maiko")
-        .map(|dirs| dirs.data_dir().to_path_buf())
-        .ok_or_else(|| std::io::Error::other("no data folder on this system"))?;
-    // The game's storage layer creates the saves folder but not the folders above it.
-    std::fs::create_dir_all(&data)?;
-    Ok(data.join("user-data"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,24 +120,21 @@ mod tests {
     fn arguments_carry_the_folders_and_chosen_options() {
         let mut settings = Settings::default();
         let args = |s: &Settings| {
-            s.arguments(Path::new("/g"), Path::new("/u"))
+            s.arguments(Path::new("/g"))
                 .into_iter()
                 .map(|a| a.into_string().unwrap())
                 .collect::<Vec<_>>()
                 .join(" ")
         };
-        assert_eq!(args(&settings), "--game-dir /g --user-dir /u");
+        assert_eq!(args(&settings), "--game-dir /g");
         settings.window_size = "1280x960".into();
         settings.skip_intro = true;
         assert_eq!(
             args(&settings),
-            "--game-dir /g --user-dir /u --window-size 1280x960 --skip-intro"
+            "--game-dir /g --window-size 1280x960 --skip-intro"
         );
         settings.fullscreen = true;
-        assert_eq!(
-            args(&settings),
-            "--game-dir /g --user-dir /u --fullscreen --skip-intro"
-        );
+        assert_eq!(args(&settings), "--game-dir /g --fullscreen --skip-intro");
         settings.texture_filter = "sharp".into();
         assert!(args(&settings).ends_with("--skip-intro --texture-filter sharp"));
     }
@@ -199,21 +170,5 @@ mod tests {
         assert!(size("1024x768").window_size_valid());
         assert!(!size("100x100").window_size_valid());
         assert!(!size("big").window_size_valid());
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn saves_stay_out_of_the_game_folder() {
-        let program = Path::new("/somewhere/maiko");
-        assert_eq!(
-            user_directory(program, Path::new("/games/Redguard")).unwrap(),
-            program.join("user-data")
-        );
-        let moved = user_directory(
-            Path::new("/games/Redguard/maiko"),
-            Path::new("/games/Redguard"),
-        )
-        .unwrap();
-        assert!(!moved.starts_with("/games/Redguard"));
     }
 }

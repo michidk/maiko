@@ -71,7 +71,7 @@ with prefix.with_suffix('.log').open('w') as log:
                     window=found.stdout.splitlines()[0]
                     break
                 if process.poll() is not None:raise RuntimeError('Original game stopped before window creation')
-                if time.monotonic()>window_deadline:raise TimeoutError('Native SDL window creation')
+                if time.monotonic()>window_deadline:raise TimeoutError('Native window creation')
                 time.sleep(.1)
             subprocess.run(['xdotool','windowfocus','--sync',window],check=True,timeout=5)
         book=BookMenu(process,root/('native-symbols.txt' if a.wine else 'linux-symbols.txt'))

@@ -21,7 +21,7 @@ redguard-native.exe --fullscreen --skip-intro --load-save 1
 |---|---|
 | `--game-dir FOLDER` | Use `FOLDER`, the one containing `RGFX.EXE`, as the game folder. Nothing is searched, asked or remembered, and a folder that does not hold a recognized game is an error (exit code 1) instead of a question. |
 | `--choose-game-dir` | Ask for the game folder (a folder dialog on Windows, a prompt in the terminal on Linux) instead of using the remembered one. Cannot be combined with `--game-dir`. |
-| `--user-dir FOLDER` | Keep saves and settings in `FOLDER` instead of the `user-data` folder beside the program. |
+| `--user-dir FOLDER` | Keep the game's saves and settings in `FOLDER` instead of the game folder; the first run copies the existing ones there. |
 | `--cd-image PATH` | Where the movies and CD music come from instead of the installed `game.gog` or the Redguard disc: a disc image (`game.gog`, an ISO or a raw 2352-byte `.bin`), its cue sheet (`.cue`, needed for the music; one `.bin` for the disc or one per track), or a folder holding the disc's files and perhaps a rip of it. |
 | `--fullscreen` | Borderless fullscreen at your desktop resolution. |
 | `--window-size WIDTHxHEIGHT` | A window of this size, from 320x240 to 8192x8192, for example `--window-size 1600x1200`. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. Without either window option the window has the game's own size. |
@@ -69,7 +69,9 @@ An installation from the original CD reads the movies from the Redguard disc, as
 
 ## Saves and settings
 
-Saves and settings are kept in a `user-data` folder next to `redguard-native.exe`, separate from the original game. The first time you run, any existing saves and settings from your game folder are copied there once; after that the two stay independent. The game folder is remembered separately, in your user profile (`%APPDATA%\maiko\config\install.json` on Windows, `~/.config/maiko/install.json` on Linux). Delete that file or start with `--choose-game-dir` to pick another. To start fresh, delete `user-data`.
+The game reads and writes its own files in the game folder, exactly like the original: the INI files (`SYSTEM.INI`, `KEYS.INI` and the others), `SAVEGAME`, `LOGBOOK.TXT` and the world states in `MAPS`. The GOG/DOSBox version and Maiko therefore share saves and settings. Game data itself (executables, art, sound) is never written. The game folder must be writable; installations under `Program Files` may need it. Maiko's own data is kept apart: the game folder is remembered in your user profile (`%APPDATA%\maiko\config\install.json` on Windows, `~/.config/maiko/install.json` on Linux). Delete that file or start with `--choose-game-dir` to pick another.
+
+Versions before 1.0 kept saves and settings in a `user-data` folder next to the program. To keep playing those saves, copy `user-data\SAVEGAME` (and any changed INI files) into the game folder.
 
 ## If something goes wrong
 

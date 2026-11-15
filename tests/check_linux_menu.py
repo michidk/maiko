@@ -76,7 +76,7 @@ assert 'BLOCKED' not in text
 assert 'reason=original-dos-termination status=0' in text
 assert 'Native Glide window 1024x768 opened=1' in text
 result=dict(exe_sha256=hashlib.sha256((root/'redguard-native').read_bytes()).hexdigest(),
-            wine_used=False,original_quit_exit=code,keyboard_events='X11 XTest through SDL',
+            wine_used=False,original_quit_exit=code,keyboard_events='X11 XTest through winit',
             menu_navigation_exercised=True,captured_frame_sha256=frame_hashes,
             startup_continue_available=continue_available,
             fresh_start_escape_verified=args.fresh_start,

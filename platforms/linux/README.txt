@@ -8,7 +8,7 @@ The launcher looks for your game by itself: the folder it remembered from an ear
 
 You can also start ./redguard-native directly, with --game-dir /path/to/Redguard and the options listed in the project README.
 
-Saves and settings go into the user-data folder next to the program; your game folder is never changed.
+The game keeps its saves and settings in the game folder, shared with the GOG/DOSBox version.
 A log of every start is kept under ~/.local/state/maiko/logs. Attach the newest one when you report a problem.
 
 No DOSBox is needed. Reports are welcome at https://github.com/michidk/maiko/issues

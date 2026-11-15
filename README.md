@@ -17,7 +17,7 @@ Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the carto
 - **The original launcher**, drawn from your installation's `REDGUARD.EXE`, with options for fullscreen, window size, renderer, textures and skipping movies.
 - **Original sound, CD music and movies** from your GOG `game.gog` or the Redguard disc.
 - **Game controllers** alongside keyboard and mouse.
-- **Finds your game itself** and never modifies it; saves and settings stay in a separate `user-data` folder.
+- **Finds your game itself** and shares its saves and settings with the GOG/DOSBox version: the game reads and writes them in its own folder.
 - **Optional [version 5 fixes](docs/playing.md#version-5-fixes)** from the later build 5.0 executable.
 
 ## Setup

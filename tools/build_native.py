@@ -31,7 +31,7 @@ def main():
     p.add_argument('--gameplay-seconds',type=int,default=30,choices=range(1,181),metavar='1..180')
     p.add_argument('--save-roundtrip',action='store_true',help='Verify original autosave/reload with Wine and isolated user files')
     p.add_argument('--redbook',action='store_true',help='Exercise the original CD-open absence path; CD playback is not implemented')
-    p.add_argument('--sound',action='store_true',help='Enable sample audio through SDL dummy test device')
+    p.add_argument('--sound',action='store_true',help='Enable sample audio (silent without a sound device)')
     p.add_argument('--writable-gameplay',action='store_true',help='Use isolated writable user files in gameplay probes')
     p.add_argument('--world-controls',action='store_true',help='Check original movement/book/Quit on Continue under Wine')
     a = p.parse_args()
@@ -64,7 +64,7 @@ def main():
         # Cargo can wait for another project; do this before the container lease starts.
         rust_runtime=build_rust_runtime('x86_64-pc-windows-gnu')
         rust_host=build_rust_runtime('x86_64-pc-windows-gnu',component='host')
-        run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--env','SDL_AUDIODRIVER=dummy','--name',name,
+        run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--name',name,
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '600'])
         for file in work.glob('*'):
             if file.suffix in ['.asm','.inc','.h']: run(['docker','cp',str(file),name+':/work/'+file.name])

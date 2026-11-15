@@ -151,7 +151,7 @@ fn system(sources: &Sources, exit: Option<&Exit>, log: Option<&Path>, created: &
         path(sources.user.as_deref()),
         path(log),
         match (sources.game, &sources.user) {
-            (Some(game), Some(user)) => sources.settings.arguments(game, user),
+            (Some(game), _) => sources.settings.arguments(game),
             _ => Vec::new(),
         },
     );
@@ -246,7 +246,7 @@ mod tests {
         let (logs, game, user, out) = (
             root.path().join("logs"),
             root.path().join("game"),
-            root.path().join("user"),
+            root.path().join("game"),
             root.path().join("launcher"),
         );
         for directory in [&logs, &game, &out, &user.join("SAVEGAME/SAVEGAME.002")] {

@@ -51,7 +51,7 @@ def main():
     try:
         invocation['toolchain']=ensure_tool_image()
         run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2',
-             '--env','SDL_AUDIODRIVER=dummy','--name',name,
+             '--name',name,
              '--mount',f'type=bind,src={a.install.resolve()},dst=/game,readonly',
              *(['--mount',f'type=bind,src={media},dst=/media/owned CD image.gog,readonly'] if media else []),
              IMAGE,'sleep','240'])

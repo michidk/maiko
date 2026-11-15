@@ -9,7 +9,7 @@ command=['/usr/lib/wine/wine64','original-close-test.exe'] if a.wine else ['./or
 for mode,status,line in [('--close',0,'PASS native close ran exit cleanup'),
                          ('--exit',7,'PASS native DOS exit runs host cleanup')]:
     result=subprocess.run(command+[mode],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,
-                          env=dict(os.environ,WINEDEBUG='-all',WINEPREFIX='/tmp/rg-wine',SDL_AUDIODRIVER='dummy'),timeout=15)
+                          env=dict(os.environ,WINEDEBUG='-all',WINEPREFIX='/tmp/rg-wine'),timeout=15)
     print(result.stdout,flush=True)
     assert result.returncode==status,(mode,result.returncode)
     assert line in result.stdout

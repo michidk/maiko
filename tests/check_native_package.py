@@ -75,7 +75,7 @@ user_argument=r'Z:\work\extracted native test\user-data'
 program=['/usr/lib/wine/wine64',str(root/'redguard-native.exe')]
 explicit=program+['--game-dir',game_argument,'--user-dir',user_argument]
 environment=dict(os.environ,WINEDEBUG='-all',WINEPREFIX='/tmp/rg-package-wine',
-                 LIBGL_ALWAYS_SOFTWARE='1',SDL_AUDIODRIVER='dummy',RG_CAPTURE_DIR='Z:\\work')
+                 LIBGL_ALWAYS_SOFTWARE='1',RG_CAPTURE_DIR='Z:\\work')
 with (root/'native-test.log').open('w') as output:
     process=subprocess.Popen(explicit,cwd=root,env=environment,stdin=subprocess.DEVNULL,
                              stdout=output,stderr=subprocess.STDOUT,text=True)

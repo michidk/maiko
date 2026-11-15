@@ -212,7 +212,7 @@ impl Kit {
                 return Err(format!("Missing runtime package file {name}"));
             }
         }
-        // Packages hold only regular files; links were for the SDL framework, which is gone.
+        // Packages hold only regular files.
         if !manifest.package_links.is_empty() {
             return Err("Runtime kit lists package links".into());
         }

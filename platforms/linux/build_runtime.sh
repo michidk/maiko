@@ -4,7 +4,7 @@ ulimit -c 0
 cd /work
 nasm -O1 -f elf64 -I/support/ rgfx.asm -o rgfx.o
 nasm -f elf64 -I/support/ native_entry.asm -o entry.o
-cc='gcc -Wall -Wextra -Werror -O2 -I/work -I/linux -DRG_USE_SDL'
+cc='gcc -Wall -Wextra -Werror -O2 -I/work -I/linux'
 # System libraries the Rust runtime's crates link: ALSA (cpal) and udev (gilrs).
 native_libs='-lasound -ludev'
 nasm -f elf64 main.asm -o main.o

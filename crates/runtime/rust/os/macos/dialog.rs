@@ -1,4 +1,4 @@
-//! macOS's built-in folder picker, launched before SDL initializes.
+//! macOS's built-in folder picker, launched before the game window opens.
 use crate::rg_log;
 use std::ffi::{c_char, c_int};
 pub(crate) unsafe fn choose_game_directory(path: *mut c_char, capacity: usize) -> c_int {

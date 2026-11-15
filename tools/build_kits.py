@@ -50,7 +50,7 @@ def sha256(data):
 
 
 def fetch_seed(target):
-    """The curated SDL and notice files have no source here; they come from the latest release's kit."""
+    """The curated notice files have no source here; they come from the latest release's kit."""
     def download(name):
         with urllib.request.urlopen(f'{RELEASE}/{name}', timeout=300) as response:
             return response.read()

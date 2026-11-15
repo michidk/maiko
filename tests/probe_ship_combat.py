@@ -1,6 +1,6 @@
 """Fight the original ship encounter using keyboard input and observe island arrival.
 
-Run inside the SDL test container under Xvfb, with a disposable game scenario
+Run inside the Linux test container under Xvfb, with a disposable game scenario
 without an autosave and a separate writable user directory. No guest memory is
 written. This is a bounded encounter check, not full-game acceptance.
 """
@@ -127,7 +127,7 @@ def main():
         try:
             window_deadline = time.monotonic() + 30
             while time.monotonic() < window_deadline:
-                require(process.poll() is None, 'Original game stopped before its SDL window')
+                require(process.poll() is None, 'Original game stopped before its window')
                 found = subprocess.run(
                     ['xdotool', 'search', '--name', '^Maiko$'],
                     capture_output=True, text=True, timeout=5,
@@ -138,7 +138,7 @@ def main():
                     break
                 time.sleep(.1)
             else:
-                raise TimeoutError('Original SDL window')
+                raise TimeoutError('Original window')
             book = BookMenu(process, root / 'linux-symbols.txt')
             book.wait_ready(timeout=40)
             report['startup_book_before_input_verified'] = True
