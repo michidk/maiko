@@ -16,6 +16,7 @@ use std::time::Instant;
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
+const PROJECT: &str = "https://github.com/michidk/maiko";
 const ISSUES: &str = "https://github.com/michidk/maiko/issues";
 const BETHESDA: &str = "https://bethesda.net/";
 
@@ -372,6 +373,20 @@ impl App {
                         }
                     });
                 }
+                // Maiko's own mark in the corner the original art leaves to the map.
+                let text = format!("Maiko {} · github.com/michidk/maiko", env!("CARGO_PKG_VERSION"));
+                let galley = ui.painter().layout_no_wrap(text, egui::FontId::proportional(12.0), PARCHMENT);
+                let rect = Rect::from_min_size(Pos2::new(10.0, HEIGHT as f32 - 28.0), galley.size() + Vec2::new(14.0, 8.0));
+                let link = ui.interact(rect, ui.id().with("project"), if modal { Sense::hover() } else { Sense::click() });
+                let hover = !modal && link.hovered();
+                ui.painter().rect(rect, 4.0, Color32::from_black_alpha(if hover { 200 } else { 150 }), egui::Stroke::new(1.0, if hover { GOLD } else { GOLD_DIM }), egui::StrokeKind::Inside);
+                ui.painter().galley(rect.min + Vec2::new(7.0, 4.0), galley, PARCHMENT);
+                if hover {
+                    context.set_cursor_icon(egui::CursorIcon::PointingHand);
+                }
+                if link.clicked() {
+                    let _ = open(PROJECT.as_ref());
+                }
                 if modal {
                     ui.painter().rect_filled(ui.max_rect(), 0.0, Color32::from_black_alpha(150));
                 }
@@ -554,6 +569,9 @@ impl App {
                     footer(ui, |ui| {
                         if secondary(ui, "Close").clicked() {
                             close = true;
+                        }
+                        if secondary(ui, "Maiko on GitHub").clicked() {
+                            let _ = open(PROJECT.as_ref());
                         }
                         if primary(ui, "Create report").clicked() {
                             make_report = true;
