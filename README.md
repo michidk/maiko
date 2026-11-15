@@ -80,7 +80,7 @@ Nothing is copied into or changed in your game folder. The controls are the orig
 
 ### Fullscreen and window size
 
-By default the game opens in a window at its own size. Change that in the launcher's **Game Options**, or with `--fullscreen` and `--window-size` when starting `redguard-native` directly; see [Command-line options](#command-line-options).
+By default the game opens in a window at its own size. Change that in the launcher's **Game Options**, or with `--fullscreen` and `--window-size` when starting `redguard-native` directly; see [Command-line options](#command-line-options). You can resize the window by dragging its edges; the picture scales to fit and keeps its shape, with black bars where the shapes differ.
 
 ### Game controllers
 

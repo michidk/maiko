@@ -1,84 +1,13 @@
-Patch: OpenGLide-ng 64-bit, read-only-install, per-pixel fog, alpha-texture and LFB fog fixes
+Patch: OpenGLide-ng 64-bit, read-only-install, per-pixel fog, alpha-texture LFB fog fixes and offscreen-frame hooks
 Upstream: https://github.com/eugenenuke/openglide-ng at the commit named by BACKEND in tools/package_native.py; applied by tools/build_glide.py and tools/build_linux.py.
-Original: FindConfig reads its configuration file without checking that it opened; GetOptions writes OpenGLid.ini unchecked and recurses if it cannot remove a bad file; RDTSC reads the timestamp counter with the 32-bit "=A" constraint, which is wrong on x86-64. OGLFogDistance rounds depth up to the next fog-table entry, so small camera or water-vertex movements abruptly change a whole triangle's fog density. ConvertA8toAP88 also copies opacity into luminance, making translucent alpha-only texels dark. Fog density is computed at the three vertices of a triangle and interpolated, but Glide looks it up per pixel from the pixel's own depth, so fog on large triangles steps and swims as the camera moves. grLfbUnlock draws written pixels as a quad with GL_FOG still enabled, so the quad takes the fog coordinate left by the last triangle.
-Replacement: FindConfig returns when the file is missing; GetOptions logs "Cannot write wrapper configuration; using defaults" and returns, and only recurses if the bad file was removed; RDTSC assembles the 64-bit value from EAX and EDX. OGLFogDistance interpolates adjacent densities in reciprocal depth and retains endpoint clamping. Alpha-only conversion keeps full luminance while preserving the supplied opacity. When ARB multitexture (three units) and texture_env_combine are available, a third texture unit looks the density up per pixel: the fog coordinate array carries 1/w (linear across a screen-space triangle) and a 16384-texel 1D alpha texture holds the table for depths from 4 up, piecewise linear in 1/w; a combine stage mixes the fog colour in. The table texture is rebuilt when the game sets a new table, and queued triangles are flushed first. RG_VERTEX_FOG=1 or missing extensions keep the per-vertex path. grLfbUnlock disables GL_FOG for writes that bypass the pixel pipeline.
-Effect: the renderer starts when the game directory is read-only (the native build mounts it read-only), its timing counter is correct on 64-bit, and distant fog no longer jumps at table boundaries. Fog remains calculated per vertex; this does not implement the original hardware's per-pixel fog or dithering. Alpha-only sprites retain their tint through translucent and bilinear-filtered edges instead of developing dark halos. Full-screen LFB pictures (world loading screens, the background behind letters) keep their colours instead of turning into the fog colour.
+Original: FindConfig reads its configuration file without checking that it opened; GetOptions writes OpenGLid.ini unchecked and recurses if it cannot remove a bad file; RDTSC reads the timestamp counter with the 32-bit "=A" constraint, which is wrong on x86-64. OGLFogDistance rounds depth up to the next fog-table entry, so small camera or water-vertex movements abruptly change a whole triangle's fog density. ConvertA8toAP88 also copies opacity into luminance, making translucent alpha-only texels dark. Fog density is computed at the three vertices of a triangle and interpolated, but Glide looks it up per pixel from the pixel's own depth, so fog on large triangles steps and swims as the camera moves. grLfbUnlock draws written pixels as a quad with GL_FOG still enabled, so the quad takes the fog coordinate left by the last triangle. Draws and reads always target the window's front or back buffer.
+Replacement: FindConfig returns when the file is missing; GetOptions logs "Cannot write wrapper configuration; using defaults" and returns, and only recurses if the bad file was removed; RDTSC assembles the 64-bit value from EAX and EDX. OGLFogDistance interpolates adjacent densities in reciprocal depth and retains endpoint clamping. Alpha-only conversion keeps full luminance while preserving the supplied opacity. When ARB multitexture (three units) and texture_env_combine are available, a third texture unit looks the density up per pixel: the fog coordinate array carries 1/w (linear across a screen-space triangle) and a 16384-texel 1D alpha texture holds the table for depths from 4 up, piecewise linear in 1/w; a combine stage mixes the fog colour in. The table texture is rebuilt when the game sets a new table, and queued triangles are flushed first. RG_VERTEX_FOG=1 or missing extensions keep the per-vertex path. grLfbUnlock disables GL_FOG for writes that bypass the pixel pipeline. While RgOffscreenFbo is set (by the SDL window, openglide-sdl-window.patch), glDrawBuffer and glReadBuffer select its colour attachment instead; RgOffscreenActive and RgSetPresentHook are exported for the host.
+Effect: the renderer starts when the game directory is read-only (the native build mounts it read-only), its timing counter is correct on 64-bit, and distant fog no longer jumps at table boundaries. Fog remains calculated per vertex; this does not implement the original hardware's per-pixel fog or dithering. Alpha-only sprites retain their tint through translucent and bilinear-filtered edges instead of developing dark halos. Full-screen LFB pictures (world loading screens, the background behind letters) keep their colours instead of turning into the fog colour. The game can render into an offscreen frame that the window scales to any size.
 Why: the game is run from an unmodified, possibly read-only installation, and the build is 64-bit. Glide interpolates fog in reciprocal depth; stepping between table entries produces moving dark bands on the opening ship's water. The sun uses an alpha-only texture with a constant tint and source-alpha blending; opacity must not also dim its RGB.
 Evidence: tests/backend_smoke.cpp checks rendered white triangles against black fog across the distant-water thresholds, at an interior depth, with falling densities and outside the table range. Before the fog fix, moving from depth 2730.650 to 2730.680 changed the captured red channel from 115 to 57. The opening-ship band persists with waves frozen or flattened and disappears with fog disabled in native Linux software-GL probes; this is not hardware or real-Windows acceptance. The Glide window checks exercise startup in Linux and Wine. The alpha-only framebuffer regression blends several opacities and a bilinear transparent/opaque boundary over white and black, checking both brightness and preserved opacity; before correction opacity 64 darkened red from 255 to 205. check_per_pixel_fog in tests/backend_smoke.cpp draws one triangle whose vertices differ widely in depth and compares pixels against the table at each pixel's own depth. check_lfb_write_unfogged writes white pixels after a fully fogged triangle and requires them to read back white; without the fix the world loading screen showed only the fog colour.
 
-diff --git a/GLutil.cpp b/GLutil.cpp
-index 8cef475..e009e09 100644
---- a/GLutil.cpp
-+++ b/GLutil.cpp
-@@ -232,6 +232,7 @@ static char * FindConfig( const char *IniFile, const char *IniConfig )
- 
-     Find = NULL;
-     file = fopen( IniFile, "r" );
-+    if (!file) return NULL;
- 
-     while ( fgets( Buffer1, 255, file ) != NULL )
-     {
-@@ -297,6 +298,10 @@ void GetOptions( void )
-     if ( access( Path, 0 ) == -1 )
-     {
-         IniFile = fopen( Path, "w" );
-+        if (!IniFile) {
-+            GlideMsg("Cannot write wrapper configuration; using defaults\n");
-+            return;
-+        }
-         fprintf( IniFile, "Configuration File for OpenGLide\n\n" );
-         fprintf( IniFile, "Info:\n" );
-         fprintf( IniFile, "Priority goes from 0(HIGH) to 5(IDLE)\n" );
-@@ -372,8 +377,7 @@ void GetOptions( void )
-         }
-         else
-         {
--            remove( Path );
--            GetOptions( );
-+            if (remove( Path ) == 0) GetOptions( );
-         }
-     }
- }
-diff --git a/GlOgl.h b/GlOgl.h
-index 1185a91..dd50b57 100644
---- a/GlOgl.h
-+++ b/GlOgl.h
-@@ -50,7 +50,7 @@
- #endif
- 
- #ifdef __GNUC__
--#define RDTSC(v)    asm volatile ("rdtsc;" : "=A" (v) )
-+#define RDTSC(v) do { unsigned lo, hi; asm volatile ("rdtsc" : "=a" (lo), "=d" (hi)); (v) = ((FxU64)hi << 32) | lo; } while (0)
- #endif
- 
- #define ERRORFILE               "OpenGLid.err"
-diff --git a/OGLFogTables.cpp b/OGLFogTables.cpp
---- a/OGLFogTables.cpp
-+++ b/OGLFogTables.cpp
-@@ -25,6 +25,18 @@
- {
--    int i;
--    for (i = 0; ((i < GR_FOG_TABLE_SIZE) && (tableIndexToW[i] < w)); i++);
--    i = (i == GR_FOG_TABLE_SIZE)? (GR_FOG_TABLE_SIZE - 1):i;
--    return Glide.FogTable[i] * D1OVER255;
-+    int upper;
-+    for (upper = 0; upper < GR_FOG_TABLE_SIZE && tableIndexToW[upper] < w; ++upper);
-+    if (upper == 0)
-+        return Glide.FogTable[0] * D1OVER255;
-+    if (upper == GR_FOG_TABLE_SIZE)
-+        return Glide.FogTable[GR_FOG_TABLE_SIZE - 1] * D1OVER255;
-+
-+    // Glide's fog-table fraction is linear in reciprocal depth, not distance.
-+    // Looking up only the next entry makes water triangles pop as they move.
-+    const int lower = upper - 1;
-+    const float nearReciprocal = 1.0f / tableIndexToW[lower];
-+    const float farReciprocal = 1.0f / tableIndexToW[upper];
-+    const float fraction = (nearReciprocal - 1.0f / w) /
-+                           (nearReciprocal - farReciprocal);
-+    return (Glide.FogTable[lower] +
-+            fraction * (Glide.FogTable[upper] - Glide.FogTable[lower])) * D1OVER255;
- }
 diff --git a/FormatConversion.cpp b/FormatConversion.cpp
+index a020a75..75a46c4 100644
 --- a/FormatConversion.cpp
 +++ b/FormatConversion.cpp
 @@ -107,11 +107,7 @@ void ConvertA8toAP88( FxU8 *Buffer1, FxU16 *Buffer2, FxU32 Pixels )
@@ -355,6 +284,139 @@ index 02f15f8..34b7b87 100644
  
  // Prototypes for the color combining
  float AlphaFactorZero( float LocalAlpha, float OtherAlpha );
+diff --git a/GLutil.cpp b/GLutil.cpp
+index 8cef475..e009e09 100644
+--- a/GLutil.cpp
++++ b/GLutil.cpp
+@@ -232,6 +232,7 @@ static char * FindConfig( const char *IniFile, const char *IniConfig )
+ 
+     Find = NULL;
+     file = fopen( IniFile, "r" );
++    if (!file) return NULL;
+ 
+     while ( fgets( Buffer1, 255, file ) != NULL )
+     {
+@@ -297,6 +298,10 @@ void GetOptions( void )
+     if ( access( Path, 0 ) == -1 )
+     {
+         IniFile = fopen( Path, "w" );
++        if (!IniFile) {
++            GlideMsg("Cannot write wrapper configuration; using defaults\n");
++            return;
++        }
+         fprintf( IniFile, "Configuration File for OpenGLide\n\n" );
+         fprintf( IniFile, "Info:\n" );
+         fprintf( IniFile, "Priority goes from 0(HIGH) to 5(IDLE)\n" );
+@@ -372,8 +377,7 @@ void GetOptions( void )
+         }
+         else
+         {
+-            remove( Path );
+-            GetOptions( );
++            if (remove( Path ) == 0) GetOptions( );
+         }
+     }
+ }
+diff --git a/GlOgl.h b/GlOgl.h
+index 1185a91..b9ccdd7 100644
+--- a/GlOgl.h
++++ b/GlOgl.h
+@@ -50,7 +50,7 @@
+ #endif
+ 
+ #ifdef __GNUC__
+-#define RDTSC(v)    asm volatile ("rdtsc;" : "=A" (v) )
++#define RDTSC(v) do { unsigned lo, hi; asm volatile ("rdtsc" : "=a" (lo), "=d" (hi)); (v) = ((FxU64)hi << 32) | lo; } while (0)
+ #endif
+ 
+ #define ERRORFILE               "OpenGLid.err"
+@@ -300,6 +300,12 @@ extern ConfigStruct         UserConfig;
+ extern ConfigStruct         InternalConfig;
+ extern GLIDEERRORFUNCTION   ExternErrorFunction;
+ 
++// Offscreen frame for a resizable window (created by platform/sdl/window.cpp). While it exists
++// every draw and read goes to its colour attachment instead of the window's front or back buffer.
++extern GLuint               RgOffscreenFbo;
++extern void              (*RgPresentHook)( void );
++#define RG_COLOR_BUFFER(b)  ( RgOffscreenFbo ? 0x8CE0 /* GL_COLOR_ATTACHMENT0 */ : (GLenum)(b) )
++
+ #ifdef OGL_DEBUG
+     // Profiling variables
+     extern FxI64            InitialTick;
+diff --git a/Glide.cpp b/Glide.cpp
+index fd8af0f..c12ac26 100644
+--- a/Glide.cpp
++++ b/Glide.cpp
+@@ -41,6 +41,26 @@ const char * OpenGLideVersion = "0.09rc9";
+ // Main Structs
+ GlideStruct     Glide;
+ OpenGLStruct    OpenGL;
++#ifdef _WIN32
++#define RG_EXPORT extern "C" __declspec(dllexport)
++#else
++#define RG_EXPORT extern "C" __attribute__((visibility("default")))
++#endif
++GLuint          RgOffscreenFbo = 0;
++void          (*RgPresentHook)( void ) = NULL;
++
++// Whether the game draws offscreen and is scaled into a window of any size.
++RG_EXPORT int RgOffscreenActive( void )
++{
++    return RgOffscreenFbo != 0;
++}
++
++// Called after the frame has been scaled into the window, before it is shown, with the window's
++// framebuffer bound and the viewport covering it.
++RG_EXPORT void RgSetPresentHook( void ( *hook )( void ) )
++{
++    RgPresentHook = hook;
++}
+ 
+ // Classes
+ PGTexture       *Textures;
+diff --git a/OGLFogTables.cpp b/OGLFogTables.cpp
+index d351130..8024659 100644
+--- a/OGLFogTables.cpp
++++ b/OGLFogTables.cpp
+@@ -23,9 +23,21 @@ float tableIndexToW[ GR_FOG_TABLE_SIZE ] =
+ 
+ float OGLFogDistance(const float w)
+ {
+-    int i;
+-    for (i = 0; ((i < GR_FOG_TABLE_SIZE) && (tableIndexToW[i] < w)); i++);
+-    i = (i == GR_FOG_TABLE_SIZE)? (GR_FOG_TABLE_SIZE - 1):i;
+-    return Glide.FogTable[i] * D1OVER255;
++    int upper;
++    for (upper = 0; upper < GR_FOG_TABLE_SIZE && tableIndexToW[upper] < w; ++upper);
++    if (upper == 0)
++        return Glide.FogTable[0] * D1OVER255;
++    if (upper == GR_FOG_TABLE_SIZE)
++        return Glide.FogTable[GR_FOG_TABLE_SIZE - 1] * D1OVER255;
++
++    // Glide's fog-table fraction is linear in reciprocal depth, not distance.
++    // Looking up only the next entry makes water triangles pop as they move.
++    const int lower = upper - 1;
++    const float nearReciprocal = 1.0f / tableIndexToW[lower];
++    const float farReciprocal = 1.0f / tableIndexToW[upper];
++    const float fraction = (nearReciprocal - 1.0f / w) /
++                           (nearReciprocal - farReciprocal);
++    return (Glide.FogTable[lower] +
++            fraction * (Glide.FogTable[upper] - Glide.FogTable[lower])) * D1OVER255;
+ }
+ 
+diff --git a/grguBuffer.cpp b/grguBuffer.cpp
+index 08b7a73..bee8587 100644
+--- a/grguBuffer.cpp
++++ b/grguBuffer.cpp
+@@ -159,7 +159,7 @@ grRenderBuffer( GrBuffer_t dwBuffer )
+     // Valid parameters are only FRONT and BACK ( 0x0 and 0x1 )
+     OpenGL.RenderBuffer = GL_FRONT + dwBuffer;
+ 
+-    glDrawBuffer( OpenGL.RenderBuffer );
++    glDrawBuffer( RG_COLOR_BUFFER( OpenGL.RenderBuffer ) );
+ 
+ #ifdef OPENGL_DEBUG
+     GLErro( "grRenderBuffer" );
 diff --git a/grguFog.cpp b/grguFog.cpp
 index 725ea9b..c88ae31 100644
 --- a/grguFog.cpp
@@ -370,9 +432,20 @@ index 725ea9b..c88ae31 100644
      }
  }
 diff --git a/grguLfb.cpp b/grguLfb.cpp
-index eb359c6..e5699e2 100644
+index eb359c6..cb7a9e7 100644
 --- a/grguLfb.cpp
 +++ b/grguLfb.cpp
+@@ -55,8 +55,8 @@ grLfbLock( GrLock_t dwType,
+     {
+         FxU32 j;
+ 
+-        glReadBuffer( dwBuffer == GR_BUFFER_BACKBUFFER
+-                      ? GL_BACK : GL_FRONT );
++        glReadBuffer( RG_COLOR_BUFFER( dwBuffer == GR_BUFFER_BACKBUFFER
++                      ? GL_BACK : GL_FRONT ) );
+ 
+         if ((dwBuffer & 0xFEU) == 0)
+         {   /* FRONT/BACK read-back */
 @@ -317,9 +317,13 @@ grLfbUnlock( GrLock_t dwType, GrBuffer_t dwBuffer )
              FxU32 ysize = maxy - miny;
  
@@ -388,3 +461,23 @@ index eb359c6..e5699e2 100644
              glEnable( GL_TEXTURE_2D );
  
              if ( Glide.DstBuffer.PixelPipeline )
+@@ -337,8 +341,8 @@ grLfbUnlock( GrLock_t dwType, GrBuffer_t dwBuffer )
+ 
+             glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+             glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
+-            glDrawBuffer( Glide.DstBuffer.Buffer == GR_BUFFER_BACKBUFFER
+-                        ? GL_BACK : GL_FRONT );
++            glDrawBuffer( RG_COLOR_BUFFER( Glide.DstBuffer.Buffer == GR_BUFFER_BACKBUFFER
++                        ? GL_BACK : GL_FRONT ) );
+ 
+             glBegin( GL_QUADS );
+                 glColor3f( 1.0f, 1.0f, 1.0f );
+@@ -357,7 +361,7 @@ grLfbUnlock( GrLock_t dwType, GrBuffer_t dwBuffer )
+             glEnd( );
+ 
+             glPopAttrib( );
+-            glDrawBuffer( OpenGL.RenderBuffer );
++            glDrawBuffer( RG_COLOR_BUFFER( OpenGL.RenderBuffer ) );
+ 
+             if ( Glide.DstBuffer.Buffer != GR_BUFFER_BACKBUFFER )
+             {

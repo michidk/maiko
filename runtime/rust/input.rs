@@ -369,10 +369,15 @@ impl Input {
                     if let Some(window) = &self.window {
                         let (width, height) = window.size();
                         if self.focused && width != 0 && height != 0 {
-                            let nx =
-                                (i64::from(x) * i64::from(self.width) / i64::from(width)) as i32;
-                            let ny =
-                                (i64::from(y) * i64::from(self.height) / i64::from(height)) as i32;
+                            let (px, py, pw, ph) =
+                                picture((width, height), (self.width, self.height));
+                            let game = |at: i32, start: i64, size: i64, units: u32| {
+                                ((i64::from(at) - start) * i64::from(units) / size)
+                                    .clamp(0, i64::from(units) - 1)
+                                    as i32
+                            };
+                            let nx = game(x, px, pw, self.width);
+                            let ny = game(y, py, ph, self.height);
                             if self.known {
                                 self.dx = self.dx.wrapping_add(nx.wrapping_sub(self.x));
                                 self.dy = self.dy.wrapping_add(ny.wrapping_sub(self.y));
@@ -448,6 +453,33 @@ pub extern "C" fn rg_input_window(width: u32, height: u32) -> *mut c_void {
     })
 }
 
+/// Where the game picture sits in a window of `window` points: as large as fits, centred, at the
+/// game's aspect, as the renderer scales it. Returns x, y, width, height.
+fn picture(window: (u32, u32), game: (u32, u32)) -> (i64, i64, i64, i64) {
+    let (w, h) = (i64::from(window.0), i64::from(window.1));
+    let (gw, gh) = (i64::from(game.0.max(1)), i64::from(game.1.max(1)));
+    let (mut pw, mut ph) = (w, w * gh / gw);
+    if ph > h {
+        ph = h;
+        pw = h * gw / gh;
+    }
+    ((w - pw) / 2, (h - ph) / 2, pw.max(1), ph.max(1))
+}
+
+/// Let the player resize the game window (not in fullscreen).
+pub fn set_resizable(resizable: bool) {
+    INPUT.with(|input| {
+        if let Some(window) = &mut input.borrow_mut().window
+            && !DISPLAY.lock().unwrap_or_else(|e| e.into_inner()).0
+        {
+            window.set_resizable(resizable);
+            if resizable {
+                let _ = window.set_minimum_size(320, 240);
+            }
+        }
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_input_pump() -> c_int {
     INPUT.with(|input| input.borrow_mut().pump()) as c_int
@@ -516,15 +548,16 @@ pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
                 }
                 input.x = i32::from(regs[2] as u16) / 2;
                 input.y = i32::from(regs[3] as u16);
-                let (width, height) = input.window.as_ref().unwrap().size();
+                let size = input.window.as_ref().unwrap().size();
+                let (px, py, pw, ph) = picture(size, (input.width, input.height));
                 if input.focused
                     && !overlay::is_open()
                     && let Some(sdl) = &input.sdl
                 {
                     sdl.mouse().warp_mouse_in_window(
                         input.window.as_ref().unwrap(),
-                        (i64::from(input.x) * i64::from(width) / i64::from(input.width)) as i32,
-                        (i64::from(input.y) * i64::from(height) / i64::from(input.height)) as i32,
+                        (px + i64::from(input.x) * pw / i64::from(input.width.max(1))) as i32,
+                        (py + i64::from(input.y) * ph / i64::from(input.height.max(1))) as i32,
                     );
                 }
                 input.dx = 0;
@@ -562,6 +595,13 @@ mod tests {
         assert!(!x11_fallback(true, ""));
         assert!(!x11_fallback(true, "X11"));
         assert!(!x11_fallback(false, "wayland"));
+    }
+
+    #[test]
+    fn the_picture_keeps_its_aspect_centred_in_any_window() {
+        assert_eq!(picture((640, 480), (640, 480)), (0, 0, 640, 480));
+        assert_eq!(picture((1920, 1080), (640, 480)), (240, 0, 1440, 1080));
+        assert_eq!(picture((800, 1000), (640, 480)), (0, 200, 800, 600));
     }
 
     #[test]

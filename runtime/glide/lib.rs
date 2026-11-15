@@ -107,7 +107,17 @@ impl Default for Bridge {
     }
 }
 thread_local! {static BRIDGE:RefCell<Bridge>=RefCell::new(Bridge::default());}
+/// Draws the overlay at window size over the scaled frame.
+unsafe extern "C" fn present_overlay() {
+    if overlay::is_open() {
+        draw_overlay();
+    }
+}
 unsafe extern "C" {
+    /// OpenGLide (openglide-sdl-window.patch): the game draws offscreen and is scaled into a
+    /// window of any size; the hook runs after scaling, before the frame is shown.
+    fn RgOffscreenActive() -> c_int;
+    fn RgSetPresentHook(hook: Option<unsafe extern "C" fn()>);
     fn grBufferSwap(interval: u32);
     fn grSstIdle();
     fn grSstQueryHardware(info: *mut c_void) -> u32;
@@ -365,6 +375,12 @@ impl Bridge {
                     }
                     f.eax =
                         grSstWinOpen(window as usize, a[1], a[2], a[3], a[4], a[5], a[6]).into();
+                    let offscreen = RgOffscreenActive() != 0;
+                    if offscreen {
+                        RgSetPresentHook(Some(present_overlay));
+                    }
+                    // Without the offscreen frame the picture would not follow a resize.
+                    maiko_runtime::input::set_resizable(offscreen);
                     rg_log!(
                         "Native Glide window {}x{} opened={}",
                         self.width,
@@ -384,7 +400,7 @@ impl Bridge {
                     if maiko_runtime::crash::frame_presented() {
                         self.snapshot();
                     }
-                    if overlay::is_open() {
+                    if overlay::is_open() && RgOffscreenActive() == 0 {
                         // grBufferSwap draws the game's batched triangles; draw them first.
                         grSstIdle();
                         draw_overlay();

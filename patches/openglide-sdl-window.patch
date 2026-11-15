@@ -1,15 +1,109 @@
-Patch: OpenGLide-ng SDL window handle width
+Patch: OpenGLide-ng SDL window handle width and resizable offscreen window
 Upstream: https://github.com/eugenenuke/openglide-ng at the commit named by BACKEND in tools/package_native.py; applied by tools/build_linux.py.
-Original: on 64-bit builds InitialiseOpenGLWindow assumes a window handle is a 32-bit value and takes the 32-bit path for foreign window ids.
-Replacement: the 64-bit path is skipped when RG_SDL_WINDOW_POINTER is defined, so the handle passed in is used as the SDL window pointer.
-Effect: with RG_SDL_WINDOW_POINTER the renderer draws into the window the Rust runtime created instead of misreading its pointer.
+Original: on 64-bit builds InitialiseOpenGLWindow assumes a window handle is a 32-bit value and takes the 32-bit path for foreign window ids. The render size and its pillarbox offset are fixed when the window opens, so the picture breaks when the window is resized.
+Replacement: the 64-bit path is skipped when RG_SDL_WINDOW_POINTER is defined, so the handle passed in is used as the SDL window pointer. When framebuffer objects are available (and RG_NO_OFFSCREEN is unset), the game draws into an offscreen frame of the size chosen when the window opened; every swap scales it into the window with GL_LINEAR, centred at the game's aspect with black bars, then calls RgPresentHook with the window's framebuffer bound.
+Effect: with RG_SDL_WINDOW_POINTER the renderer draws into the window the Rust runtime created instead of misreading its pointer. The window can be resized freely and windows of any shape show the whole 4:3 picture; without framebuffer objects the renderer behaves as before.
 Why: the runtime creates the SDL window and hands its pointer to the renderer.
 Evidence: glide/bridge.cpp; the Glide window checks in the Linux run.
 
 diff --git a/platform/sdl/window.cpp b/platform/sdl/window.cpp
+index f9fe7aa..f80bf6c 100644
 --- a/platform/sdl/window.cpp
 +++ b/platform/sdl/window.cpp
-@@ -109,7 +109,7 @@
+@@ -74,6 +74,92 @@ static SDL_GLContext context;
+ static bool self_ctx, self_wnd, wnd_from;
+ static void *hlib;
+ 
++// Offscreen rendering, so the window can have any size: the game draws into a framebuffer of the
++// size chosen when the window opened, and each swap scales it into the window with 4:3 bars.
++#ifndef APIENTRY
++#define APIENTRY
++#endif
++#define RG_FRAMEBUFFER           0x8D40
++#define RG_READ_FRAMEBUFFER      0x8CA8
++#define RG_DRAW_FRAMEBUFFER      0x8CA9
++#define RG_RENDERBUFFER          0x8D41
++#define RG_COLOR_ATTACHMENT0     0x8CE0
++#define RG_DEPTH_ATTACHMENT      0x8D00
++#define RG_FRAMEBUFFER_COMPLETE  0x8CD5
++#define RG_RGBA8                 0x8058
++#define RG_DEPTH_COMPONENT24     0x81A6
++static struct {
++    void (APIENTRY *GenFramebuffers)(GLsizei, GLuint *);
++    void (APIENTRY *BindFramebuffer)(GLenum, GLuint);
++    void (APIENTRY *GenRenderbuffers)(GLsizei, GLuint *);
++    void (APIENTRY *BindRenderbuffer)(GLenum, GLuint);
++    void (APIENTRY *RenderbufferStorage)(GLenum, GLenum, GLsizei, GLsizei);
++    void (APIENTRY *FramebufferRenderbuffer)(GLenum, GLenum, GLenum, GLuint);
++    GLenum (APIENTRY *CheckFramebufferStatus)(GLenum);
++    void (APIENTRY *BlitFramebuffer)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
++} fbo;
++
++static bool CreateOffscreen(int width, int height)
++{
++    if (getenv("RG_NO_OFFSCREEN"))
++        return false;
++    *(void **)&fbo.GenFramebuffers = SDL_GL_GetProcAddress("glGenFramebuffers");
++    *(void **)&fbo.BindFramebuffer = SDL_GL_GetProcAddress("glBindFramebuffer");
++    *(void **)&fbo.GenRenderbuffers = SDL_GL_GetProcAddress("glGenRenderbuffers");
++    *(void **)&fbo.BindRenderbuffer = SDL_GL_GetProcAddress("glBindRenderbuffer");
++    *(void **)&fbo.RenderbufferStorage = SDL_GL_GetProcAddress("glRenderbufferStorage");
++    *(void **)&fbo.FramebufferRenderbuffer = SDL_GL_GetProcAddress("glFramebufferRenderbuffer");
++    *(void **)&fbo.CheckFramebufferStatus = SDL_GL_GetProcAddress("glCheckFramebufferStatus");
++    *(void **)&fbo.BlitFramebuffer = SDL_GL_GetProcAddress("glBlitFramebuffer");
++    if (!fbo.GenFramebuffers || !fbo.BindFramebuffer || !fbo.GenRenderbuffers ||
++        !fbo.BindRenderbuffer || !fbo.RenderbufferStorage || !fbo.FramebufferRenderbuffer ||
++        !fbo.CheckFramebufferStatus || !fbo.BlitFramebuffer)
++        return false;
++    GLuint frame, buffers[2];
++    fbo.GenFramebuffers(1, &frame);
++    fbo.GenRenderbuffers(2, buffers);
++    fbo.BindRenderbuffer(RG_RENDERBUFFER, buffers[0]);
++    fbo.RenderbufferStorage(RG_RENDERBUFFER, RG_RGBA8, width, height);
++    fbo.BindRenderbuffer(RG_RENDERBUFFER, buffers[1]);
++    fbo.RenderbufferStorage(RG_RENDERBUFFER, RG_DEPTH_COMPONENT24, width, height);
++    fbo.BindFramebuffer(RG_FRAMEBUFFER, frame);
++    fbo.FramebufferRenderbuffer(RG_FRAMEBUFFER, RG_COLOR_ATTACHMENT0, RG_RENDERBUFFER, buffers[0]);
++    fbo.FramebufferRenderbuffer(RG_FRAMEBUFFER, RG_DEPTH_ATTACHMENT, RG_RENDERBUFFER, buffers[1]);
++    if (fbo.CheckFramebufferStatus(RG_FRAMEBUFFER) != RG_FRAMEBUFFER_COMPLETE || glGetError()) {
++        fbo.BindFramebuffer(RG_FRAMEBUFFER, 0);
++        return false;
++    }
++    glDrawBuffer(RG_COLOR_ATTACHMENT0);
++    glReadBuffer(RG_COLOR_ATTACHMENT0);
++    RgOffscreenFbo = frame;
++    return true;
++}
++
++// Scale the finished frame into the window, keeping 4:3 with black bars.
++static void PresentOffscreen(void)
++{
++    int w, h, W = OpenGL.WindowWidth, H = OpenGL.WindowHeight;
++    SDL_GL_GetDrawableSize(window, &w, &h);
++    int dw = w, dh = (int)((long long)w * H / W);
++    if (dh > h) {
++        dh = h;
++        dw = (int)((long long)h * W / H);
++    }
++    int x = (w - dw) / 2, y = (h - dh) / 2;
++    glPushAttrib(GL_COLOR_BUFFER_BIT | GL_SCISSOR_BIT | GL_VIEWPORT_BIT);
++    fbo.BindFramebuffer(RG_READ_FRAMEBUFFER, RgOffscreenFbo);
++    fbo.BindFramebuffer(RG_DRAW_FRAMEBUFFER, 0);
++    glDisable(GL_SCISSOR_TEST);
++    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
++    glClearColor(0.f, 0.f, 0.f, 1.f);
++    glClear(GL_COLOR_BUFFER_BIT);
++    fbo.BlitFramebuffer(0, 0, W, H, x, y, x + dw, y + dh, GL_COLOR_BUFFER_BIT, GL_LINEAR);
++    glViewport(0, 0, w, h);
++    if (RgPresentHook)
++        RgPresentHook();
++    glPopAttrib();
++}
++
+ bool InitialiseOpenGLWindow(FxU wnd, int x, int y, int width, int height)
+ {
+     const char dllname[] =
+@@ -109,7 +195,7 @@ bool InitialiseOpenGLWindow(FxU wnd, int x, int y, int width, int height)
          self_wnd = (window)? true:false;
      }
      else {
@@ -18,3 +112,24 @@ diff --git a/platform/sdl/window.cpp b/platform/sdl/window.cpp
          /* SDL_Window is a native pointer. On 64-bit system, native pointers
           * should have more than 32-bit values. Windows HWND and X11 Window handles
           * are always in 32-bit values.
+@@ -204,6 +290,8 @@ bool InitialiseOpenGLWindow(FxU wnd, int x, int y, int width, int height)
+                 }
+                 UserConfig.Resolution = OpenGL.WindowWidth;
+             }
++            if (CreateOffscreen(OpenGL.WindowWidth, OpenGL.WindowHeight))
++                OpenGL.WindowOffset = 0;
+         } while(0);
+ 
+         if (has_sRGB)
+@@ -312,7 +400,11 @@ void SwapBuffers()
+         glSwapFunc();
+         return;
+     }
++    if (RgOffscreenFbo)
++        PresentOffscreen();
+     SDL_GL_SwapWindow(window);
++    if (RgOffscreenFbo)
++        fbo.BindFramebuffer(RG_FRAMEBUFFER, RgOffscreenFbo);
+ }
+ 
+ #endif // C_USE_SDL
