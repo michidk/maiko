@@ -1,7 +1,3 @@
-# @orcastrate
-# template: projects/maiko/bump-version
-# @end-orcastrate
-
 name: Bump version and tag
 on:
   workflow_dispatch:

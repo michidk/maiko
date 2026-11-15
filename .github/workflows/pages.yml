@@ -1,7 +1,3 @@
-# @orcastrate
-# template: projects/maiko/pages
-# @end-orcastrate
-
 name: Deploy browser builder
 # Releases deploy the site with their own kits. This redeploys main against the latest release's kits.
 on:
