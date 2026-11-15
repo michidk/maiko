@@ -58,6 +58,9 @@ header a:hover { color: var(--parchment-light); }
   letter-spacing: .06em;
   text-decoration: none;
 }
+.brand { display: flex; align-items: baseline; gap: 12px; }
+.brand .release { font-size: .9rem; text-align: left; color: var(--gold-light); text-decoration: none; }
+.brand .release:hover { color: var(--gold-pale); text-decoration: underline; }
 main, footer { max-width: 860px; margin: auto; padding: 0 20px; }
 h1, h2 { font-family: 'Cinzel', 'Palatino Linotype', 'Book Antiqua', serif; }
 h1 {

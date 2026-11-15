@@ -49,8 +49,12 @@ const assets = ['index.html', 'style.css', 'main.js', 'worker.js', 'dlang.js', '
 const hasher = new Bun.CryptoHasher('sha256');
 for (const name of assets) hasher.update(name).update('\0').update(await readFile(`web/dist/${name}`));
 const version = hasher.digest('hex').slice(0, 20);
+// The version commit sets it, so it names the release whose kits the site serves.
+const release = `v${metadata.packages.find(item => item.name === 'maiko-runtime').version}`;
 const html = await readFile('web/dist/index.html', 'utf8');
-await Bun.write('web/dist/index.html', html.replace('./style.css', `./style.css?v=${version}`).replace('./main.js', `./main.js?v=${version}`));
+if (!html.includes('releases/latest">Latest release<')) throw new Error('index.html lost its release link');
+await Bun.write('web/dist/index.html', html.replace('./style.css', `./style.css?v=${version}`).replace('./main.js', `./main.js?v=${version}`)
+  .replace('releases/latest">Latest release<', `releases/tag/${release}">${release}<`));
 let css = await readFile('web/dist/style.css', 'utf8');
 for (const name of fonts) css = css.replaceAll(`./fonts/${name}`, `./fonts/${name}?v=${version}`);
 await Bun.write('web/dist/style.css', css);
