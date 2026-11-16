@@ -1,6 +1,7 @@
 //! Crash reports: one timestamped ZIP in the log folder's `crash-reports` folder with what is needed to look into a game
 //! that crashed or froze: the run's log, its last screenshot, system details, the launcher
-//! settings, the player's INI files and newest save. Game files are never included.
+//! settings, the player's INI files, the save the run loaded (else the newest) and the live map
+//! state (`MAPS/*.TSG`). Game files are never included.
 use crate::font::named;
 use crate::settings::Settings;
 use std::io::{self, Write};
@@ -61,9 +62,12 @@ fn archive(sources: &Sources, exit: Option<&Exit>, created: &str) -> io::Result<
         "system.txt",
         system(sources, exit, log.as_deref(), created).as_bytes(),
     )?;
+    let mut log_text = String::new();
     if let Some(log) = &log {
         let name = log.file_name().unwrap_or_default().to_string_lossy();
-        add(&format!("logs/{name}"), &std::fs::read(log)?)?;
+        let bytes = std::fs::read(log)?;
+        log_text = String::from_utf8_lossy(&bytes).into_owned();
+        add(&format!("logs/{name}"), &bytes)?;
         if let Ok(screenshot) = std::fs::read(log.with_extension("bmp")) {
             add("screenshot.bmp", &screenshot)?;
         }
@@ -79,7 +83,12 @@ fn archive(sources: &Sources, exit: Option<&Exit>, created: &str) -> io::Result<
                 add(&format!("user/{name}"), &std::fs::read(&path)?)?;
             }
         }
-        if let Some(slot) = named(user, "SAVEGAME").and_then(|saves| newest_slot(&saves)) {
+        let slot = named(user, "SAVEGAME").and_then(|saves| {
+            loaded_slot(&log_text)
+                .and_then(|name| named(&saves, name))
+                .or_else(|| newest_slot(&saves))
+        });
+        if let Some(slot) = slot {
             let slot_name = slot.file_name().unwrap_or_default().to_string_lossy();
             for path in files(&slot) {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -87,6 +96,15 @@ fn archive(sources: &Sources, exit: Option<&Exit>, created: &str) -> io::Result<
                     &format!("user/SAVEGAME/{slot_name}/{name}"),
                     &std::fs::read(&path)?,
                 )?;
+            }
+        }
+        // A save restores each map's script state from these; a crash after loading often needs them.
+        if let Some(maps) = named(user, "MAPS") {
+            for path in files(&maps) {
+                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                if name.to_ascii_uppercase().ends_with(".TSG") {
+                    add(&format!("user/MAPS/{name}"), &std::fs::read(&path)?)?;
+                }
             }
         }
     }
@@ -106,6 +124,15 @@ fn session_log(logs: &Path, pid: Option<u32>) -> Option<PathBuf> {
                 }
         })
         .max()
+}
+
+/// The slot the run loaded: the game opens a slot's `LOGBOOK.TXT` only when it loads that save
+/// (the load menu reads every `SAVEGAME.SAV`).
+fn loaded_slot(log: &str) -> Option<&str> {
+    log.lines()
+        .rev()
+        .filter_map(|line| line.split("OPEN SAVEGAME\\").nth(1))
+        .find_map(|rest| rest.split_once("\\LOGBOOK.TXT").map(|(slot, _)| slot))
 }
 
 fn newest_slot(saves: &Path) -> Option<PathBuf> {
@@ -249,15 +276,31 @@ mod tests {
             root.path().join("game"),
             root.path().join("launcher"),
         );
-        for directory in [&logs, &game, &out, &user.join("SAVEGAME/SAVEGAME.002")] {
+        for directory in [
+            &logs,
+            &game,
+            &out,
+            &user.join("SAVEGAME/SAVEGAME.001"),
+            &user.join("SAVEGAME/SAVEGAME.002"),
+            &user.join("MAPS"),
+        ] {
             std::fs::create_dir_all(directory).unwrap();
         }
-        std::fs::write(logs.join("maiko-01-7.log"), "crashed run").unwrap();
+        std::fs::write(
+            logs.join("maiko-01-7.log"),
+            "crashed run\nOPEN SAVEGAME\\SAVEGAME.002\\SAVEGAME.SAV -> 5\nOPEN SAVEGAME\\SAVEGAME.001\\LOGBOOK.TXT -> 5\n",
+        )
+        .unwrap();
         std::fs::write(logs.join("maiko-01-7.bmp"), "BM").unwrap();
         std::fs::write(logs.join("maiko-02-8.log"), "later run").unwrap();
         std::fs::write(game.join("RGFX.EXE"), "game file").unwrap();
         std::fs::write(user.join("SYSTEM.INI"), "ini").unwrap();
-        std::fs::write(user.join("SAVEGAME/SAVEGAME.002/SAVEGAME.SAV"), "save").unwrap();
+        std::fs::write(user.join("SAVEGAME/SAVEGAME.001/SAVEGAME.SAV"), "loaded").unwrap();
+        std::fs::write(user.join("SAVEGAME/SAVEGAME.001/ISLAND.TSG"), "slot map").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(user.join("SAVEGAME/SAVEGAME.002/SAVEGAME.SAV"), "newer").unwrap();
+        std::fs::write(user.join("MAPS/ISLAND.TSG"), "live map").unwrap();
+        std::fs::write(user.join("MAPS/ISLAND.RGM"), "game file").unwrap();
         let settings = Settings::default();
         let sources = Sources {
             logs: Some(logs),
@@ -283,13 +326,24 @@ mod tests {
             io::Read::read_to_string(&mut zip.by_name(name).unwrap(), &mut text).unwrap();
             text
         };
-        assert_eq!(read("logs/maiko-01-7.log"), "crashed run");
+        assert!(read("logs/maiko-01-7.log").starts_with("crashed run"));
         assert_eq!(read("screenshot.bmp"), "BM");
         assert_eq!(read("user/SYSTEM.INI"), "ini");
-        assert_eq!(read("user/SAVEGAME/SAVEGAME.002/SAVEGAME.SAV"), "save");
+        assert_eq!(read("user/SAVEGAME/SAVEGAME.001/SAVEGAME.SAV"), "loaded");
+        assert_eq!(read("user/SAVEGAME/SAVEGAME.001/ISLAND.TSG"), "slot map");
+        assert_eq!(read("user/MAPS/ISLAND.TSG"), "live map");
         let system = read("system.txt");
         assert!(system.contains("stopped with exit status: 3"), "{system}");
         assert!(system.contains("RGFX.EXE  9"), "{system}");
         assert!(zip.by_name("RGFX.EXE").is_err(), "game files stay out");
+        assert!(
+            zip.by_name("user/SAVEGAME/SAVEGAME.002/SAVEGAME.SAV")
+                .is_err(),
+            "the loaded slot, not the newest"
+        );
+        assert!(
+            zip.by_name("user/MAPS/ISLAND.RGM").is_err(),
+            "map files stay out"
+        );
     }
 }
