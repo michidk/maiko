@@ -33,17 +33,19 @@ body {
   margin: 0;
   color: var(--text);
   font: 1.2rem/1.6 'Crimson Pro', Georgia, 'Palatino Linotype', serif;
+  /* The UESP map of Stros M'Kai, faded into the parchment so text stays readable. */
   background:
     radial-gradient(ellipse at 20% 50%, rgba(217, 200, 165, .25) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 20%, rgba(184, 134, 11, .06) 0%, transparent 40%),
+    linear-gradient(rgb(240 228 207 / .9), rgb(240 228 207 / .9)),
+    url('stros-mkai.webp') center / cover fixed,
     var(--parchment);
 }
 ::selection { background: var(--gold-pale); color: var(--burgundy-dark); }
 a { color: var(--red); text-underline-offset: 4px; }
 a:hover { color: var(--red-light); }
-/* The UESP map of Stros M'Kai, tinted so the links stay readable. */
 header {
-  background: linear-gradient(rgb(74 26 42 / .78), rgb(74 26 42 / .9)), url('stros-mkai.webp') center 42% / cover, var(--burgundy);
+  background: var(--burgundy);
   border-bottom: 3px solid var(--gold-muted);
 }
 .header-inner {
