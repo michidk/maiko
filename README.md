@@ -16,7 +16,7 @@ Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the carto
 - **Hardware rendering** by [rustyglide](https://github.com/michidk/rustyglide) through Vulkan, Direct3D 12, Metal or OpenGL, in a resizable window or fullscreen.
 - **The original launcher**, drawn from your installation's `REDGUARD.EXE`, with options for fullscreen, window size, renderer, textures and skipping movies.
 - **Original sound, CD music and movies** from your GOG `game.gog` or the Redguard disc.
-- **Game controllers** alongside keyboard and mouse.
+- **Controller support:** Xbox, PlayStation and other gamepads on Windows, Linux and macOS, plugged in at any time and used alongside keyboard and mouse ([button layout](docs/playing.md#game-controllers)).
 - **Finds your game itself** and shares its saves and settings with the GOG/DOSBox version: the game reads and writes them in its own folder.
 - **Optional [version 5 fixes](docs/playing.md#version-5-fixes)** from the later build 5.0 executable.
 
