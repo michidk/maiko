@@ -2634,9 +2634,9 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustyglide"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cc96a6cffa496cc62e7df31eb473237acf9eb76ab2ec8462d544b08980fb2bb"
+checksum = "930eec0f17d6c6e5064fb1e1662487075bf2183e4917ba741cc2560c2f150cf1"
 dependencies = [
  "log",
  "raw-window-handle",
@@ -2646,18 +2646,18 @@ dependencies = [
 
 [[package]]
 name = "rustyglide-core"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6bbfdec599764b3d8f90d2b1c5388bcc9b5185d17a1aacb76df226f0b7a2778"
+checksum = "7623340139d4517bcbfed95e12860abd85a367ee4e095bb6acab8a6fd81c33ce"
 dependencies = [
  "bytemuck",
 ]
 
 [[package]]
 name = "rustyglide-wgpu"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a5f478c3b67ef5439bfa5625d54db721745cc3bc2de36f1010e6d7b94fa2bf8"
+checksum = "1abe33d82e0a01f23a6bb8db2807703d1a6cd6e39de44703c3fb056b5b9ceed2"
 dependencies = [
  "bytemuck",
  "log",
