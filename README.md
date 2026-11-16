@@ -2,6 +2,8 @@
 
 Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows, Linux and macOS, without DOSBox. You build it from your own copy of the game; Maiko contains no game files.
 
+![Cyrus on the docks of Stros M'Kai, running natively in Maiko on Windows](docs/images/screenshot.png)
+
 Join the [Discord](https://discord.com/invite/xjCCyqbxkp) and discuss Maiko in `#redguard-maiko-recomp`.
 
 **Disclaimer:** AI was used heavily in this reverse engineering project; without AI it would not have been possible.
