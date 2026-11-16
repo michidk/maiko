@@ -69,7 +69,7 @@ export async function runWasi(module, args, files, outputs, log = () => {}) {
   return result;
 }
 
-export async function runLlasm(builder, files) {
+export async function runLlasm(builder, files, compileOnMainThread) {
   const encoder = new TextEncoder();
   const inputs = Object.entries(files).filter(([name]) => /\.(?:llasm|llinc|bin)$/.test(name));
   const chunks = [encoder.encode(`${inputs.length}\n`)];
@@ -88,7 +88,10 @@ export async function runLlasm(builder, files) {
   const moduleUrl = new URL('./dlang.js', import.meta.url);
   moduleUrl.search = new URL(import.meta.url).search;
   const { compile } = await import(moduleUrl.href);
-  const result = await compile(new TextDecoder().decode(builder.asset('llasm.d')), input, builder.tool('dmd'));
+  const source = new TextDecoder().decode(builder.asset('llasm.d'));
+  let result = await compile(source, input, builder.tool('dmd'));
+  // Safari gives workers a 512 KiB stack, too small for DMD's recursion through Phobos; its main thread has room.
+  if (compileOnMainThread && result.errors.some(error => /call stack/i.test(error))) result = await compileOnMainThread(source, input, builder.tool('dmd'));
   if (result.exitCode !== 0 || result.errors.length || result.stderr) {
     throw new Error(`LLasm failed: ${[...result.errors, result.stderr].filter(Boolean).join('\n') || `exit code ${result.exitCode}`}`);
   }

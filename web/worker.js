@@ -1,7 +1,14 @@
 import init, { Builder, validate } from './pkg/maiko_patcher.js';
 import { runWasi, runLlasm } from './wasi.js';
 
+let mainThreadReply;
+const compileOnMainThread = (source, input, dmd) => new Promise(resolve => {
+  mainThreadReply = resolve;
+  self.postMessage({ kind: 'llasm', source, input, dmd }, [input.buffer, dmd.buffer]);
+});
+
 self.onmessage = async ({ data }) => {
+  if (data.kind === 'llasm-result') { mainThreadReply?.(data.result); return; }
   let builder;
   const logs = [];
   // The assembler prints tens of thousands of harmless overflow warnings; count them so that real messages stay visible.
@@ -36,7 +43,7 @@ self.onmessage = async ({ data }) => {
       files = await runWasi(sr, ['sr', 'RGFX.EXE', 'rgfx.llasm'], files, outputs, log);
       files = builder.finish(files);
       stage('Translating the game to LLVM…');
-      let ir = await runLlasm(builder, files);
+      let ir = await runLlasm(builder, files, compileOnMainThread);
       files = null;
       stage('Optimizing the Mac engine…');
       const opt = await WebAssembly.compile(builder.tool('opt'));

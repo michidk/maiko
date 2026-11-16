@@ -146,6 +146,19 @@ build.addEventListener('click', async () => {
     current.onmessage = ({ data }) => {
       if (worker !== current) return;
       if (data.kind === 'progress') progressLine(data.message);
+      else if (data.kind === 'llasm') {
+        progressLine('Continuing this step on the page itself. The page may not respond for a minute.');
+        // Let the message paint before the compiler blocks this thread.
+        setTimeout(async () => {
+          try {
+            const url = new URL('./dlang.js', import.meta.url);
+            url.search = new URL(import.meta.url).search;
+            const { compile } = await import(url.href);
+            const result = await compile(data.source, data.input, data.dmd);
+            if (worker === current) current.postMessage({ kind: 'llasm-result', result });
+          } catch (cause) { if (worker === current) failure(cause instanceof Error ? cause.message : String(cause)); }
+        }, 100);
+      }
       else if (data.kind === 'error') failure(data.message);
       else if (data.kind === 'complete') {
         downloadUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'application/zip' }));
