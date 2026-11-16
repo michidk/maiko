@@ -402,11 +402,20 @@ impl Input {
                     self.closed = true;
                 }
                 WindowEvent::Focused(focused) => self.focus(focused),
-                WindowEvent::KeyboardInput { event, .. } => {
+                WindowEvent::KeyboardInput {
+                    event,
+                    is_synthetic,
+                    ..
+                } => {
                     let PhysicalKey::Code(key) = event.physical_key else {
                         continue;
                     };
                     let down = event.state == ElementState::Pressed;
+                    // Keys still held when focus returns (Alt+Tab) are not new presses: a
+                    // synthetic Tab would toggle walk mode.
+                    if is_synthetic && down {
+                        continue;
+                    }
                     if matches!(key, KeyCode::Escape | KeyCode::F10) && down && !event.repeat {
                         rg_log!(
                             "event=input-navigation key={key:?} focused={} overlay={}",
