@@ -6,6 +6,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// The mix rate every sample and stream is converted to.
 pub const RATE: u32 = 44100;
@@ -61,6 +62,7 @@ struct Voice {
     pcm: Option<Arc<[i16]>>,
     position: usize,
     playing: bool,
+    started: Option<Instant>,
 }
 
 // The guest pointer in `data` is only read on the game thread when a sample starts.
@@ -78,6 +80,7 @@ impl Voice {
             pcm: None,
             position: 0,
             playing: false,
+            started: None,
         }
     }
 }
@@ -163,6 +166,19 @@ pub fn set_master_volume(volume: i32) {
     with(|mixer| mixer.master = volume.clamp(0, 127));
 }
 
+/// A looping sample started again this soon, from the same data on another handle, replaces the
+/// older copy.
+///
+/// shortcut: works around the game's `AmbientSound` script task instead of patching it. On a run
+/// whose elapsed input is zero the task forgets its sample handle without stopping the sound, and
+/// starts the sound again on a new handle. Elapsed input is `runs * frame scale >> 8`, so at
+/// Maiko's 60+ fps (scale ~50) several of a new task's first runs read zero and each leaves
+/// another copy looping (the docks' waves stacked up). The original at 12-20 fps rarely gets
+/// there. Two identical loops started within this window would only sound doubled, so the old one
+/// goes. Upgrade to a guest patch of `AmbientSound` that forgets the handle only on its first run
+/// if a sound must legitimately loop twice from one buffer.
+const RESTART_WINDOW: Duration = Duration::from_millis(250);
+
 /// # Safety
 /// The address set with [`set_address`] is readable for its length.
 pub unsafe fn start(handle: *mut c_void) {
@@ -191,6 +207,22 @@ pub unsafe fn start(handle: *mut c_void) {
         voice.pcm = Some(pcm);
         voice.position = 0;
         voice.playing = true;
+        voice.started = Some(Instant::now());
+        let (source, forever) = (voice.data, voice.loops < 0);
+        if forever {
+            for (other_handle, other) in &mut mixer.voices {
+                if *other_handle != handle as usize
+                    && other.playing
+                    && other.loops < 0
+                    && other.data == source
+                    && other
+                        .started
+                        .is_some_and(|at| at.elapsed() < RESTART_WINDOW)
+                {
+                    other.playing = false;
+                }
+            }
+        }
     });
 }
 
@@ -400,5 +432,35 @@ mod tests {
         end(handle);
         assert_eq!(status(handle), 2);
         detach(handle);
+    }
+
+    #[test]
+    fn a_loop_restarted_on_another_handle_replaces_the_old_copy() {
+        let data: Vec<u8> = vec![0, 64, 0, 64];
+        let start_loop = |handle: *mut c_void, count: i32| {
+            attach(handle);
+            set_type(handle, 1, 1);
+            set_address(handle, data.as_ptr().cast(), data.len() as u32);
+            set_loop_count(handle, count);
+            unsafe { start(handle) };
+        };
+        let (old, new, once) = (
+            0x2000 as *mut c_void,
+            0x3000 as *mut c_void,
+            0x4000 as *mut c_void,
+        );
+        start_loop(old, 0);
+        start_loop(once, 1);
+        start_loop(new, 0);
+        assert_eq!(status(old), 2, "the forgotten loop stops");
+        assert_eq!(status(new), 4);
+        assert_eq!(
+            status(once),
+            4,
+            "samples that play a set number of times are left alone"
+        );
+        for handle in [old, new, once] {
+            detach(handle);
+        }
     }
 }
