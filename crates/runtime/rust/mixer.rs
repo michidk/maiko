@@ -385,6 +385,10 @@ fn device(post: fn(&mut [u8])) -> Result<(cpal::Stream, String), String> {
 mod tests {
     use super::*;
 
+    // These tests share MIXER. Hold this across each scenario so another test's
+    // mix_voices call cannot consume a finite sample before its status is checked.
+    static SAMPLE_TEST: Mutex<()> = Mutex::new(());
+
     #[test]
     fn conversion_widens_mono_and_resamples() {
         let format = Format {
@@ -408,6 +412,7 @@ mod tests {
 
     #[test]
     fn a_sample_plays_its_loops_then_reports_done() {
+        let _test = SAMPLE_TEST.lock().unwrap();
         let data: Vec<u8> = vec![0, 64, 0, 64]; // two 16-bit mono frames of 16384
         let handle = 0x1000 as *mut c_void;
         attach(handle);
@@ -436,6 +441,7 @@ mod tests {
 
     #[test]
     fn a_loop_restarted_on_another_handle_replaces_the_old_copy() {
+        let _test = SAMPLE_TEST.lock().unwrap();
         let data: Vec<u8> = vec![0, 64, 0, 64];
         let start_loop = |handle: *mut c_void, count: i32| {
             attach(handle);
