@@ -92,13 +92,13 @@ def runtime_directory(target, built, destination):
                 # drop once a release ships without them.
                 if (leaf.startswith(('RUN', 'libGL', 'libOpenGL', 'libredguard-', 'redguard-', 'libSDL2', 'SDL2'))
                         or leaf.endswith('.tar.gz')
-                        or leaf in ('README.txt', 'Maiko.exe')):
+                        or leaf in ('README.txt', 'Maiko.exe', 'maiko.exe', 'maiko-launcher.exe')):
                     continue
                 data = seed.read(name)
                 (destination / leaf).write_bytes(notices(data.decode(), target).encode() if leaf == 'LICENSES.txt' else data)
     # The launcher is the part that changes per release.
     shutil.copyfile(ROOT / 'platforms' / target / 'README.txt', destination / 'README.txt')
-    launcher = 'maiko.exe' if target == 'windows' else 'maiko'
+    launcher = 'maiko-launcher.exe' if target == 'windows' else 'maiko'
     shutil.copyfile(built / launcher, destination / launcher)
 
 

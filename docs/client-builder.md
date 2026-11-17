@@ -4,7 +4,7 @@ The static GitHub Pages site accepts your owned `RGFX.EXE`, detects Windows, Lin
 
 Both interfaces use the same Rust library for input validation and package creation. The browser uses an isolated worker; the CLI uses a private temporary directory.
 
-The kits include controller support and automatic game-folder discovery. Start the launcher, `maiko.exe` on Windows or `./maiko` on Linux and macOS; it asks for the game folder only if it cannot find it, then shows Redguard's original start window with artwork read from the installation's `REDGUARD.EXE`. The included README repeats this.
+The kits include controller support and automatic game-folder discovery. Start the launcher, `maiko-launcher.exe` on Windows or `./maiko` on Linux and macOS; it asks for the game folder only if it cannot find it, then shows Redguard's original start window with artwork read from the installation's `REDGUARD.EXE`. The included README repeats this.
 
 For macOS, select `RGFX.EXE`, build the ZIP and extract it. Open the `maiko`
 launcher and select your owned installation when asked. See the [Mac launch guide](../platforms/macos/LAUNCH.md)
@@ -33,7 +33,7 @@ maiko-patcher build --input /path/to/RGFX.EXE --target linux \
 
 The local Wasmtime CLI supports Linux and Windows. Use `--target windows` with `maiko-runtime-kit-windows.zip` for Windows x64. For macOS, use the browser or the [local source build](../platforms/macos/README.md). `--wasmtime PATH` selects a local Wasmtime installation. `--v5-fixes` adds the optional [version 5 fixes](playing.md#version-5-fixes); the browser builder offers the same option as a checkbox. The CLI uses a private temporary directory, reads the original game without modifying it, and refuses to overwrite the output ZIP.
 
-Extract the generated ZIP into a separate writable folder. Windows users double-click `maiko.exe`; Linux users run `./maiko`. The launcher looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. It needs a glibc 2.36 or newer X11 or Wayland desktop with a Vulkan or OpenGL (EGL) driver and the system's ALSA and udev libraries. The game keeps its saves and settings in the game folder. Startup options such as skipping the intro are set in the launcher's Game Options, or given as command-line options to `redguard-native`; see the README.
+Extract the generated ZIP into a separate writable folder. Windows users double-click `maiko-launcher.exe`; Linux users run `./maiko`. The launcher looks for the Redguard folder itself (remembered folder, its own folder and the folders around it, standard GOG folders) and asks only if it finds nothing. It needs a glibc 2.36 or newer X11 or Wayland desktop with a Vulkan or OpenGL (EGL) driver and the system's ALSA and udev libraries. The game keeps its saves and settings in the game folder. Startup options such as skipping the intro are set in the launcher's Game Options, or given as command-line options to `redguard-native`; see the README.
 
 ## Runtime kits
 

@@ -39,7 +39,7 @@ resolve() {{
 for library in {' '.join(WINDOWS_LIBRARIES)}; do resolve $library; done
 echo '1 ICON "maiko.ico"' > maiko.rc
 x86_64-w64-mingw32-windres maiko.rc -O coff -o maiko-icon.o
-x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/maiko.exe launcher_main.c maiko-icon.o libmaiko_launcher.a -L/work \\
+x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/maiko-launcher.exe launcher_main.c maiko-icon.o libmaiko_launcher.a -L/work \\
   -lshell32 -lole32 -luser32 -lgdi32 -ladvapi32 -lopengl32 {' '.join('-l' + name for name in CRATE_IMPORT_LIBRARIES)} \\
   -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp
 '''

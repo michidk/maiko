@@ -43,7 +43,7 @@ Use `--target windows` with the Windows kit, and `--v5-fixes` for the version 5 
 
 ## Play
 
-Extract the ZIP into **its own writable folder** (not the game folder) and start the launcher: `maiko.exe` on Windows, `./maiko` on Linux and macOS. It finds your game in the usual GOG, Wine, Heroic and Lutris folders and only asks if it finds nothing. Click **Play Redguard**.
+Extract the ZIP into **its own writable folder** (not the game folder) and start the launcher: `maiko-launcher.exe` on Windows, `./maiko` on Linux and macOS. It finds your game in the usual GOG, Wine, Heroic and Lutris folders and only asks if it finds nothing. Click **Play Redguard**.
 
 - **Windows:** 64-bit Windows 10 or newer.
 - **Linux:** x86-64 with glibc 2.36 or newer, X11 or XWayland, and a Vulkan or OpenGL driver.
