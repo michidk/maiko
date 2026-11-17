@@ -24,6 +24,15 @@ bun test web
 
 Cargo uses its configured shared target directory; do not override it.
 
+The website build (`bun run build`) optionally inserts `MAIKO_HEAD_INJECT` as
+HTML at the end of the page's `<head>`. The deployment workflow reads it from
+the repository Actions variable of the same name. Leave it unset for a build
+without extra headers. Treat its value as trusted deployment code: HTTPS
+script origins are also added to the page's `script-src` and `connect-src`
+content security policy. The injected HTML is public in the built site;
+never put secrets in this variable. Changing the variable requires a new
+Pages deployment.
+
 The runtime and package builders have command-line help for their supported options. Downloaded dependencies and generated output stay in ignored `.cache/` and `artifacts/` directories. Original installations and media are read-only inputs. Generated packages are for the owner's local use and must not be uploaded as release assets.
 
 A Linux or Wine check does not establish real-Windows acceptance. Dummy audio and software rendering checks do not establish hardware playback or rendering.

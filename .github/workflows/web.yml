@@ -40,6 +40,8 @@ jobs:
       - if: inputs.kits_artifact != ''
         run: echo "MAIKO_KIT_DIRECTORY=$PWD/.cache/site-kits" >> "$GITHUB_ENV"
       - name: Build site and verify runtime kit checksums
+        env:
+          MAIKO_HEAD_INJECT: ${{ vars.MAIKO_HEAD_INJECT }}
         run: bun run build
       - name: Archive browser distribution
         run: tar -czf maiko-browser.tar.gz -C web/dist .

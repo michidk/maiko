@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import { injectHead } from './head.js';
 
 function command(args) {
   const result = Bun.spawnSync(args, { stdout: 'inherit', stderr: 'inherit' });
@@ -15,6 +16,9 @@ await mkdir('web/dist/kits', { recursive: true });
 const built = await Bun.build({ entrypoints: ['web/main.js', 'web/worker.js'], outdir: 'web/dist', target: 'browser', minify: true, external: ['./pkg/maiko_patcher.js'] });
 if (!built.success) throw new AggregateError(built.logs, 'Website build failed');
 for (const name of ['index.html', 'style.css', 'favicon.svg', 'og.png', 'stros-mkai.webp']) await cp(`web/${name}`, `web/dist/${name}`);
+await Bun.write('web/dist/index.html', await injectHead(
+  await readFile('web/dist/index.html', 'utf8'), process.env.MAIKO_HEAD_INJECT,
+));
 await cp('web/pkg', 'web/dist/pkg', { recursive: true });
 await cp('web/fonts', 'web/dist/fonts', { recursive: true });
 // Kits are release assets. The site takes the latest release's kits and checks each one
