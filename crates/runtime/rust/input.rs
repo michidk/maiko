@@ -234,7 +234,11 @@ impl Input {
             let (fullscreen, size) = *DISPLAY.lock().unwrap_or_else(|e| e.into_inner());
             let (w, h) = size.unwrap_or((width, height));
             let mut attributes = Window::default_attributes()
-                .with_title("Maiko")
+                .with_title(concat!(
+                    "The Elder Scrolls Adventures: Redguard (Maiko v",
+                    env!("CARGO_PKG_VERSION"),
+                    ")"
+                ))
                 .with_inner_size(winit::dpi::LogicalSize::new(w, h));
             if fullscreen {
                 attributes = attributes.with_fullscreen(Some(Fullscreen::Borderless(None)));
