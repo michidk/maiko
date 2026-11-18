@@ -2,6 +2,7 @@
 //! stereo at 44.1 kHz, mixed with the movie streams and CD music into the system's audio device
 //! (cpal). Without a device the mix still runs in real time and is discarded, so samples finish and
 //! the game waits on them as usual.
+use crate::Locked;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::collections::HashMap;
 use std::ffi::c_void;
@@ -99,7 +100,7 @@ struct Mixer {
 static MIXER: Mutex<Option<Mixer>> = Mutex::new(None);
 
 fn with<R>(f: impl FnOnce(&mut Mixer) -> R) -> R {
-    let mut mixer = MIXER.lock().unwrap_or_else(|e| e.into_inner());
+    let mut mixer = MIXER.locked();
     f(mixer.get_or_insert_with(|| Mixer {
         voices: HashMap::new(),
         cache: HashMap::new(),

@@ -8,11 +8,10 @@ from pathlib import Path
 import subprocess
 import time
 import uuid
-from .toolchain import ROOT,run,ensure_tool_image,is_mountable,MOUNT_ROOT
+from .toolchain import ROOT,run,ensure_tool_image,ensure_linux_image,is_mountable,MOUNT_ROOT,LINUX_IMAGE as IMAGE
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
 from .gog_install import movie_bundle
 
-IMAGE='redguard-recomp-linux:bookworm'
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -30,7 +29,7 @@ def main():
     p.add_argument('--gameplay-seconds',type=float,default=30,help='Observation time per probe, from1 to180 seconds; a timeout is not a pass')
     p.add_argument('--world-controls',action='store_true',help='Measure player movement and book/Quit in the Continue probe')
     p.add_argument('--writable-gameplay',action='store_true',help='Use disposable isolated save/config storage for gameplay probes')
-    p.add_argument('--redbook',action='store_true',help='Exercise the original CD-open absence path; CD playback is not implemented')
+    p.add_argument('--redbook',action='store_true',help="Enable redbook CD music in the scenario's SYSTEM.INI")
     p.add_argument('--sound',action='store_true',help='Enable native sample audio with the dummy test device; CD music remains disabled')
     p.add_argument('--keep-container',action='store_true',help='Retain the bounded development container for follow-up diagnosis')
     p.add_argument('--save-roundtrip',action='store_true',help='Verify original autosave/reload with the supplied stable noncombat save')
@@ -64,10 +63,8 @@ def main():
     began=time.monotonic();name='rg-linux-'+uuid.uuid4().hex[:10]
     try:
         report['base_toolchain']=ensure_tool_image()
-        if subprocess.run(['docker','image','inspect',IMAGE],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
-            with (output/'toolchain-build.log').open('w') as log:
-                run(['docker','build','-t',IMAGE,'-f',str(ROOT/'platforms/linux/Dockerfile'),str(ROOT/'platforms/linux')],stdout=log,stderr=subprocess.STDOUT)
-        report['toolchain_image']=subprocess.check_output(['docker','image','inspect',IMAGE,'--format','{{.Id}}'],text=True).strip()
+        with (output/'toolchain-build.log').open('w') as log:
+            report['toolchain_image']=ensure_linux_image(stdout=log,stderr=subprocess.STDOUT)
         # Cargo can wait for another project; do this before the container lease starts.
         rust_runtime=build_rust_runtime('x86_64-unknown-linux-gnu')
         rust_host=build_rust_runtime('x86_64-unknown-linux-gnu',component='host')

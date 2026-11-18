@@ -1,19 +1,21 @@
-//! Miles double-buffer PCM state exposed through the original service ABI.
+//! Miles double-buffer PCM state behind the original stream services.
 use crate::mixer::{Format, to_stereo16};
-use std::ffi::{c_int, c_void};
 
-#[repr(C)]
-#[derive(Default)]
-pub struct StreamBuffer {
-    pub(crate) data: *mut u8,
-    pub(crate) length: u32,
-    pub(crate) position: u32,
-    pub(crate) source_length: u32,
-    pub(crate) state: c_int,
+/// Bytes per source frame for a Miles format: bit 0 selects 16-bit, bit 1 stereo.
+pub(crate) fn frame_bytes(format: u32) -> u32 {
+    (1 + (format & 1)) * (1 + (format >> 1 & 1))
 }
 
-#[repr(C)]
 #[derive(Default)]
+pub struct StreamBuffer {
+    /// Converted 16-bit stereo PCM at the output rate.
+    pub(crate) data: Vec<u8>,
+    pub(crate) position: u32,
+    pub(crate) source_length: u32,
+    /// 0 free, 1 handed to the game for filling, 2 loaded.
+    pub(crate) state: u32,
+}
+
 pub struct PcmStream {
     pub(crate) buffer: [StreamBuffer; 2],
     pub(crate) current: u32,
@@ -23,96 +25,118 @@ pub struct PcmStream {
     pub(crate) output_rate: u32,
     pub(crate) volume: u32,
     pub(crate) pan: u32,
-    pub(crate) ended: c_int,
-    pub(crate) started: c_int,
+    pub(crate) ended: bool,
+    pub(crate) started: bool,
     pub(crate) mixed_frames: u64,
     pub(crate) nonzero_frames: u64,
     pub(crate) underrun_frames: u64,
 }
 
-// Stream buffers move between the game and audio threads only under the
-// audio state mutex. Their malloc-owned storage has no thread affinity.
-unsafe impl Send for PcmStream {}
+impl Default for PcmStream {
+    fn default() -> Self {
+        Self::new(crate::mixer::RATE)
+    }
+}
 
 impl PcmStream {
-    pub(crate) fn clear(&mut self) {
-        for buffer in &mut self.buffer {
-            unsafe {
-                libc::free(buffer.data.cast());
-            }
-            *buffer = StreamBuffer::default();
+    /// A stream in the state Miles opens one in.
+    pub(crate) fn new(output_rate: u32) -> Self {
+        Self {
+            buffer: Default::default(),
+            current: 0,
+            format: 0,
+            flags: 0,
+            rate: 22050,
+            output_rate,
+            volume: 127,
+            pan: 64,
+            ended: false,
+            started: false,
+            mixed_frames: 0,
+            nonzero_frames: 0,
+            underrun_frames: 0,
         }
-        self.current = 0;
-        self.ended = 0;
-        self.started = 0;
     }
 
-    pub(crate) unsafe fn load(&mut self, index: u32, data: *const c_void, length: u32) -> bool {
+    pub(crate) fn clear(&mut self) {
+        self.buffer = Default::default();
+        self.current = 0;
+        self.ended = false;
+        self.started = false;
+    }
+
+    /// Hand the next free buffer to the game, or `u32::MAX` when both are in use.
+    pub(crate) fn ready(&mut self) -> u32 {
+        for offset in 0..2 {
+            let index = (self.current + offset) & 1;
+            if self.buffer[index as usize].state == 0 {
+                self.buffer[index as usize].state = 1;
+                return index;
+            }
+        }
+        u32::MAX
+    }
+
+    /// Miles status: 4 while a buffer is loaded, 2 when done.
+    pub(crate) fn status(&self) -> u32 {
+        if self.buffer.iter().any(|b| b.state == 2) {
+            4
+        } else {
+            2
+        }
+    }
+
+    /// Convert and load `source` into a buffer the game was handed; empty marks the end.
+    pub(crate) fn load(&mut self, index: u32, source: &[u8]) -> bool {
         let Some(buffer) = self.buffer.get_mut(index as usize) else {
             return false;
         };
-        if buffer.state != 1 || length > 16 * 1024 * 1024 {
+        let length = source.len() as u32;
+        if buffer.state != 1
+            || length > 16 * 1024 * 1024
+            || !length.is_multiple_of(frame_bytes(self.format))
+        {
             return false;
         }
-        let channels = if self.format & 2 != 0 { 2 } else { 1 };
-        let width = if self.format & 1 != 0 { 2 } else { 1 };
-        if !length.is_multiple_of(channels * width) {
-            return false;
-        }
-        if length == 0 {
-            unsafe {
-                libc::free(buffer.data.cast());
-            }
-            buffer.data = std::ptr::null_mut();
-            buffer.length = 0;
-            buffer.position = 0;
-            buffer.source_length = 0;
-            self.ended = 1;
+        if source.is_empty() {
+            *buffer = StreamBuffer {
+                state: 1,
+                ..StreamBuffer::default()
+            };
+            self.ended = true;
             return true;
         }
-        if data.is_null() || self.output_rate == 0 {
+        if self.output_rate == 0 {
             return false;
         }
-        let source = unsafe { std::slice::from_raw_parts(data.cast::<u8>(), length as usize) };
         let format = Format {
-            stereo: channels == 2,
-            sixteen: width == 2,
+            stereo: self.format & 2 != 0,
+            sixteen: self.format & 1 != 0,
             signed: self.flags & 1 != 0,
         };
         let pcm = to_stereo16(source, format, self.rate, self.output_rate);
         if pcm.is_empty() {
             return false;
         }
-        let bytes = pcm.len() * 2;
-        let converted = unsafe { libc::malloc(bytes) }.cast::<u8>();
-        if converted.is_null() {
-            return false;
-        }
-        unsafe {
-            converted.copy_from_nonoverlapping(pcm.as_ptr().cast(), bytes);
-        }
-        unsafe {
-            libc::free(buffer.data.cast());
-        }
         *buffer = StreamBuffer {
-            data: converted,
-            length: bytes as u32,
+            data: pcm.iter().flat_map(|s| s.to_le_bytes()).collect(),
             position: 0,
             source_length: length,
             state: 2,
         };
-        self.started = 1;
+        self.started = true;
         true
     }
 
-    pub(crate) unsafe fn mix(&mut self, output: &mut [u8]) {
+    pub(crate) fn mix(&mut self, output: &mut [u8]) {
         let mut out = 0;
         while out + 4 <= output.len() {
             let buffer = &mut self.buffer[self.current as usize];
             if buffer.state != 2 {
                 break;
             }
-            let count = (buffer.length - buffer.position).min((output.len() - out) as u32) & !3;
+            let start = buffer.position as usize;
+            let count = (buffer.data.len() - start).min(output.len() - out) & !3;
             let pan = self.pan.min(127);
             let gain = [
                 if pan >= 64 {
@@ -122,16 +146,10 @@ impl PcmStream {
                 },
                 if pan <= 63 { pan * 255 / 63 } else { 255 },
             ];
-            self.mixed_frames += u64::from(count / 4);
-            let source = unsafe {
-                std::slice::from_raw_parts(
-                    buffer.data.add(buffer.position as usize),
-                    count as usize,
-                )
-            };
-            for (src, dst) in source
+            self.mixed_frames += (count / 4) as u64;
+            for (src, dst) in buffer.data[start..start + count]
                 .chunks_exact(4)
-                .zip(output[out..out + count as usize].chunks_exact_mut(4))
+                .zip(output[out..out + count].chunks_exact_mut(4))
             {
                 let samples = [
                     i16::from_le_bytes([src[0], src[1]]),
@@ -152,106 +170,18 @@ impl PcmStream {
                     dst[offset..offset + 2].copy_from_slice(&sample.to_le_bytes());
                 }
             }
-            out += count as usize;
-            buffer.position += count;
-            if buffer.position == buffer.length {
+            out += count;
+            buffer.position += count as u32;
+            if buffer.position as usize == buffer.data.len() {
                 buffer.state = 0;
                 self.current ^= 1;
             } else {
                 break;
             }
         }
-        if self.started != 0 && self.ended == 0 {
+        if self.started && !self.ended {
             self.underrun_frames += ((output.len() - out) / 4) as u64;
         }
-    }
-}
-
-/// # Safety
-/// `stream` points to an initialized, exclusively owned C-layout stream.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_stream_clear(stream: *mut PcmStream) {
-    if let Some(stream) = unsafe { stream.as_mut() } {
-        stream.clear();
-    }
-}
-
-/// # Safety
-/// `stream` points to a zero-initialized or previously initialized stream.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_stream_reset(stream: *mut PcmStream) {
-    let Some(stream) = (unsafe { stream.as_mut() }) else {
-        return;
-    };
-    stream.clear();
-    *stream = PcmStream {
-        rate: 22050,
-        output_rate: 44100,
-        volume: 127,
-        pan: 64,
-        ..PcmStream::default()
-    };
-}
-
-/// # Safety
-/// `stream` is an initialized stream under the audio state lock.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_stream_ready(stream: *mut PcmStream) -> u32 {
-    let Some(stream) = (unsafe { stream.as_mut() }) else {
-        return u32::MAX;
-    };
-    for offset in 0..2 {
-        let index = (stream.current + offset) & 1;
-        if stream.buffer[index as usize].state == 0 {
-            stream.buffer[index as usize].state = 1;
-            return index;
-        }
-    }
-    u32::MAX
-}
-
-/// # Safety
-/// `stream` is initialized and cannot be modified while inspecting its status.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_stream_status(stream: *const PcmStream) -> u32 {
-    let Some(stream) = (unsafe { stream.as_ref() }) else {
-        return 2;
-    };
-    if stream.buffer.iter().any(|b| b.state == 2) {
-        4
-    } else {
-        2
-    }
-}
-
-/// # Safety
-/// `stream` is exclusively owned; nonempty `data` is readable for `length` bytes.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_stream_load(
-    stream: *mut PcmStream,
-    index: u32,
-    data: *const c_void,
-    length: u32,
-) -> c_int {
-    let Some(stream) = (unsafe { stream.as_mut() }) else {
-        return 0;
-    };
-    (unsafe { stream.load(index, data, length) }) as c_int
-}
-
-/// # Safety
-/// The locked stream owns its buffers; `output` is writable for `length` bytes
-/// and does not overlap those buffers or the stream state.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_stream_mix(stream: *mut PcmStream, output: *mut u8, length: u32) {
-    let Some(stream) = (unsafe { stream.as_mut() }) else {
-        return;
-    };
-    if length == 0 || output.is_null() {
-        return;
-    }
-    unsafe {
-        stream.mix(std::slice::from_raw_parts_mut(output, length as usize));
     }
 }
 
@@ -264,18 +194,21 @@ mod tests {
     }
 
     fn stream(format: u32, flags: u32, rate: u32) -> PcmStream {
-        let mut s = PcmStream::default();
-        unsafe { rg_stream_reset(&mut s) };
+        let mut s = PcmStream::new(44100);
         (s.format, s.flags, s.rate) = (format, flags, rate);
         s
     }
 
-    unsafe fn load(s: &mut PcmStream, index: u32, data: &[u8]) -> bool {
-        unsafe { rg_stream_load(s, index, data.as_ptr().cast(), data.len() as u32) != 0 }
+    fn load(s: &mut PcmStream, index: u32, data: &[u8]) -> bool {
+        s.load(index, data)
     }
 
     fn mix(s: &mut PcmStream, output: &mut [i16]) {
-        unsafe { rg_stream_mix(s, output.as_mut_ptr().cast(), (output.len() * 2) as u32) };
+        let mut bytes: Vec<u8> = output.iter().flat_map(|v| v.to_le_bytes()).collect();
+        s.mix(&mut bytes);
+        for (value, pair) in output.iter_mut().zip(bytes.chunks_exact(2)) {
+            *value = i16::from_le_bytes([pair[0], pair[1]]);
+        }
     }
 
     #[test]
@@ -283,14 +216,14 @@ mod tests {
         let first = bytes(&[1000, -2000, 1000, -2000, 1000, -2000, 1000, -2000]);
         let second = bytes(&[3000, -4000, 3000, -4000, 3000, -4000, 3000, -4000]);
         let mut s = stream(3, 1, 44100);
-        unsafe {
-            assert_eq!(rg_stream_ready(&mut s), 0);
+        {
+            assert_eq!(s.ready(), 0);
             assert!(load(&mut s, 0, &first));
             assert!(!load(&mut s, 0, &first), "a loaded buffer is not refilled");
-            assert_eq!(rg_stream_ready(&mut s), 1);
+            assert_eq!(s.ready(), 1);
             assert!(!load(&mut s, 1, &second[..3]), "partial frames are refused");
             assert!(load(&mut s, 1, &second));
-            assert_eq!(rg_stream_ready(&mut s), u32::MAX);
+            assert_eq!(s.ready(), u32::MAX);
         }
         let mut output = [10i16; 16];
         mix(&mut s, &mut output);
@@ -304,25 +237,25 @@ mod tests {
             assert_eq!(*value, expected, "frame value {i}");
         }
         assert_eq!((s.mixed_frames, s.nonzero_frames), (8, 8));
-        unsafe {
-            assert_eq!(rg_stream_status(&s), 2);
-            assert_eq!(rg_stream_ready(&mut s), 0);
-            assert!(rg_stream_load(&mut s, 0, std::ptr::null(), 0) != 0);
+        {
+            assert_eq!(s.status(), 2);
+            assert_eq!(s.ready(), 0);
+            assert!(s.load(0, &[]));
         }
-        assert!(s.ended != 0);
+        assert!(s.ended);
 
         let mut s = stream(3, 1, 44100);
         s.pan = 0;
-        unsafe {
-            assert_eq!(rg_stream_ready(&mut s), 0);
+        {
+            assert_eq!(s.ready(), 0);
             assert!(load(&mut s, 0, &second));
         }
         let mut output = [32000i16; 16];
         mix(&mut s, &mut output);
         assert_eq!(&output[..2], &[32767, 32000], "panned left and saturated");
         s.volume = 0;
-        unsafe {
-            assert_eq!(rg_stream_ready(&mut s), 1);
+        {
+            assert_eq!(s.ready(), 1);
             assert!(load(&mut s, 1, &second));
         }
         let mut output = [0i16; 16];
@@ -335,14 +268,18 @@ mod tests {
         let mut s = stream(3, 1, 44100);
         s.output_rate = 48000;
         let tone: Vec<i16> = (0..4410).flat_map(|_| [12000, -6000]).collect();
-        unsafe {
-            assert_eq!(rg_stream_ready(&mut s), 0);
+        {
+            assert_eq!(s.ready(), 0);
             assert!(load(&mut s, 0, &bytes(&tone)));
         }
-        assert_eq!(s.buffer[0].length, 4800 * 4);
-        let converted = unsafe { std::slice::from_raw_parts(s.buffer[0].data.cast::<i16>(), 9600) };
+        assert_eq!(s.buffer[0].data.len(), 4800 * 4);
+        let converted: Vec<i16> = s.buffer[0]
+            .data
+            .chunks_exact(2)
+            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
         assert!(converted[2000] > 11000 && converted[2001] < -5000);
-        unsafe { rg_stream_clear(&mut s) };
+        s.clear();
         for bits in 0..2 {
             for sign in 0..2 {
                 let mut s = stream(bits, sign, 44100);
@@ -352,23 +289,23 @@ mod tests {
                         pair.copy_from_slice(&[0, if sign == 1 { 0 } else { 128 }]);
                     }
                 }
-                unsafe {
-                    assert_eq!(rg_stream_ready(&mut s), 0);
+                {
+                    assert_eq!(s.ready(), 0);
                     assert!(load(&mut s, 0, &silence));
                 }
                 let mut zeros = [0i16; 512];
                 mix(&mut s, &mut zeros);
                 assert!(zeros.iter().all(|&v| v == 0), "bits {bits} signed {sign}");
-                unsafe {
-                    assert_eq!(rg_stream_status(&s), 2);
-                    rg_stream_clear(&mut s);
+                {
+                    assert_eq!(s.status(), 2);
+                    s.clear();
                 }
             }
         }
         let mut s = stream(2, 0, 22050);
         s.output_rate = 22050;
-        unsafe {
-            assert_eq!(rg_stream_ready(&mut s), 0);
+        {
+            assert_eq!(s.ready(), 0);
             assert!(load(&mut s, 0, &[0, 255, 128, 64]));
         }
         let mut out = [0i16; 4];
@@ -380,9 +317,9 @@ mod tests {
     fn partial_refills_never_starve_and_starvation_is_counted() {
         let block = bytes(&[7000; 512]);
         let mut s = stream(3, 1, 44100);
-        unsafe {
+        {
             for n in 0..2 {
-                assert_eq!(rg_stream_ready(&mut s), n);
+                assert_eq!(s.ready(), n);
                 assert!(load(&mut s, n, &block));
             }
         }
@@ -392,22 +329,22 @@ mod tests {
                 mix(&mut s, &mut part);
                 assert!(part.iter().all(|&v| v == 7000));
                 if quarter < 3 {
-                    assert_eq!(unsafe { rg_stream_ready(&mut s) }, u32::MAX);
+                    assert_eq!(s.ready(), u32::MAX);
                 }
             }
-            let next = unsafe { rg_stream_ready(&mut s) };
+            let next = s.ready();
             assert_eq!(next, cycle & 1);
-            unsafe { assert!(load(&mut s, next, &block)) };
+            assert!(load(&mut s, next, &block));
         }
         assert!(s.mixed_frames >= 51200 && s.underrun_frames == 0);
-        unsafe {
-            rg_stream_clear(&mut s);
-            assert_eq!(rg_stream_ready(&mut s), 0);
+        {
+            s.clear();
+            assert_eq!(s.ready(), 0);
             assert!(load(&mut s, 0, &block));
         }
         let mut large = [0i16; 1024];
         mix(&mut s, &mut large);
         assert_eq!(s.underrun_frames, 256);
-        unsafe { rg_stream_clear(&mut s) };
+        s.clear();
     }
 }

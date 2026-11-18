@@ -8,6 +8,7 @@
 //! Positions are the Miles ones: milliseconds from the start of the disc. The original asks for a
 //! track's start and end (`track_info`) and then plays exactly that range (`play`), so the unit only
 //! has to be consistent; it is converted to 2352-byte sectors at 75 per second.
+use crate::Locked;
 use crate::guest::GuestFrame;
 use crate::host::rg_host_readable;
 use crate::rg_log;
@@ -204,7 +205,7 @@ static PLAYER: Mutex<Player> = Mutex::new(Player {
 });
 
 fn player() -> std::sync::MutexGuard<'static, Player> {
-    PLAYER.lock().unwrap_or_else(|e| e.into_inner())
+    PLAYER.locked()
 }
 
 impl Player {

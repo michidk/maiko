@@ -1,15 +1,14 @@
 //! The original DOS machine inventory and interrupt adapters on native hosts.
+use crate::Locked;
 use crate::guest::GuestFrame;
 use crate::input::rg_mouse_service;
 use crate::memory::rg_low_alloc;
 use crate::memory::{guest_address, guest_ptr};
 use crate::rg_log;
-use std::ffi::{c_char, c_int};
+use std::ffi::c_int;
 use std::sync::Mutex;
 
-unsafe extern "C" {
-    fn rg_host_cwd(capacity: u32, buffer: *mut c_char) -> u32;
-}
+use crate::storage::rg_host_cwd;
 static INVENTORY: Mutex<usize> = Mutex::new(0);
 
 use crate::memory::guest_space;
@@ -71,7 +70,7 @@ pub unsafe extern "C" fn rg_platform_info(frame: *mut GuestFrame) {
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return;
     };
-    let mut cached = INVENTORY.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cached = INVENTORY.locked();
     let pointer = if frame.eax as u32 == 0 {
         if *cached == 0 {
             *cached = rg_low_alloc(0x1bc) as usize;

@@ -1,3 +1,4 @@
+use crate::Locked;
 use std::cell::RefCell;
 use std::sync::{
     Arc, Mutex,
@@ -189,7 +190,7 @@ pub extern "C" fn rg_clock_convert(elapsed: u64, frequency: u64) -> u32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_clock_start() -> i32 {
-    let mut clock = CLOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut clock = CLOCK.locked();
     if clock.is_some() {
         return 1;
     }
@@ -201,11 +202,8 @@ pub extern "C" fn rg_clock_start() -> i32 {
         .name("Redguard BIOS clock".into())
         .spawn(move || {
             while !stopping.load(Ordering::Acquire) {
-                let nanos = began.elapsed().as_nanos();
-                rg_bios_ticks.store(
-                    (nanos * 1_193_182 / 1_000_000_000 / 65_536) as u32,
-                    Ordering::Relaxed,
-                );
+                let nanos = began.elapsed().as_nanos() as u64;
+                rg_bios_ticks.store(rg_clock_convert(nanos, 1_000_000_000), Ordering::Relaxed);
                 thread::park_timeout(Duration::from_millis(1));
             }
         })
@@ -222,7 +220,7 @@ pub extern "C" fn rg_clock_start() -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_clock_stop() {
-    let mut clock = CLOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut clock = CLOCK.locked();
     if let Some(clock) = clock.take() {
         clock.stop.store(true, Ordering::Release);
         clock.worker.thread().unpark();
@@ -233,8 +231,7 @@ pub extern "C" fn rg_clock_stop() {
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_clock_milliseconds() -> u32 {
     CLOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .locked()
         .as_ref()
         .map_or(0, |clock| clock.began.elapsed().as_millis() as u32)
 }

@@ -1,4 +1,5 @@
 //! Read-only ISO root files exposed to the original DOS movie player.
+use crate::Locked;
 use crate::guest::GuestFrame;
 use crate::memory::guest_ptr;
 use crate::rg_log;
@@ -292,7 +293,7 @@ unsafe fn cd_path<'a>(pointer: u32) -> Option<&'a [u8]> {
 /// Mount a disc image (ISO or raw 2352-byte sectors) read-only as the CD drive. Call during
 /// installation selection.
 pub(crate) fn mount(path: &Path) -> bool {
-    let mut media = MEDIA.lock().unwrap_or_else(|e| e.into_inner());
+    let mut media = MEDIA.locked();
     *media = None;
     let Some(opened) = Media::open(path) else {
         rg_log!("CD image unavailable or invalid: {}", path.display());
@@ -328,7 +329,7 @@ pub unsafe extern "C" fn rg_cd_mount(path: *const c_char) -> c_int {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_cd_close() {
-    *MEDIA.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *MEDIA.locked() = None;
 }
 
 /// # Safety
@@ -339,7 +340,7 @@ pub unsafe extern "C" fn rg_cd_service(frame: *mut GuestFrame) -> c_int {
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return 0;
     };
-    let mut media = MEDIA.lock().unwrap_or_else(|e| e.into_inner());
+    let mut media = MEDIA.locked();
     media
         .as_mut()
         .is_some_and(|media| unsafe { media.service(frame) }) as c_int

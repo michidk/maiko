@@ -117,7 +117,7 @@ fn open(target: &std::ffi::OsStr) -> std::io::Result<()> {
 impl App {
     fn new(program: PathBuf) -> Self {
         let game = locate::find(
-            &locate::preference_files(),
+            locate::preference_file().as_deref(),
             std::env::var_os(locate::ENV_VAR).map(PathBuf::from),
             &program,
             &locate::Machine::current(),

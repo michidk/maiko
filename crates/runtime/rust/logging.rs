@@ -1,4 +1,5 @@
 //! Per-run diagnostics. Native stdout/stderr and fatal writes share the log file.
+use crate::Locked;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, OpenOptions};
@@ -27,7 +28,7 @@ macro_rules! rg_log {
 pub fn initialize() -> io::Result<PathBuf> {
     let preferred = std::env::var_os("MAIKO_LOG_DIR")
         .map(PathBuf::from)
-        .map_or_else(crate::os::log_directory, Ok);
+        .map_or_else(maiko_launcher::settings::log_directory, Ok);
     let error = match preferred.and_then(|directory| initialize_in(&directory)) {
         Ok(path) => return Ok(path),
         Err(error) => error,
@@ -157,7 +158,7 @@ pub fn session_path() -> Option<&'static Path> {
 
 /// Normal records may allocate and lock. Fatal handlers use raw OS writes.
 pub fn write(arguments: fmt::Arguments<'_>) {
-    let _guard = RECORD.lock().unwrap_or_else(|error| error.into_inner());
+    let _guard = RECORD.locked();
     let elapsed = SESSION
         .get()
         .map_or(0, |session| session.started.elapsed().as_millis());
@@ -178,7 +179,7 @@ pub fn write(arguments: fmt::Arguments<'_>) {
 /// Original-game console output (DOS handles 1 and 2): every line is tagged
 /// `game: ` and goes to the session log and the terminal, as on DOS.
 pub fn game_output(stderr: bool, data: &[u8]) -> io::Result<()> {
-    let mut starts = RECORD.lock().unwrap_or_else(|error| error.into_inner());
+    let mut starts = RECORD.locked();
     let tagged = tag_game_lines(&mut starts[usize::from(stderr)], data);
     if stderr {
         io::stderr().write_all(&tagged)?;

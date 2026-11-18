@@ -1,9 +1,6 @@
 //! Per-user runtime state, separate from the owned game installation.
 use std::io;
 use std::path::PathBuf;
-pub(crate) fn log_directory() -> io::Result<PathBuf> {
-    maiko_launcher::settings::log_directory()
-}
 
 pub(crate) fn default_game() -> Option<PathBuf> {
     None

@@ -3,6 +3,7 @@
 //! `--cd-image` (a disc image, a cue sheet, or a folder holding the disc's files), the GOG
 //! `game.gog` with its `game.ins` cue sheet, then for the original CD release the Redguard disc in a
 //! drive. Loose movie files in the game folder are found by `storage.rs` in every case.
+use crate::Locked;
 use crate::rg_log;
 use std::fs;
 use std::io;
@@ -15,12 +16,12 @@ static FOLDER: Mutex<Option<PathBuf>> = Mutex::new(None);
 static AUDIO: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 pub(crate) fn audio() -> Option<PathBuf> {
-    AUDIO.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    AUDIO.locked().clone()
 }
 
 /// The movie `leaf` on the selected disc folder, if there is one.
 pub(crate) fn disc_file(leaf: &str) -> Option<PathBuf> {
-    let folder = FOLDER.lock().unwrap_or_else(|e| e.into_inner()).clone()?;
+    let folder = FOLDER.locked().clone()?;
     named(&folder, &[leaf])
 }
 
@@ -269,8 +270,8 @@ pub(crate) fn select(
         ),
         None => {}
     }
-    *FOLDER.lock().unwrap_or_else(|e| e.into_inner()) = choice.folder;
-    *AUDIO.lock().unwrap_or_else(|e| e.into_inner()) = choice.audio;
+    *FOLDER.locked() = choice.folder;
+    *AUDIO.locked() = choice.audio;
     Ok(())
 }
 

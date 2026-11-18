@@ -282,7 +282,7 @@ loc_1631B1,2,test edx,edx|jz loc_163386|mov al,[edx]
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on, instead of continuing with wrong behavior.
 # Why: neither the translator nor the runtime has a 16-bit execution model. These four sites are in unsupported mixed-mode system code and are not reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm; twelve such traps remain in the native build.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c; twelve such traps remain in the native build.
 # sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
 loc_135EEC,6,ud2 ; unsupported transition to 16-bit code; must fail if executed
 # sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
@@ -297,7 +297,7 @@ loc_1361F2,6,ud2 ; unsupported 16-bit transition
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
 loc_127C9A,3,ud2 ; LSL needs a guest descriptor model
 # sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca

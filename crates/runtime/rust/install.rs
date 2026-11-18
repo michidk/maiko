@@ -1,4 +1,5 @@
 //! Installation selection and exact original-executable validation on native hosts.
+use crate::Locked;
 use crate::rg_log;
 use crate::storage;
 use sha2::{Digest, Sha256};
@@ -115,8 +116,7 @@ impl Selection {
 /// Ask the user, then accept the game folder, a folder inside it or the GOG folder around it.
 fn choose() -> io::Result<PathBuf> {
     let picker = PICKER
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .locked()
         .unwrap_or(crate::dialog::rg_choose_game_directory);
     let mut buffer = [0; 4096];
     if unsafe { picker(buffer.as_mut_ptr(), buffer.len()) } == 0 {
@@ -182,7 +182,7 @@ fn select(selection: Selection) -> io::Result<()> {
             .or_else(crate::os::default_game)
             .or_else(|| {
                 crate::locate::find(
-                    &crate::locate::preference_files(),
+                    crate::locate::preference_file().as_deref(),
                     std::env::var_os(crate::locate::ENV_VAR).map(PathBuf::from),
                     program,
                     &crate::locate::Machine::current(),
@@ -200,13 +200,13 @@ fn select(selection: Selection) -> io::Result<()> {
     // game writes its own files there unless `--user-dir` names a separate folder.
     storage::select_game(&game)?;
     let (image, game) = {
-        let guard = storage::STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = storage::STORAGE.locked();
         let root = guard.as_ref().ok_or_else(storage::absent)?;
         (root.resolved("C:\\RGFX.EXE")?, root.game.path.clone())
     };
     validate(&image)?;
     {
-        let mut guard = storage::STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = storage::STORAGE.locked();
         let root = guard.as_mut().ok_or_else(storage::absent)?;
         match &selection.user {
             Some(user) => root.initialize_user(user)?,
@@ -221,8 +221,7 @@ fn select(selection: Selection) -> io::Result<()> {
     }
     if let Some(slot) = selection.load_save {
         let save = storage::STORAGE
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .locked()
             .as_ref()
             .ok_or_else(storage::absent)?
             .resolved(&format!("C:\\SAVEGAME\\SAVEGAME.{slot:03}\\SAVEGAME.SAV"));
@@ -242,8 +241,7 @@ fn select(selection: Selection) -> io::Result<()> {
     }
     // The installer writes the CD drive letter into SYSTEM.INI; the saves folder holds the copy in use.
     let system_ini = storage::STORAGE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .locked()
         .as_ref()
         .and_then(|root| root.resolved("C:\\SYSTEM.INI").ok())
         .and_then(|path| std::fs::read(path).ok())
@@ -258,7 +256,7 @@ fn select(selection: Selection) -> io::Result<()> {
 /// `picker`, when supplied, writes a NUL-terminated path within its capacity.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rg_install_set_picker(picker: Option<Picker>) {
-    *PICKER.lock().unwrap_or_else(|e| e.into_inner()) = picker;
+    *PICKER.locked() = picker;
 }
 /// # Safety
 /// `argv` contains `argc` pointers to NUL-terminated arguments.
@@ -290,7 +288,7 @@ pub unsafe extern "C" fn rg_install_select(argc: c_int, argv: *const *const c_ch
         });
         if !explicit {
             crate::dialog::show_error(
-                "The game folder could not be used, so Redguard did not start.\n\nChoose the inner Redguard folder that contains RGFX.EXE (the GOG release or the original CD). Only the two RGFX.EXE builds Maiko knows are supported.\n\nSee the session log for the detailed messages.",
+                "The game folder could not be used, so Redguard did not start.\n\nChoose the inner Redguard folder that contains RGFX.EXE (the GOG release or the original CD). Only the three RGFX.EXE builds Maiko knows are supported.\n\nSee the session log for the detailed messages.",
             );
         }
     }

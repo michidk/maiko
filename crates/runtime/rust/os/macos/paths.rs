@@ -9,9 +9,6 @@ fn home() -> io::Result<PathBuf> {
 pub(crate) fn state_directory() -> io::Result<PathBuf> {
     home().map(|path| path.join("Library/Application Support/Maiko"))
 }
-pub(crate) fn log_directory() -> io::Result<PathBuf> {
-    maiko_launcher::settings::log_directory()
-}
 
 pub(crate) fn default_game() -> Option<PathBuf> {
     let bytes = std::fs::read(state_directory().ok()?.join("game-directory")).ok()?;

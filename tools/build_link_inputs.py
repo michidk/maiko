@@ -10,10 +10,9 @@ from pathlib import Path
 import subprocess
 import uuid
 
-from .toolchain import ROOT, IMAGE, run, ensure_tool_image
+from .toolchain import ROOT, IMAGE, LINUX_IMAGE, run, ensure_tool_image, ensure_linux_image
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime, CRATE_IMPORT_LIBRARIES, crate_import_libraries
 
-LINUX_IMAGE = 'redguard-recomp-linux:bookworm'
 
 # Mirrors crates/patcher/src/link.rs. LLD's MinGW driver picks the first match per directory in this order.
 WINDOWS_LIBRARIES = sorted(set(
@@ -73,7 +72,7 @@ def main():
         image = IMAGE
     else:
         image = LINUX_IMAGE
-        run(['docker', 'build', '-t', image, '-f', str(ROOT / 'platforms/linux/Dockerfile'), str(ROOT / 'platforms/linux')])
+        ensure_linux_image()
     rust_target = 'x86_64-pc-windows-gnu' if windows else 'x86_64-unknown-linux-gnu'
     host = build_rust_runtime(rust_target, component='host')
     launcher, _ = build_rust_runtime(rust_target, component='launcher')

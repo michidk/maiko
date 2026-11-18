@@ -28,31 +28,31 @@ pub struct Settings {
     pub cd_image: Option<PathBuf>,
 }
 
-fn file() -> Option<PathBuf> {
-    directories::ProjectDirs::from("", "", "maiko")
-        .map(|dirs| dirs.config_dir().join("launcher.json"))
+/// `name` in Maiko's configuration folder.
+pub(crate) fn config_file(name: &str) -> Option<PathBuf> {
+    directories::ProjectDirs::from("", "", "maiko").map(|dirs| dirs.config_dir().join(name))
+}
+
+/// Write `value` as JSON to `name` in Maiko's configuration folder.
+pub(crate) fn save_config(name: &str, value: &impl Serialize) -> std::io::Result<()> {
+    let file = config_file(name)
+        .ok_or_else(|| std::io::Error::other("no configuration folder on this system"))?;
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(file, serde_json::to_vec_pretty(value)?)
 }
 
 impl Settings {
     pub fn load() -> Self {
-        file()
+        config_file("launcher.json")
             .and_then(|file| std::fs::read(file).ok())
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default()
     }
 
     pub fn save(&self) -> std::io::Result<()> {
-        let file = file()
-            .ok_or_else(|| std::io::Error::other("no configuration folder on this system"))?;
-        if let Some(parent) = file.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(file, serde_json::to_vec_pretty(self)?)
-    }
-
-    /// Whether `window_size` is empty or a usable `WIDTHxHEIGHT`.
-    pub fn window_size_valid(&self) -> bool {
-        self.window_size.is_empty() || parse_size(&self.window_size).is_some()
+        save_config("launcher.json", self)
     }
 
     /// The `WGPU_BACKEND` value for the game, when a known backend is chosen.
@@ -162,13 +162,8 @@ mod tests {
 
     #[test]
     fn window_sizes_must_be_sensible() {
-        let size = |text: &str| Settings {
-            window_size: text.into(),
-            ..Settings::default()
-        };
-        assert!(size("").window_size_valid());
-        assert!(size("1024x768").window_size_valid());
-        assert!(!size("100x100").window_size_valid());
-        assert!(!size("big").window_size_valid());
+        assert_eq!(parse_size("1024x768"), Some((1024, 768)));
+        assert_eq!(parse_size("100x100"), None);
+        assert_eq!(parse_size("big"), None);
     }
 }

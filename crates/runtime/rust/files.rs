@@ -1,4 +1,5 @@
 //! Original DOS file handles and DTA searches, with one host-independent policy.
+use crate::Locked;
 use crate::guest::GuestFrame;
 use crate::media::rg_cd_service;
 use crate::memory::guest_ptr;
@@ -315,7 +316,7 @@ impl Files {
     unsafe fn service(&mut self, frame: &mut GuestFrame) -> bool {
         let op = (frame.eax as u32 >> 8) & 255;
         let handle = frame.ebx as u32 as usize;
-        let storage = STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let storage = STORAGE.locked();
         let storage = storage.as_ref();
         match op {
             0x1a => {
@@ -557,7 +558,7 @@ pub unsafe extern "C" fn rg_file_service(frame: *mut GuestFrame) -> c_int {
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return 0;
     };
-    let mut files = FILES.lock().unwrap_or_else(|e| e.into_inner());
+    let mut files = FILES.locked();
     (unsafe { files.get_or_insert_with(Files::default).service(frame) }) as c_int
 }
 

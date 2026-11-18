@@ -28,6 +28,15 @@ def collect_tool_notices(container, support, destination):
         run(['docker','cp',container+':/usr/share/common-licenses/'+license,str(destination/(license+'.txt'))])
 
 
+LINUX_IMAGE='redguard-recomp-linux:bookworm'
+
+
+def ensure_linux_image(**options):
+    """Build the Linux toolchain image; Docker's cache makes an unchanged Dockerfile cheap."""
+    run(['docker','build','-t',LINUX_IMAGE,'-f',str(ROOT/'platforms/linux/Dockerfile'),str(ROOT/'platforms/linux')],**options)
+    return subprocess.check_output(['docker','image','inspect',LINUX_IMAGE,'--format','{{.Id}}'],text=True).strip()
+
+
 def ensure_tool_image():
     """Restore the disposable toolchain after external Docker cache cleanup."""
     began=time.monotonic()

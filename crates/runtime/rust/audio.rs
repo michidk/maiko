@@ -1,13 +1,12 @@
 //! Shared Miles service adapter over the sample mixer and sound output in `mixer.rs`.
+use crate::Locked;
 use crate::guest::GuestFrame;
 use crate::host::{rg_host_lock, rg_host_readable};
 use crate::memory::{guest_address, guest_ptr};
 use crate::memory::{rg_guest_pointer, rg_low_alloc, rg_low_free};
 use crate::mixer;
 use crate::rg_log;
-use crate::stream::{
-    PcmStream, rg_stream_load, rg_stream_ready, rg_stream_reset, rg_stream_status,
-};
+use crate::stream::{PcmStream, frame_bytes};
 use std::ffi::{c_int, c_void};
 use std::io::Write;
 use std::sync::Mutex;
@@ -84,14 +83,12 @@ pub unsafe extern "C" fn rg_audio_stats(stats: *mut AudioStats) {
 /// Runs on the audio thread after the samples are mixed: movie streams, then CD music.
 fn postmix(output: &mut [u8]) {
     {
-        let mut streams = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
+        let mut streams = STREAMS.locked();
         if let Some(streams) = streams.as_mut() {
             for stream in streams.iter_mut().filter(|s| s.handle != 0) {
                 let pcm = &mut stream.pcm;
                 let before = (pcm.nonzero_frames, pcm.mixed_frames, pcm.underrun_frames);
-                unsafe {
-                    pcm.mix(output);
-                }
+                pcm.mix(output);
                 STREAM_NONZERO.fetch_add(pcm.nonzero_frames - before.0, Relaxed);
                 STREAM_MIXED.fetch_add(pcm.mixed_frames - before.1, Relaxed);
                 UNDERRUN.fetch_add(pcm.underrun_frames - before.2, Relaxed);
@@ -157,10 +154,9 @@ impl Audio {
             *sample = Sample::default();
         }
         {
-            let mut streams = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
+            let mut streams = STREAMS.locked();
             if let Some(streams) = streams.as_mut() {
                 for stream in streams {
-                    stream.pcm.clear();
                     if stream.handle != 0 {
                         unsafe {
                             rg_low_free(stream.handle as *mut c_void);
@@ -227,8 +223,7 @@ impl Audio {
                 return false;
             }
         }
-        *STREAMS.lock().unwrap_or_else(|e| e.into_inner()) =
-            Some(std::array::from_fn(|_| Stream::default()));
+        *STREAMS.locked() = Some(std::array::from_fn(|_| Stream::default()));
         self.driver = rg_low_alloc(4) as usize;
         if self.driver == 0 {
             self.close();
@@ -308,19 +303,14 @@ impl Audio {
             if !self.opened || guest_ptr::<c_void>(a[1]) as usize != self.driver {
                 return false;
             }
-            let mut streams = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
+            let mut streams = STREAMS.locked();
             let Some(streams) = streams.as_mut() else {
                 return false;
             };
             frame.eax = 0;
             if let Some(stream) = streams.iter_mut().find(|s| s.handle == 0) {
                 stream.handle = rg_low_alloc(644) as usize;
-                if stream.handle != 0 {
-                    unsafe {
-                        rg_stream_reset(&mut stream.pcm);
-                        stream.pcm.output_rate = mixer::RATE;
-                    }
-                }
+                stream.pcm = PcmStream::default();
                 frame.eax = guest_address(stream.handle as *const c_void).into();
             }
             return true;
@@ -333,8 +323,7 @@ impl Audio {
             {
                 return false;
             }
-            let stride = (if a[3] & 1 != 0 { 2 } else { 1 }) * (if a[3] & 2 != 0 { 2 } else { 1 });
-            frame.eax = (u64::from(a[2]) * stride * 2048)
+            frame.eax = (u64::from(a[2]) * u64::from(frame_bytes(a[3])) * 2048)
                 .div_ceil(u64::from(mixer::RATE))
                 .next_multiple_of(256);
             return true;
@@ -370,9 +359,7 @@ impl Audio {
                             return false;
                         }
                         // With fidelity=1 the game tags 8-bit data as 16-bit; Miles drops the odd trailing byte.
-                        let stride = (if sample.format & 1 != 0 { 2 } else { 1 })
-                            * (if sample.format & 2 != 0 { 2 } else { 1 });
-                        let length = a[3] - a[3] % stride;
+                        let length = a[3] - a[3] % frame_bytes(sample.format);
                         sample.length = length;
                         mixer::set_address(handle, guest_ptr::<c_void>(a[2]), length);
                     }
@@ -396,9 +383,9 @@ impl Audio {
                     }
                     8 => return a[2] == 0 && a[3] == u32::MAX,
                     9 => {
-                        let stride = (if sample.format & 1 != 0 { 2 } else { 1 })
-                            * (if sample.format & 2 != 0 { 2 } else { 1 });
-                        if sample.length == 0 || !sample.length.is_multiple_of(stride) {
+                        if sample.length == 0
+                            || !sample.length.is_multiple_of(frame_bytes(sample.format))
+                        {
                             return false;
                         }
                         mixer::start(handle);
@@ -422,19 +409,7 @@ impl Audio {
                         }
                     }
                     12 => mixer::end(handle),
-                    13 => {
-                        let Some(user) = sample.user.get_mut(a[2] as usize) else {
-                            return false;
-                        };
-                        frame.eax = (*user).into();
-                        *user = a[3];
-                    }
-                    14 => {
-                        let Some(user) = sample.user.get(a[2] as usize) else {
-                            return false;
-                        };
-                        frame.eax = (*user).into();
-                    }
+                    13 | 14 => return user_slot(&mut sample.user, service, &a, frame),
                     _ => return false,
                 }
             }
@@ -449,7 +424,7 @@ impl Audio {
         frame: &mut GuestFrame,
         a: &[u32; 6],
     ) -> bool {
-        let mut streams = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
+        let mut streams = STREAMS.locked();
         let Some(all) = streams.as_mut() else {
             return false;
         };
@@ -472,28 +447,20 @@ impl Audio {
                 format: stream.format,
                 flags: stream.flags,
                 rate: stream.rate,
-                output_rate: stream.output_rate,
-                ..PcmStream::default()
+                ..PcmStream::new(stream.output_rate)
             };
             prepared.buffer[index].state = 1;
             drop(streams);
-            if unsafe { rg_stream_load(&mut prepared, a[2], guest_ptr::<c_void>(a[3]), a[4]) } == 0
-            {
+            // SAFETY: readable for a[4] bytes, checked above; converted before the lock is retaken.
+            let source =
+                unsafe { std::slice::from_raw_parts(guest_ptr::<u8>(a[3]), a[4] as usize) };
+            if !prepared.load(a[2], source) || !self.capture(source) {
                 return false;
             }
-            if !self.capture(unsafe {
-                std::slice::from_raw_parts(guest_ptr::<u8>(a[3]), a[4] as usize)
-            }) {
-                prepared.clear();
-                return false;
-            }
-            let mut streams = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
+            let mut streams = STREAMS.locked();
             let stream = &mut streams.as_mut().unwrap()[slot].pcm;
-            unsafe {
-                libc::free(stream.buffer[index].data.cast());
-            }
             stream.buffer[index] = std::mem::take(&mut prepared.buffer[index]);
-            stream.started = 1;
+            stream.started = true;
             BUFFERS.fetch_add(1, Relaxed);
             return true;
         }
@@ -501,10 +468,7 @@ impl Audio {
         let pcm = &mut stream.pcm;
         match service {
             2 => {
-                unsafe {
-                    rg_stream_reset(pcm);
-                    pcm.output_rate = mixer::RATE;
-                }
+                *pcm = PcmStream::default();
                 stream.user.fill(0);
             }
             3 => {
@@ -539,34 +503,18 @@ impl Audio {
                 }
                 pcm.volume = a[2];
             }
-            11 => frame.eax = unsafe { rg_stream_status(pcm) }.into(),
+            11 => frame.eax = pcm.status().into(),
             12 => pcm.clear(),
-            13 => {
-                let Some(user) = stream.user.get_mut(a[2] as usize) else {
-                    return false;
-                };
-                frame.eax = (*user).into();
-                *user = a[3];
-            }
-            14 => {
-                let Some(user) = stream.user.get(a[2] as usize) else {
-                    return false;
-                };
-                frame.eax = (*user).into();
-            }
+            13 | 14 => return user_slot(&mut stream.user, service, a, frame),
             21 => {
-                pcm.clear();
                 unsafe {
                     rg_low_free(stream.handle as *mut c_void);
                 }
                 *stream = Stream::default();
             }
-            22 => frame.eax = unsafe { rg_stream_ready(pcm) }.into(),
-            23 => {
-                if unsafe { rg_stream_load(pcm, a[2], guest_ptr::<c_void>(a[3]), a[4]) } == 0 {
-                    return false;
-                }
-            }
+            22 => frame.eax = pcm.ready().into(),
+            // A nonempty buffer was loaded above; an empty one marks the end.
+            23 => return pcm.load(a[2], &[]),
             24 => {
                 if a[2..]
                     .iter()
@@ -576,10 +524,10 @@ impl Audio {
                 }
                 let mut info = [0; 4];
                 for (i, b) in pcm.buffer.iter().enumerate() {
-                    info[2 * i] = if b.length == 0 {
+                    info[2 * i] = if b.data.is_empty() {
                         0
                     } else {
-                        (u64::from(b.position) * u64::from(b.source_length) / u64::from(b.length))
+                        (u64::from(b.position) * u64::from(b.source_length) / b.data.len() as u64)
                             as u32
                     };
                     info[2 * i + 1] = b.source_length;
@@ -591,7 +539,7 @@ impl Audio {
                         }
                     }
                 }
-                frame.eax = u64::from(pcm.ended != 0 && unsafe { rg_stream_status(pcm) } == 2);
+                frame.eax = u64::from(pcm.ended && pcm.status() == 2);
             }
             _ => return false,
         }
@@ -606,7 +554,7 @@ pub unsafe extern "C" fn rg_audio_open(handles: *mut u32) -> c_int {
     if handles.is_null() {
         return 0;
     }
-    let mut audio = AUDIO.lock().unwrap_or_else(|e| e.into_inner());
+    let mut audio = AUDIO.locked();
     (unsafe {
         audio
             .get_or_insert_with(Audio::default)
@@ -616,7 +564,7 @@ pub unsafe extern "C" fn rg_audio_open(handles: *mut u32) -> c_int {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_audio_close() {
-    if let Some(audio) = AUDIO.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+    if let Some(audio) = AUDIO.locked().as_mut() {
         audio.close();
     }
 }
@@ -628,10 +576,22 @@ pub unsafe extern "C" fn rg_audio_service(service: u32, frame: *mut GuestFrame) 
     let Some(frame) = (unsafe { frame.as_mut() }) else {
         return 0;
     };
-    let mut audio = AUDIO.lock().unwrap_or_else(|e| e.into_inner());
+    let mut audio = AUDIO.locked();
     (unsafe {
         audio
             .get_or_insert_with(Audio::default)
             .service(service, frame)
     }) as c_int
+}
+
+/// Miles user data slots: service 13 swaps in a value, 14 reads it; both return the old value.
+fn user_slot(user: &mut [u32; 8], service: u32, a: &[u32; 6], frame: &mut GuestFrame) -> bool {
+    let Some(slot) = user.get_mut(a[2] as usize) else {
+        return false;
+    };
+    frame.eax = (*slot).into();
+    if service == 13 {
+        *slot = a[3];
+    }
+    true
 }

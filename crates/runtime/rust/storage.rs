@@ -1,6 +1,7 @@
 //! DOS paths and isolated writable storage shared by native hosts.
 //! User operations stay relative to opened capability directories. Each parent
 //! is opened without following links; installation data is never writable.
+use crate::Locked;
 use crate::os::{canonical, inside, path_cstring, sync_directory};
 pub(crate) use crate::os::{path_from_c, rename_noreplace};
 use crate::rg_log;
@@ -412,7 +413,7 @@ pub(crate) unsafe fn copy_path(
 
 pub(crate) fn select_game(path: &Path) -> io::Result<()> {
     let selected = Storage::select(path)?;
-    *STORAGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(selected);
+    *STORAGE.locked() = Some(selected);
     Ok(())
 }
 
@@ -430,8 +431,7 @@ pub unsafe extern "C" fn rg_path_root(path: *const c_char) -> c_int {
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_game_root() -> *const c_char {
     STORAGE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .locked()
         .as_ref()
         .map_or(EMPTY.as_ptr().cast(), |s| s.game.c_path.as_ptr())
 }
@@ -447,7 +447,7 @@ pub unsafe extern "C" fn rg_resolve_path(
 ) -> c_int {
     let result = (|| {
         let path = unsafe { path_from_c(path) }?;
-        let storage = STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let storage = STORAGE.locked();
         let storage = storage.as_ref().ok_or_else(denied)?;
         let resolved = storage.resolved(&path.to_string_lossy())?;
         unsafe { copy_path(&resolved, out, capacity) }?;
@@ -463,7 +463,7 @@ pub unsafe extern "C" fn rg_resolve_path(
 pub unsafe extern "C" fn rg_user_storage_init(path: *const c_char) -> c_int {
     let result = (|| {
         let path = unsafe { path_from_c(path) }?;
-        let mut storage = STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut storage = STORAGE.locked();
         storage.as_mut().ok_or_else(denied)?.initialize_user(&path)
     })();
     result.is_ok() as c_int
@@ -479,7 +479,7 @@ pub unsafe extern "C" fn rg_user_storage_init(game: *const c_char, user: *const 
         let user = unsafe { path_from_c(user) }?;
         let mut selected = Storage::select(&game)?;
         selected.initialize_user(&user)?;
-        *STORAGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(selected);
+        *STORAGE.locked() = Some(selected);
         Ok::<_, io::Error>(())
     })();
     if let Err(error) = &result {
@@ -489,41 +489,11 @@ pub unsafe extern "C" fn rg_user_storage_init(game: *const c_char, user: *const 
 }
 
 /// # Safety
-/// `path` points to a native directory pathname.
-#[cfg(windows)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_storage_game_root(path: *const c_char) -> c_int {
-    unsafe { path_from_c(path) }
-        .and_then(|p| select_game(&p))
-        .is_ok() as c_int
-}
-
-#[cfg(windows)]
-#[unsafe(no_mangle)]
-pub extern "C" fn rg_storage_game_selected() -> c_int {
-    STORAGE.lock().unwrap_or_else(|e| e.into_inner()).is_some() as c_int
-}
-
-/// # Safety
-/// `path` is a native directory and `out` has the legacy MAX_PATH capacity.
-#[cfg(windows)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_storage_canonical_directory(
-    path: *const c_char,
-    out: *mut c_char,
-) -> c_int {
-    unsafe { path_from_c(path) }
-        .and_then(|p| canonical(&p))
-        .and_then(|p| unsafe { copy_path(&p, out, 260) })
-        .is_ok() as c_int
-}
-
-/// # Safety
 /// `out` is writable for `capacity` bytes, or null when asking for the size.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rg_host_cwd(capacity: u32, out: *mut c_char) -> u32 {
     let result = (|| {
-        let storage = STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let storage = STORAGE.locked();
         let cwd = std::env::current_dir()?;
         let path = if let Some(storage) = storage.as_ref() {
             let relative = std::iter::once(&storage.game)
@@ -552,7 +522,7 @@ pub unsafe extern "C" fn rg_host_cwd(capacity: u32, out: *mut c_char) -> u32 {
 pub unsafe extern "C" fn rg_host_chdir(path: *const c_char) -> c_int {
     let result = (|| {
         let path = unsafe { path_from_c(path) }?;
-        let storage = STORAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let storage = STORAGE.locked();
         let target = if let Some(storage) = storage.as_ref() {
             storage.resolved(&path.to_string_lossy())?
         } else {

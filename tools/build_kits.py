@@ -67,16 +67,12 @@ RUST_TARGETS = {'windows': 'x86_64-pc-windows-gnu', 'linux': 'x86_64-unknown-lin
 
 
 def notices(text, target):
-    """The seed's notices without OpenGLide, GLU and GL dispatch (the renderer is now built into the
-    program), followed by fresh notices for the Rust standard library and the target's crates."""
+    """The seed's own notices, followed by fresh notices for the Rust standard library and the
+    target's crates. Older Mac seeds title the Rust part without "and bundled dependencies"."""
     from .rust_licenses import notices as crate_notices
-    text = text.split(RUST_NOTICES)[0]
-    # shortcut: edits the notices carried forward from the release; drop once a release ships without OpenGLide.
-    text = re.sub(r'OpenGLide-ng[^\n]*\n', '', text)
-    text = re.sub(r'===== OpenGLide LGPL 2\.1 =====\n.*?(?====== )', '', text, flags=re.S)
-    # GLU and libglvnd are the last two Linux notices.
-    text = text.split('\n\ncopyright\nFormat: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n'
-                      'Upstream-Name: glu\n')[0]
+    text = re.split(r'\n===== Rust standard library', text)[0]
+    # shortcut: the v1.0.2 Mac seed still lists SDL; drop once a release ships without it.
+    text = re.sub(r'===== SDL(_mixer)? [0-9.]+ =====\n.*?(?====== )', '', text, flags=re.S)
     sysroot = Path(subprocess.check_output(['rustc', '--print', 'sysroot'], cwd=ROOT, text=True).strip())
     library = (sysroot / 'share/doc/rust/COPYRIGHT-library.html').read_text()
     return text.rstrip('\n') + '\n' + RUST_NOTICES + library + '\n\n' + crate_notices(RUST_TARGETS[target]) + '\n'
@@ -88,11 +84,9 @@ def runtime_directory(target, built, destination):
         for name in seed.namelist():
             if name.startswith('runtime/') and not name.endswith('/'):
                 leaf = name.removeprefix('runtime/')
-                # shortcut: skips the launcher's old name, the OpenGLide renderer, its GL libraries and the old pthread DLL in the seed;
-                # drop once a release ships without them.
-                if (leaf.startswith(('RUN', 'libwinpthread', 'libGL', 'libOpenGL', 'libredguard-', 'redguard-', 'libSDL2', 'SDL2'))
-                        or leaf.endswith('.tar.gz')
-                        or leaf in ('README.txt', 'Maiko.exe', 'maiko.exe', 'maiko-launcher.exe')):
+                # shortcut: the v1.0.2 seed carries the old launcher name, the pthread DLL and the SDL
+                # build note; drop those names once a release ships without them.
+                if leaf in ('README.txt', 'maiko.exe', 'maiko-launcher.exe', 'libwinpthread-1.dll', 'SDL-BUILD.txt'):
                     continue
                 data = seed.read(name)
                 (destination / leaf).write_bytes(notices(data.decode(), target).encode() if leaf == 'LICENSES.txt' else data)
@@ -105,11 +99,10 @@ def runtime_directory(target, built, destination):
 def sources():
     """The pinned SR checkout the tools and link inputs are built from."""
     from .pipeline import SR_COMMIT
-    for repository, url, commit in [('sr', 'https://github.com/M-HT/SR.git', SR_COMMIT)]:
-        directory = ROOT / '.cache' / repository
-        if not directory.exists():
-            sh(['git', 'clone', '--no-checkout', url, directory])
-            sh(['git', '-C', directory, 'checkout', '--detach', commit])
+    directory = ROOT / '.cache/sr'
+    if not directory.exists():
+        sh(['git', 'clone', '--no-checkout', 'https://github.com/M-HT/SR.git', directory])
+        sh(['git', '-C', directory, 'checkout', '--detach', SR_COMMIT])
 
 
 def browser_build(target, kit, exe, output, scratch, kit_tool):

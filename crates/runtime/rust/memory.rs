@@ -1,4 +1,5 @@
 //! Guest-addressable heap: free-list blocks mapped within 2 GiB of the guest base.
+use crate::Locked;
 use crate::{os, rg_log};
 use std::alloc::Layout;
 use std::ffi::{c_int, c_void};
@@ -199,7 +200,7 @@ pub extern "C" fn rg_low_alloc(size: usize) -> *mut c_void {
     if size == 0 || size > 0x10000000 {
         return std::ptr::null_mut();
     }
-    let mut heap = HEAP.lock().unwrap_or_else(|e| e.into_inner());
+    let mut heap = HEAP.locked();
     #[cfg(feature = "llasm")]
     if POINTER_OFFSET
         .get_or_init(initialize_pointer_offset)
@@ -253,7 +254,7 @@ pub unsafe extern "C" fn rg_low_free(pointer: *mut c_void) -> c_int {
         return 1;
     };
     let address = pointer.as_ptr() as usize;
-    let mut heap = HEAP.lock().unwrap_or_else(|e| e.into_inner());
+    let mut heap = HEAP.locked();
     let Some(slot) = heap.allocations.iter().position(|&(a, _)| a == address) else {
         return 0;
     };
@@ -276,8 +277,7 @@ pub unsafe extern "C" fn rg_low_free(pointer: *mut c_void) -> c_int {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rg_low_size(pointer: *const c_void) -> usize {
-    HEAP.lock()
-        .unwrap_or_else(|e| e.into_inner())
+    HEAP.locked()
         .allocations
         .iter()
         .find(|&&(address, _)| address == pointer as usize)

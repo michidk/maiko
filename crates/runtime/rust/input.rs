@@ -1,5 +1,6 @@
 //! The game window (winit) and DOS keyboard/mouse state shared by every host. The translated game
 //! owns its main loop, so window events are pumped from it instead of from a winit event loop.
+use crate::Locked;
 use crate::rg_log;
 #[path = "controller.rs"]
 mod controller;
@@ -197,7 +198,7 @@ fn dos_scan(key: KeyCode) -> u16 {
 static DISPLAY: std::sync::Mutex<(bool, Option<(u32, u32)>)> = std::sync::Mutex::new((false, None));
 
 pub fn set_display(fullscreen: bool, size: Option<(u32, u32)>) {
-    let mut display = DISPLAY.lock().unwrap_or_else(|e| e.into_inner());
+    let mut display = DISPLAY.locked();
     *display = (fullscreen || display.0, size.or(display.1));
 }
 
@@ -231,7 +232,7 @@ impl Input {
         self.height = height;
         if self.window.is_none() {
             let events = EventLoop::new().map_err(|e| e.to_string())?;
-            let (fullscreen, size) = *DISPLAY.lock().unwrap_or_else(|e| e.into_inner());
+            let (fullscreen, size) = *DISPLAY.locked();
             let (w, h) = size.unwrap_or((width, height));
             let mut attributes = Window::default_attributes()
                 .with_title(concat!(
@@ -250,7 +251,7 @@ impl Input {
                 .map_err(|e| e.to_string())?;
             self.window = Some(Arc::new(window));
             self.events = Some(events);
-        } else if *DISPLAY.lock().unwrap_or_else(|e| e.into_inner()) == (false, None)
+        } else if *DISPLAY.locked() == (false, None)
             && let Some(window) = &self.window
         {
             let _ = window.request_inner_size(winit::dpi::LogicalSize::new(width, height));
@@ -507,7 +508,7 @@ fn picture(window: (u32, u32), game: (u32, u32)) -> (i64, i64, i64, i64) {
 pub fn set_resizable(resizable: bool) {
     INPUT.with(|input| {
         if let Some(window) = &input.borrow().window
-            && !DISPLAY.lock().unwrap_or_else(|e| e.into_inner()).0
+            && !DISPLAY.locked().0
         {
             window.set_resizable(resizable);
             if resizable {

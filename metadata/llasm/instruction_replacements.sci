@@ -641,7 +641,7 @@ loc_1631B1,2,ctcallz edx, loc_163386|tcall rg_patch_1631B1_part1|endp|proc rg_pa
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on, instead of continuing with wrong behavior.
 # Why: neither the translator nor the runtime has a 16-bit execution model. These four sites are in unsupported mixed-mode system code and are not reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm; twelve such traps remain in the native build.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c; twelve such traps remain in the native build.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
 loc_135EEC,6,call rg_translation_trap 0x135eec|POP tmp1|tcall tmp1|endp
@@ -651,7 +651,7 @@ loc_135EEC,6,call rg_translation_trap 0x135eec|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on, instead of continuing with wrong behavior.
 # Why: neither the translator nor the runtime has a 16-bit execution model. These four sites are in unsupported mixed-mode system code and are not reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm; twelve such traps remain in the native build.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c; twelve such traps remain in the native build.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
 loc_136137,6,call rg_translation_trap 0x136137|POP tmp1|tcall tmp1|endp
@@ -661,7 +661,7 @@ loc_136137,6,call rg_translation_trap 0x136137|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on, instead of continuing with wrong behavior.
 # Why: neither the translator nor the runtime has a 16-bit execution model. These four sites are in unsupported mixed-mode system code and are not reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm; twelve such traps remain in the native build.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c; twelve such traps remain in the native build.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
 loc_13619A,6,call rg_translation_trap 0x13619a|POP tmp1|tcall tmp1|endp
@@ -671,7 +671,7 @@ loc_13619A,6,call rg_translation_trap 0x13619a|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on, instead of continuing with wrong behavior.
 # Why: neither the translator nor the runtime has a 16-bit execution model. These four sites are in unsupported mixed-mode system code and are not reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm; twelve such traps remain in the native build.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c; twelve such traps remain in the native build.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: ff1adf1d1bd5d6b819e6111ce361fd9b9b191a057b77871ae88827b3b6487a04
 loc_1361F2,6,call rg_translation_trap 0x1361f2|POP tmp1|tcall tmp1|endp
@@ -681,7 +681,7 @@ loc_1361F2,6,call rg_translation_trap 0x1361f2|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
 loc_127C9A,3,call rg_translation_trap 0x127c9a|POP tmp1|tcall tmp1|endp
@@ -691,7 +691,7 @@ loc_127C9A,3,call rg_translation_trap 0x127c9a|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
 loc_127EB1,3,call rg_translation_trap 0x127eb1|POP tmp1|tcall tmp1|endp
@@ -701,7 +701,7 @@ loc_127EB1,3,call rg_translation_trap 0x127eb1|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 2017ff3461395672aa0aa4f64894fd2f95a4b120e2690e8951656d79adc2eed2
 loc_128CEB,1,call rg_translation_trap 0x128ceb|POP tmp1|tcall tmp1|endp
@@ -711,7 +711,7 @@ loc_128CEB,1,call rg_translation_trap 0x128ceb|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
 loc_135543,3,call rg_translation_trap 0x135543|POP tmp1|tcall tmp1|endp
@@ -721,7 +721,7 @@ loc_135543,3,call rg_translation_trap 0x135543|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 60cbe1165c0f7184a47c68b9418ad25066b5dfa06cacfa4bbd86e3ec1dcf13ca
 loc_1356B5,3,call rg_translation_trap 0x1356b5|POP tmp1|tcall tmp1|endp
@@ -731,7 +731,7 @@ loc_1356B5,3,call rg_translation_trap 0x1356b5|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 820240448fc9d0e855c61584ed04a8a069253d608b84bab4083cd4887b6b6423
 loc_135999,3,call rg_translation_trap 0x135999|POP tmp1|tcall tmp1|endp
@@ -741,7 +741,7 @@ loc_135999,3,call rg_translation_trap 0x135999|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm traps the complete LSL/JE/MOV decision, including the unreachable ZF consumer.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: e9f61fbeb43abeefd82d4399122796d994a534f8d16e1cfe6d95f2fe7c035d16
@@ -752,7 +752,7 @@ loc_144CA7,10,call rg_translation_trap 0x144ca7|POP tmp1|tcall tmp1|endp
 # Replacement: UD2.
 # Effect: reaching the site raises an invalid-instruction fault, which the native fault reporter prints and stops on.
 # Why: LSL and LAR need a guest descriptor model, SIDT needs a guest interrupt descriptor table, and HLT has no meaning in a native process. None is reached during normal play.
-# Evidence: tests/check_original_fault.py; tests/entry_fault.asm.
+# Evidence: tests/check_original_fault.py; tests/original_fault.c.
 # Replacement: LLasm uses explicit CPU-state host calls and tail calls; the behavior above is retained.
 # sha256: 17204d99c7f0f84dccfc4b09f720a13bacc4af033aa234d7a39210584f35662a
 loc_13BD6B,4,call rg_translation_trap 0x13bd6b|POP tmp1|tcall tmp1|endp

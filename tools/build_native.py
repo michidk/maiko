@@ -29,7 +29,7 @@ def main():
     p.add_argument('--exercise',action='store_true',help='Check inventory close and original sword/attack/jump input under Wine')
     p.add_argument('--gameplay-seconds',type=int,default=30,choices=range(1,181),metavar='1..180')
     p.add_argument('--save-roundtrip',action='store_true',help='Verify original autosave/reload with Wine and isolated user files')
-    p.add_argument('--redbook',action='store_true',help='Exercise the original CD-open absence path; CD playback is not implemented')
+    p.add_argument('--redbook',action='store_true',help="Enable redbook CD music in the scenario's SYSTEM.INI")
     p.add_argument('--sound',action='store_true',help='Enable sample audio (silent without a sound device)')
     p.add_argument('--writable-gameplay',action='store_true',help='Use isolated writable user files in gameplay probes')
     p.add_argument('--world-controls',action='store_true',help='Check original movement/book/Quit on Continue under Wine')
@@ -81,17 +81,12 @@ def main():
         with (work/'native-build.log').open('w') as log:
             run(['docker','exec',name,'timeout','1800' if a.link_only else '360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
         report['native_build_status']='linked'
-        report['wine_crash_dispatch_tests_verified']=True
-        report['wine_translated_fault_reports_verified']=True
-        report['wine_original_clip_tests_verified']=True
-        report['wine_original_gameplay_function_tests_verified']=True
         report['wine_original_audio_tests_verified']=True
         report['native_setup_build_test_seconds']=round(time.monotonic()-began,3)
         for filename in ['redguard-native.exe','native.map','native-symbols.txt']:
             run(['docker','cp',name+':/work/'+filename,str(work/filename)])
         report['native_exe_sha256']=hashlib.sha256((work/'redguard-native.exe').read_bytes()).hexdigest()
         if a.link_only:
-            report['native_build_status']='linked'
             print(work)
             return 0
         game_directory='Z:\\game'

@@ -76,8 +76,6 @@ static mut KEY_STACK: u32 = 0;
 static mut ALLOCATIONS: u32 = 0;
 static TRACE_ALLOC: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 static mut SIGNAL_HANDLERS: [u32; 13] = [0; 13];
-static mut KEYBOARD_LOCKS: u32 = 0;
-static mut HARD_ERROR_CALLBACK: u32 = 0;
 static mut CRITICAL_VECTOR: u32 = 0;
 unsafe fn read32(p: *const u8) -> u32 {
     unsafe { p.cast::<u32>().read_unaligned() }
@@ -386,14 +384,10 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                 return;
             }
             13 => {
-                HARD_ERROR_CALLBACK = f.eax as u32;
                 rg_log!("Native file errors return status without a DOS critical-error dialog");
                 return;
             }
-            14 => {
-                HARD_ERROR_CALLBACK = 0;
-                return;
-            }
+            14 => return,
             11 | 12 => {
                 f.eax = rg_host_lock(
                     guest_ptr::<c_void>(f.eax as u32),
@@ -408,12 +402,10 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     final_version,
                     memory_manager
                 );
-                KEYBOARD_LOCKS &= !0x10;
                 rg_log!("Native input scroll lock cleared");
                 return;
             }
             10 => {
-                KEYBOARD_LOCKS &= !0x20;
                 rg_log!("Native input num lock cleared");
                 return;
             }

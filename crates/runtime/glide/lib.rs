@@ -40,9 +40,9 @@ struct Bridge {
 }
 /// Glide's GR_TEXTURECLAMP_CLAMP.
 const CLAMP: u32 = 1;
-/// Texture memory per TMU, as OpenGLide reported it to the game.
+/// Texture memory per TMU reported to the game.
 const TEXTURE_MEMORY: u32 = 16 << 20;
-/// Frame buffer memory reported in MB, as OpenGLide did.
+/// Frame buffer memory reported to the game, in MB.
 const FRAME_BUFFER_MB: u32 = 8;
 
 /// Converts a raw Glide value, logging one that is out of range.
@@ -398,7 +398,7 @@ impl Bridge {
                 }
                 36 => g.fog_color(a[0]),
                 65 => {
-                    // GrHwConfiguration: one Voodoo board with one TMU, as OpenGLide reports.
+                    // GrHwConfiguration: one Voodoo board with one TMU.
                     let config = guest_ptr::<u32>(a[0]);
                     for (i, value) in [1, 0, FRAME_BUFFER_MB, 2, 1, 0, 1, TEXTURE_MEMORY >> 20]
                         .into_iter()

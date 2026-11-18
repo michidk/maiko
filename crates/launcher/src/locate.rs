@@ -129,11 +129,8 @@ pub fn standard_folders(machine: &Machine) -> Vec<PathBuf> {
 }
 
 /// Where Maiko stores the folder it found (`install.json` in its own config directory).
-pub fn preference_files() -> Vec<PathBuf> {
-    directories::ProjectDirs::from("", "", "maiko")
-        .map(|dirs| dirs.config_dir().join("install.json"))
-        .into_iter()
-        .collect()
+pub fn preference_file() -> Option<PathBuf> {
+    crate::settings::config_file("install.json")
 }
 
 fn read_preference(file: &Path) -> Option<PathBuf> {
@@ -142,12 +139,12 @@ fn read_preference(file: &Path) -> Option<PathBuf> {
 
 /// Find the game folder with everything known about the machine, in the documented order.
 pub fn find(
-    preferences: &[PathBuf],
+    preference: Option<&Path>,
     env: Option<PathBuf>,
     program_folder: &Path,
     machine: &Machine,
 ) -> Option<PathBuf> {
-    let remembered = preferences.iter().filter_map(|file| read_preference(file));
+    let remembered = preference.and_then(read_preference).into_iter();
     let from_env = env.into_iter();
     // The exact folders first, then the folders around the program, then the standard places.
     remembered
@@ -164,14 +161,7 @@ pub fn find(
 
 /// Store the chosen folder for the next launch.
 pub fn remember(game: &Path) -> std::io::Result<()> {
-    let file = preference_files()
-        .into_iter()
-        .next()
-        .ok_or_else(|| std::io::Error::other("no configuration folder on this system"))?;
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(file, serde_json::to_vec_pretty(game)?)
+    crate::settings::save_config("install.json", &game)
 }
 
 #[cfg(test)]
@@ -269,14 +259,14 @@ mod tests {
         };
         let preference = root.path().join("install.json");
         fs::write(&preference, serde_json::to_vec(&remembered_game).unwrap()).unwrap();
-        let find = |preferences: &[PathBuf], env: Option<PathBuf>| {
-            find(preferences, env, &program, &machine)
+        let find = |preference: Option<&Path>, env: Option<PathBuf>| {
+            find(preference, env, &program, &machine)
         };
         assert_eq!(
-            find(std::slice::from_ref(&preference), Some(env_game.clone())),
+            find(Some(&preference), Some(env_game.clone())),
             Some(remembered_game)
         );
-        assert_eq!(find(&[], Some(env_game.clone())), Some(env_game));
+        assert_eq!(find(None, Some(env_game.clone())), Some(env_game));
         // A remembered folder that has gone away is skipped, not an error.
         fs::write(
             &preference,
@@ -284,12 +274,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            find(&[preference], None),
+            find(Some(&preference), None),
             Some(beside),
             "the folder beside the program"
         );
         fs::remove_dir_all(root.path().join("Redguard")).unwrap();
-        assert_eq!(find(&[], None), Some(standard), "a standard location");
+        assert_eq!(find(None, None), Some(standard), "a standard location");
     }
 
     #[test]
@@ -298,7 +288,7 @@ mod tests {
         let program = game(&root.path().join("Redguard"));
         game(&root.path().join("Redguard/Redguard"));
         assert_eq!(
-            find(&[], None, &program, &Machine::default()),
+            find(None, None, &program, &Machine::default()),
             Some(program)
         );
     }
