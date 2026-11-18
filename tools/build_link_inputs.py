@@ -13,27 +13,20 @@ import uuid
 
 from .toolchain import ROOT, IMAGE, run, ensure_tool_image
 from .sr_heap import stage_sr_heap
-from .sr_audio import stage_sr_audio
 from .windows_sdl import stage_windows_sdl
-from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
+from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime, CRATE_IMPORT_LIBRARIES, crate_import_libraries
 
 LINUX_IMAGE = 'redguard-recomp-linux:bookworm'
 
 # Mirrors crates/patcher/src/link.rs. LLD's MinGW driver picks the first match per directory in this order.
-# Import libraries the launcher's crates name (`cargo rustc -- --print native-static-libs`) that MinGW
-# does not provide: windows-targets' for winit and wgpu, winapi's for sysinfo.
-CRATE_IMPORT_LIBRARIES = ['windows.0.52.0', 'winapi_ntdll', 'winapi_advapi32', 'winapi_credui', 'winapi_kernel32',
-                          'winapi_secur32']
 WINDOWS_LIBRARIES = sorted(set(
-    'SDL2_mixer SDL2 stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
-    'user32 shell32 ole32 mingw32 gcc moldname mingwex msvcrt kernel32 pthread'.split()))
+    'SDL2 stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
+    'user32 shell32 ole32 mingw32 gcc moldname mingwex msvcrt kernel32 pthread'.split() + CRATE_IMPORT_LIBRARIES))
 WINDOWS = f'''set -e
 cd /work
 x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.obj
-x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work -I/audio -I/sdl/include/SDL2 -DRG_USE_SDL_AUDIO -DSDL_MAIN_HANDLED \\
-  -Wno-unused-parameter -c /audio/Albion-sound.c -o sr_audio.obj
 mkdir -p /out/link /out/runtime
-cp libmaiko_host.a guest_memory.obj sr_audio.obj /out/link/
+cp libmaiko_host.a guest_memory.obj /out/link/
 gcc=/usr/lib/gcc/x86_64-w64-mingw32/12-posix; mingw=/usr/x86_64-w64-mingw32/lib
 cp $mingw/crt2.o $gcc/crtbegin.o $gcc/crtend.o /out/link/
 resolve() {{
@@ -54,14 +47,13 @@ x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/maiko.exe launcher_main.
 LINUX = '''set -e
 cd /work
 g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.o
-gcc -Wall -Wextra -Werror -O2 -I/work -I/linux -I/audio -DRG_USE_SDL -DRG_USE_SDL_AUDIO $(pkg-config --cflags SDL2_mixer) \\
-  -Wno-unused-parameter -c /audio/Albion-sound.c -o sr_audio.o
 mkdir -p /out/link /out/runtime
-cp libmaiko_host.a guest_memory.o sr_audio.o /out/link/
+cp libmaiko_host.a guest_memory.o /out/link/
 for file in /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o /usr/lib/x86_64-linux-gnu/crtn.o \\
     /usr/lib/gcc/x86_64-linux-gnu/12/crtbegin.o /usr/lib/gcc/x86_64-linux-gnu/12/crtend.o /usr/lib/gcc/x86_64-linux-gnu/12/libgcc.a \\
     /lib/x86_64-linux-gnu/libgcc_s.so.1 /lib/x86_64-linux-gnu/libc.so.6 /usr/lib/x86_64-linux-gnu/libc_nonshared.a \\
-    /lib64/ld-linux-x86-64.so.2 /lib/x86_64-linux-gnu/libm.so.6 /lib/x86_64-linux-gnu/libstdc++.so.6; do
+    /lib64/ld-linux-x86-64.so.2 /lib/x86_64-linux-gnu/libm.so.6 /lib/x86_64-linux-gnu/libstdc++.so.6 \\
+    /usr/lib/x86_64-linux-gnu/libasound.so.2; do
   cp -L $file /out/link/
 done
 gcc -O2 -s -o /out/runtime/maiko launcher_main.c libmaiko_launcher.a \\
@@ -70,20 +62,6 @@ gcc -O2 -s -o /out/runtime/maiko launcher_main.c libmaiko_launcher.a \\
 
 # The launcher is a Rust static library (maiko-launcher); this is the executable's whole C side.
 LAUNCHER_MAIN = b'int maiko_launcher_main(void);\nint main(void) { return maiko_launcher_main(); }\n'
-
-
-def crate_import_libraries():
-    """The MinGW import libraries in CRATE_IMPORT_LIBRARIES, from the locked crates that ship them."""
-    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--format-version=1', '--locked', '--filter-platform',
-                                                   'x86_64-pc-windows-gnu'], cwd=ROOT, text=True))
-    folders = [Path(p['manifest_path']).parent / 'lib' for p in metadata['packages']
-               if p['name'] in ('windows_x86_64_gnu', 'winapi-x86_64-pc-windows-gnu')]
-    found = {name: next((folder / f'lib{name}.a' for folder in folders if (folder / f'lib{name}.a').is_file()), None)
-             for name in CRATE_IMPORT_LIBRARIES}
-    missing = [name for name, path in found.items() if path is None]
-    if missing:
-        raise SystemExit(f'Import libraries not found in the locked crates: {missing}')
-    return list(found.values())
 
 
 def main():
@@ -113,7 +91,6 @@ def main():
         subprocess.run(['docker', 'exec', '-i', name, 'sh', '-c', 'cat > /work/launcher_main.c'], check=True,
                        input=LAUNCHER_MAIN)
         stage_sr_heap(name)
-        stage_sr_audio(name)
         if windows:
             stage_windows_sdl(name)
             # The launcher's crates link import libraries that their -sys crates ship for MinGW.

@@ -5,7 +5,7 @@ For a runnable package from your own installation, use the [client-side browser 
 ## Requirements
 
 - Rust through [rustup](https://rustup.rs/). `rust-toolchain.toml` pins the compiler.
-- SDL2 and SDL2_mixer development libraries and `pkg-config` for the runtime tests.
+- SDL2 and ALSA (`libasound2-dev`) development libraries and `pkg-config` for the runtime tests.
 - Python 3.11 and a C/C++ compiler for the existing independent interface tests.
 - Bun for the static website.
 

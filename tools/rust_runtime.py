@@ -37,6 +37,24 @@ def cross_tools(target):
     return env
 
 
+# Import libraries the launcher's and runtime's crates name (`cargo rustc -- --print native-static-libs`) that MinGW
+# does not provide: windows-targets' for winit, wgpu and cpal, winapi's for sysinfo.
+CRATE_IMPORT_LIBRARIES = ['windows.0.52.0', 'winapi_ntdll', 'winapi_advapi32', 'winapi_credui', 'winapi_kernel32',
+                          'winapi_secur32']
+def crate_import_libraries():
+    """The MinGW import libraries in CRATE_IMPORT_LIBRARIES, from the locked crates that ship them."""
+    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--format-version=1', '--locked', '--filter-platform',
+                                                   'x86_64-pc-windows-gnu'], cwd=ROOT, text=True))
+    folders = [Path(p['manifest_path']).parent / 'lib' for p in metadata['packages']
+               if p['name'] in ('windows_x86_64_gnu', 'winapi-x86_64-pc-windows-gnu')]
+    found = {name: next((folder / f'lib{name}.a' for folder in folders if (folder / f'lib{name}.a').is_file()), None)
+             for name in CRATE_IMPORT_LIBRARIES}
+    missing = [name for name, path in found.items() if path is None]
+    if missing:
+        raise SystemExit(f'Import libraries not found in the locked crates: {missing}')
+    return list(found.values())
+
+
 def build(target, *, component="runtime", llasm=False):
     if component not in ("runtime", "host", "probe", "glide", "launcher"):
         raise ValueError("Unknown Rust component: "+component)

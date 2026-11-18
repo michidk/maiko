@@ -8,7 +8,6 @@ from .toolchain import ROOT
 
 PACKAGES=[
  ('SDL','2.30.11','SDL2','0590db0a47b564aab92499ed03eaa75db9aee17c371080caa3b05df9d49d9ff9'),
- ('SDL_mixer','2.8.1','SDL2_mixer','b6c98eecd308aa9922ede0aac466bb5dea6c3e9b9b59dd496009f778c90d83d7'),
 ]
 def stage_windows_sdl(container):
     destination=ROOT/'.cache/sdl-windows';destination.mkdir(exist_ok=True)
@@ -34,6 +33,6 @@ def stage_windows_sdl(container):
         report[project]=dict(version=version,url=url,archive_sha256=expected,
                              dll_sha256=hashlib.sha256(runtime.read_bytes()).hexdigest())
     subprocess.run(['docker','cp',str(destination)+'/.',container+':/sdl'],check=True)
-    for dll in ['SDL2.dll','SDL2_mixer.dll']:
+    for dll in ['SDL2.dll']:
         subprocess.run(['docker','cp',str(destination/'bin'/dll),container+':/work/'+dll],check=True)
     return report

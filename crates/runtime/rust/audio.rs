@@ -1,57 +1,17 @@
-//! Shared Miles service adapter. SR owns sample decoding; SDL_mixer owns output.
+//! Shared Miles service adapter over the sample mixer and sound output in `mixer.rs`.
 use crate::guest::GuestFrame;
 use crate::host::{rg_host_lock, rg_host_readable};
 use crate::memory::{guest_address, guest_ptr};
 use crate::memory::{rg_guest_pointer, rg_low_alloc, rg_low_free};
+use crate::mixer;
 use crate::rg_log;
 use crate::stream::{
     PcmStream, rg_stream_load, rg_stream_ready, rg_stream_reset, rg_stream_status,
 };
-use sdl2::sys::{self, mixer::*};
-use std::ffi::{CStr, c_int, c_void};
+use std::ffi::{c_int, c_void};
 use std::io::Write;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
-
-// These globals are the pinned SR sample engine ABI, accessed on the game
-// thread. SDL synchronizes that engine's channel callbacks internally.
-#[unsafe(no_mangle)]
-pub static mut Game_SoundMasterVolume: u32 = 127;
-#[unsafe(no_mangle)]
-pub static mut Game_MixerChannels: c_int = 0;
-#[unsafe(no_mangle)]
-pub static mut Game_AudioRate: c_int = 44100;
-#[unsafe(no_mangle)]
-pub static mut Game_ResamplingQuality: c_int = 1;
-#[unsafe(no_mangle)]
-pub static mut Game_SwapSoundChannels: c_int = 0;
-#[unsafe(no_mangle)]
-pub static mut Game_AudioFormat: u32 = sys::AUDIO_S16LSB;
-#[unsafe(no_mangle)]
-pub static mut Game_AudioChannels: u32 = 2;
-#[unsafe(no_mangle)]
-pub static mut Game_SampleCache: [*mut c_void; 32] = [std::ptr::null_mut(); 32];
-#[unsafe(no_mangle)]
-pub static mut AIL_preference: [i32; 19] = {
-    let mut values = [0; 19];
-    values[5] = 127;
-    values
-};
-
-unsafe extern "C" {
-    fn Game_AIL_allocate_sample_handle(driver: *mut c_void) -> *mut c_void;
-    fn Game_AIL_release_sample_handle(sample: *mut c_void);
-    fn Game_AIL_init_sample(sample: *mut c_void);
-    fn Game_AIL_set_sample_address(sample: *mut c_void, data: *mut c_void, length: u32);
-    fn Game_AIL_start_sample(sample: *mut c_void);
-    fn Game_AIL_end_sample(sample: *mut c_void);
-    fn Game_AIL_set_sample_loop_count(sample: *mut c_void, count: i32);
-    fn Game_AIL_set_sample_pan(sample: *mut c_void, pan: i32);
-    fn Game_AIL_set_sample_playback_rate(sample: *mut c_void, rate: i32);
-    fn Game_AIL_set_sample_type(sample: *mut c_void, format: i32, flags: u32);
-    fn Game_AIL_set_sample_volume(sample: *mut c_void, volume: i32);
-    fn Game_AIL_sample_status(sample: *mut c_void) -> u32;
-}
 
 #[derive(Default)]
 struct Sample {
@@ -76,6 +36,7 @@ struct Audio {
     samples: [Sample; 16],
     captured: usize,
     capture_failed: bool,
+    output: Option<mixer::Output>,
 }
 static AUDIO: Mutex<Option<Audio>> = Mutex::new(None);
 static STREAMS: Mutex<Option<[Stream; 8]>> = Mutex::new(None);
@@ -100,6 +61,13 @@ pub struct AudioStats {
     nonzero_frames: u64,
 }
 
+impl AudioStats {
+    /// Frames of output that were not silent.
+    pub fn nonzero_frames(&self) -> u64 {
+        self.nonzero_frames
+    }
+}
+
 /// # Safety
 /// `stats` points to writable storage for the C-layout statistics.
 #[unsafe(no_mangle)]
@@ -113,11 +81,8 @@ pub unsafe extern "C" fn rg_audio_stats(stats: *mut AudioStats) {
     }
 }
 
-unsafe extern "C" fn postmix(_: *mut c_void, data: *mut u8, length: c_int) {
-    if length <= 0 || data.is_null() {
-        return;
-    }
-    let output = unsafe { std::slice::from_raw_parts_mut(data, length as usize) };
+/// Runs on the audio thread after the samples are mixed: movie streams, then CD music.
+fn postmix(output: &mut [u8]) {
     {
         let mut streams = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(streams) = streams.as_mut() {
@@ -180,15 +145,13 @@ impl Audio {
         if !self.opened {
             return;
         }
-        // Detach and wait for the callback before taking STREAMS or freeing any
-        // buffers. Never call SDL channel functions while holding STREAMS.
-        unsafe {
-            Mix_SetPostMix(None, std::ptr::null_mut());
-        }
+        // Stop the output (and its callback) before taking STREAMS or freeing any buffers.
+        self.output = None;
         for sample in &mut self.samples {
             if sample.handle != 0 {
                 unsafe {
-                    Game_AIL_release_sample_handle(sample.handle as *mut c_void);
+                    mixer::detach(sample.handle as *mut c_void);
+                    rg_low_free(sample.handle as *mut c_void);
                 }
             }
             *sample = Sample::default();
@@ -207,19 +170,11 @@ impl Audio {
                 }
             }
         }
-        unsafe {
-            Mix_CloseAudio();
-            if self.driver != 0 {
+        if self.driver != 0 {
+            unsafe {
                 rg_low_free(self.driver as *mut c_void);
-                self.driver = 0;
             }
-            sys::SDL_QuitSubSystem(sys::SDL_INIT_AUDIO);
-            let cache = std::ptr::addr_of_mut!(Game_SampleCache).cast::<*mut c_void>();
-            for index in 0..32 {
-                libc::free(*cache.add(index));
-                cache.add(index).write(std::ptr::null_mut());
-            }
-            Game_MixerChannels = 0;
+            self.driver = 0;
         }
         self.opened = false;
         rg_log!(
@@ -242,19 +197,6 @@ impl Audio {
         self.close();
         self.started = started;
         handles.fill(0);
-        unsafe {
-            sys::SDL_SetMainReady();
-        }
-        if unsafe { sys::SDL_InitSubSystem(sys::SDL_INIT_AUDIO) } != 0
-            // allowed_changes=0: SDL converts to stereo even when the device is 5.1/7.1
-            || unsafe { Mix_OpenAudioDevice(44100, sys::AUDIO_S16LSB as u16, 2, 1024, std::ptr::null(), 0) } != 0
-        {
-            rg_log!("Native audio device failed: {}", sdl2::get_error());
-            unsafe {
-                sys::SDL_QuitSubSystem(sys::SDL_INIT_AUDIO);
-            }
-            return false;
-        }
         self.opened = true;
         self.observed = false;
         self.captured = 0;
@@ -270,25 +212,14 @@ impl Audio {
         ] {
             counter.store(0, Relaxed);
         }
-        let (mut rate, mut format, mut channels) = (0, 0, 0);
-        if unsafe { Mix_QuerySpec(&mut rate, &mut format, &mut channels) } == 0
-            || format != sys::AUDIO_S16LSB as u16
-            || channels != 2
-        {
-            rg_log!(
-                "Native audio device gave rate={rate} format={format:#x} channels={channels}; need 16-bit stereo"
-            );
-            self.close();
-            return false;
-        }
-        unsafe {
-            Game_AudioRate = rate;
-            Game_AudioFormat = u32::from(format);
-            Game_AudioChannels = channels as u32;
-        }
         for (sample, handle) in self.samples.iter_mut().zip(handles) {
-            sample.handle =
-                unsafe { Game_AIL_allocate_sample_handle(std::ptr::null_mut()) } as usize;
+            // Miles' sample handle size; the game only passes it back.
+            let memory = rg_low_alloc(644);
+            if !memory.is_null() {
+                unsafe { memory.cast::<u8>().write_bytes(0, 644) };
+                mixer::attach(memory);
+            }
+            sample.handle = memory as usize;
             if sample.handle == 0
                 || unsafe { rg_guest_pointer(sample.handle as *const c_void, 644, handle) } == 0
             {
@@ -305,21 +236,18 @@ impl Audio {
         }
         unsafe {
             (self.driver as *mut u32).write(0x52474155);
-            Mix_SetPostMix(Some(postmix), std::ptr::null_mut());
             if !self.exit_registered {
                 libc::atexit(rg_audio_close);
                 self.exit_registered = true;
             }
         }
-        let driver = unsafe { sys::SDL_GetCurrentAudioDriver() };
-        let driver = if driver.is_null() {
-            "unknown".into()
-        } else {
-            unsafe { CStr::from_ptr(driver) }.to_string_lossy()
-        };
+        let output = mixer::open(postmix);
         rg_log!(
-            "Native audio device={driver} rate={rate} channels={channels} backend=SR/SDL_mixer"
+            "Native audio device={} rate={} channels=2 backend=cpal",
+            output.describe(),
+            mixer::RATE
         );
+        self.output = Some(output);
         true
     }
 
@@ -390,7 +318,7 @@ impl Audio {
                 if stream.handle != 0 {
                     unsafe {
                         rg_stream_reset(&mut stream.pcm);
-                        stream.pcm.output_rate = Game_AudioRate as u32;
+                        stream.pcm.output_rate = mixer::RATE;
                     }
                 }
                 frame.eax = guest_address(stream.handle as *const c_void).into();
@@ -407,7 +335,7 @@ impl Audio {
             }
             let stride = (if a[3] & 1 != 0 { 2 } else { 1 }) * (if a[3] & 2 != 0 { 2 } else { 1 });
             frame.eax = (u64::from(a[2]) * stride * 2048)
-                .div_ceil(unsafe { Game_AudioRate } as u64)
+                .div_ceil(u64::from(mixer::RATE))
                 .next_multiple_of(256);
             return true;
         }
@@ -424,8 +352,8 @@ impl Audio {
             unsafe {
                 match service {
                     2 => {
-                        Game_AIL_end_sample(handle);
-                        Game_AIL_init_sample(handle);
+                        mixer::end(handle);
+                        mixer::init(handle);
                         sample.length = 0;
                     }
                     3 => {
@@ -433,7 +361,7 @@ impl Audio {
                             return false;
                         }
                         sample.format = a[2];
-                        Game_AIL_set_sample_type(handle, a[2] as i32, a[3]);
+                        mixer::set_type(handle, a[2] as i32, a[3]);
                     }
                     4 => {
                         if a[3] > 16 * 1024 * 1024
@@ -446,25 +374,25 @@ impl Audio {
                             * (if sample.format & 2 != 0 { 2 } else { 1 });
                         let length = a[3] - a[3] % stride;
                         sample.length = length;
-                        Game_AIL_set_sample_address(handle, guest_ptr::<c_void>(a[2]), length);
+                        mixer::set_address(handle, guest_ptr::<c_void>(a[2]), length);
                     }
                     5 => {
-                        if !(512..=44000).contains(&a[2]) || Game_AIL_sample_status(handle) == 4 {
+                        if !(512..=44000).contains(&a[2]) || mixer::status(handle) == 4 {
                             return false;
                         }
-                        Game_AIL_set_sample_playback_rate(handle, a[2] as i32);
+                        mixer::set_rate(handle, a[2] as i32);
                     }
                     6 => {
                         if a[2] > 127 {
                             return false;
                         }
-                        Game_AIL_set_sample_pan(handle, a[2] as i32);
+                        mixer::set_pan(handle, a[2] as i32);
                     }
                     7 => {
                         if a[2] > i32::MAX as u32 {
                             return false;
                         }
-                        Game_AIL_set_sample_loop_count(handle, a[2] as i32);
+                        mixer::set_loop_count(handle, a[2] as i32);
                     }
                     8 => return a[2] == 0 && a[3] == u32::MAX,
                     9 => {
@@ -473,17 +401,17 @@ impl Audio {
                         if sample.length == 0 || !sample.length.is_multiple_of(stride) {
                             return false;
                         }
-                        Game_AIL_start_sample(handle);
+                        mixer::start(handle);
                         STARTS.fetch_add(1, Relaxed);
                     }
                     10 => {
                         if a[2] > 127 {
                             return false;
                         }
-                        Game_AIL_set_sample_volume(handle, a[2] as i32);
+                        mixer::set_volume(handle, a[2] as i32);
                     }
                     11 => {
-                        frame.eax = Game_AIL_sample_status(handle).into();
+                        frame.eax = mixer::status(handle).into();
                         if !self.observed && NONZERO.load(Relaxed) != 0 {
                             self.observed = true;
                             rg_log!(
@@ -493,7 +421,7 @@ impl Audio {
                             );
                         }
                     }
-                    12 => Game_AIL_end_sample(handle),
+                    12 => mixer::end(handle),
                     13 => {
                         let Some(user) = sample.user.get_mut(a[2] as usize) else {
                             return false;
@@ -575,7 +503,7 @@ impl Audio {
             2 => {
                 unsafe {
                     rg_stream_reset(pcm);
-                    pcm.output_rate = Game_AudioRate as u32;
+                    pcm.output_rate = mixer::RATE;
                 }
                 stream.user.fill(0);
             }

@@ -114,9 +114,7 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
                     || name == "LICENSES.txt"
                     || name == "Frameworks"
                     || (name == "Frameworks/SDL2.framework"
-                        || name.starts_with("Frameworks/SDL2.framework/"))
-                    || (name == "Frameworks/SDL2_mixer.framework"
-                        || name.starts_with("Frameworks/SDL2_mixer.framework/")))
+                        || name.starts_with("Frameworks/SDL2.framework/")))
             {
                 return Err(format!("Unexpected runtime file or game data: {name}").into());
             }

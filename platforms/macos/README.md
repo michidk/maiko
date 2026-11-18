@@ -44,15 +44,15 @@ The executable discovers an adjacent or remembered owned installation and uses
 macOS's built-in folder picker when necessary. Saves and logs use the user's
 standard directories. See [launch instructions](LAUNCH.md).
 
-After adding complete `LICENSES.txt` notices for Maiko, SR, SDL,
-SDL_mixer and Rust dependencies, package the runtime with:
+After adding complete `LICENSES.txt` notices for Maiko, SR, SDL
+and Rust dependencies, package the runtime with:
 
 ```sh
 cargo run --locked -p maiko-patcher --bin maiko-macos-package -- \
   artifacts/<timestamp>-macos-backend/runtime redguard-macos-runtime.zip
 ```
 
-The packager accepts only the executable, two SDL frameworks,
+The packager accepts only the executable, the SDL framework,
 `README.md` and `LICENSES.txt`. It rejects extra top-level files, game folders,
 disc media and command launchers. Framework symlinks must stay inside the runtime
 directory; the archive preserves them and executable permissions. Original game

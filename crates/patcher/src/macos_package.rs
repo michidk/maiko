@@ -28,7 +28,7 @@ fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
             }
             if first == "Frameworks" && relative.components().count() > 1 {
                 let framework = relative.components().nth(1).unwrap().as_os_str();
-                if framework != "SDL2.framework" && framework != "SDL2_mixer.framework" {
+                if framework != "SDL2.framework" {
                     return Err(invalid("Unexpected runtime framework"));
                 }
             }
@@ -53,7 +53,6 @@ fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
         "README.md",
         "LICENSES.txt",
         "Frameworks/SDL2.framework/SDL2",
-        "Frameworks/SDL2_mixer.framework/SDL2_mixer",
     ] {
         if !root.join(name).is_file() {
             return Err(invalid(
@@ -124,7 +123,6 @@ mod tests {
             "README.md",
             "LICENSES.txt",
             "Frameworks/SDL2.framework/SDL2",
-            "Frameworks/SDL2_mixer.framework/SDL2_mixer",
         ] {
             let path = root.join(name);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -152,7 +150,7 @@ mod tests {
         fs::remove_file(&output).unwrap();
         package(source.path(), &output).unwrap();
         let mut archive = zip::ZipArchive::new(File::open(&output).unwrap()).unwrap();
-        assert_eq!(archive.len(), 5);
+        assert_eq!(archive.len(), 4);
         assert_eq!(
             archive
                 .by_name("Maiko Mac Runtime/redguard-native")

@@ -4,12 +4,11 @@ ulimit -c 0
 cd /work
 cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll /work/
 sh /tests/init_wine.sh /tmp/rg-wine
-cc='x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work -I/audio -I/sdl/include/SDL2 -DRG_USE_SDL_AUDIO -DSDL_MAIN_HANDLED'
+cc='x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work -I/sdl/include/SDL2 -DSDL_MAIN_HANDLED'
 x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.obj
-$cc -Wno-unused-parameter -c /audio/Albion-sound.c -o sr_audio.obj
 link() {
-    $cc "$@" -Wl,--gc-sections -Wl,--start-group ${rust_library:-/work/libmaiko_runtime.a} guest_memory.obj sr_audio.obj -Wl,--end-group \
-      -L/sdl/lib -lSDL2_mixer -lSDL2 -lstdc++ \
+    $cc "$@" -Wl,--gc-sections -Wl,--start-group ${rust_library:-/work/libmaiko_runtime.a} guest_memory.obj -Wl,--end-group \
+      -L/sdl/lib -L/work -lSDL2 -lstdc++ $CRATE_LIBRARIES \
       -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -lwinpthread -luser32 -lshell32 -lole32 \
       -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp
 }
@@ -39,13 +38,11 @@ wine_run timing-test.exe
 nasm -f win64 /tests/image_variant.asm -o variant_test.obj
 link /tests/image_variant.c variant_test.obj -o variant-test.exe
 wine_run variant-test.exe
-for spec in 'guest_alloc alloc-test' 'heap_lifetime heap-lifetime' 'audio_stream audio-stream' 'stream_pcm stream-pcm' 'windows_storage windows-storage'; do
+for spec in 'guest_alloc alloc-test' 'heap_lifetime heap-lifetime' 'audio_stream audio-stream' 'windows_storage windows-storage'; do
     set -- $spec
     link /tests/"$1".c -o "$2".exe
     wine_run "$2".exe
 done
-link /tests/audio_samples.c -o audio-samples.exe
-for sample_case in pan loop volume cache; do wine_run audio-samples.exe "$sample_case"; done
 link /tests/cd_image.c -o cd-image-test.exe
 WINEDEBUG=-all WINEPREFIX=/tmp/rg-wine python3 /tests/check_cd_image.py /work/cd-image-test.exe --wine
 link /tests/installed_movies.c -o installed-movies.exe
