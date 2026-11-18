@@ -11,6 +11,7 @@
 #include <time.h>
 void rg_host_setup(void) {}
 void rg_host_exit(unsigned code) {exit((int)code);}
+#ifndef __APPLE__
 int rg_host_readable(const void *p,size_t size) {
     if(!p || size>UINTPTR_MAX-(uintptr_t)p) return 0;
     FILE *maps=fopen("/proc/self/maps","r"); if(!maps) return 0;
@@ -21,6 +22,7 @@ int rg_host_readable(const void *p,size_t size) {
     }
     fclose(maps); return found;
 }
+#endif
 int rg_host_lock(void *p,size_t size,int unlock) {return (unlock ? munlock(p,size) : mlock(p,size))==0;}
 unsigned rg_host_cwd(unsigned capacity,char *buffer) {
     /* Original CRT stores DOS paths in fixed buffers. C: maps to the selected install. */

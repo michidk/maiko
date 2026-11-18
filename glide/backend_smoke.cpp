@@ -66,6 +66,8 @@ int main(int argc,char **) {
 
 #ifdef _WIN32
     const char *capture="Z:\\work\\backend-smoke.ppm";
+#elif defined(__APPLE__)
+    const char *capture="backend-smoke.ppm";
 #else
     const char *capture="/work/backend-smoke.ppm";
 #endif
