@@ -52,7 +52,7 @@ def build(target, *, component="runtime", llasm=False):
     output.mkdir(parents=True, exist_ok=True)
     tag=target+('' if component=='runtime' else '-'+component)+('-llasm' if llasm else '')
     with (output/(tag+'.log')).open('w') as log:
-        # The launcher's own binary needs SDL to link; the packages link its static library instead.
+        # The packages link the launcher's static library with a small C main.
         subprocess.run([cargo, 'build', '--locked', '--profile', 'runtime', '--target', target, '-p', 'maiko-'+component,
                         *(['--lib'] if component == 'launcher' else []),
                         *(['--features', 'maiko-'+component+('/llasm-entry' if component=='host' else '/llasm')] if llasm else [])],
