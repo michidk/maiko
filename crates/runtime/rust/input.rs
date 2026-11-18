@@ -15,21 +15,31 @@ use std::mem::ManuallyDrop;
 use std::sync::Arc;
 use std::time::Duration;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
-use winit::window::{Fullscreen, Window, WindowId};
+use winit::window::{CursorGrabMode, Fullscreen, Window, WindowId};
 
-/// Collects window events while the loop is pumped.
+/// Collects window events and raw pointer motion while the loop is pumped.
 #[derive(Default)]
-struct Pending(Vec<WindowEvent>);
+struct Pending {
+    events: Vec<WindowEvent>,
+    motion: (f64, f64),
+}
 
 impl ApplicationHandler for Pending {
     fn resumed(&mut self, _: &ActiveEventLoop) {}
 
     fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
-        self.0.push(event);
+        self.events.push(event);
+    }
+
+    fn device_event(&mut self, _: &ActiveEventLoop, _: DeviceId, event: DeviceEvent) {
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.motion.0 += delta.0;
+            self.motion.1 += delta.1;
+        }
     }
 }
 
@@ -46,6 +56,12 @@ struct Input {
     cursor: bool,
     known: bool,
     focused: bool,
+    /// The hidden pointer is held in the window.
+    grabbed: bool,
+    /// Held by a pointer lock: motion comes from raw device events, not positions.
+    locked: bool,
+    /// Sub-unit raw motion carried to the next event.
+    remainder: (f64, f64),
     closed: bool,
     queue: VecDeque<u8>,
     held: [bool; 512],
@@ -70,6 +86,9 @@ impl Default for Input {
             cursor: true,
             known: false,
             focused: false,
+            grabbed: false,
+            locked: false,
+            remainder: (0.0, 0.0),
             closed: false,
             queue: VecDeque::with_capacity(256),
             held: [false; 512],
@@ -275,9 +294,28 @@ impl Input {
         self.known = false;
     }
 
-    fn show_cursor(&self, visible: bool) {
-        if let Some(window) = &self.window {
-            window.set_cursor_visible(visible);
+    /// Shows the pointer for the game's menus and the overlay; otherwise hides it and holds it in
+    /// the window: locked where the platform can (Wayland, macOS), else confined (Windows, X11).
+    fn sync_cursor(&mut self) {
+        let Some(window) = self.window.clone() else {
+            return;
+        };
+        let free = self.cursor || overlay::is_open();
+        window.set_cursor_visible(free);
+        let hold = !free && self.focused;
+        if hold == self.grabbed {
+            return;
+        }
+        self.grabbed = hold;
+        self.locked = false;
+        self.known = false;
+        if !hold {
+            let _ = window.set_cursor_grab(CursorGrabMode::None);
+        } else if window.set_cursor_grab(CursorGrabMode::Locked).is_ok() {
+            self.locked = true;
+            self.remainder = (0.0, 0.0);
+        } else if let Err(error) = window.set_cursor_grab(CursorGrabMode::Confined) {
+            rg_log!("Pointer grab unavailable: {error}");
         }
     }
 
@@ -287,7 +325,7 @@ impl Input {
         } else {
             self.controller_keys();
         }
-        self.show_cursor(open || self.cursor);
+        self.sync_cursor();
     }
 
     fn controller_keys(&mut self) {
@@ -339,6 +377,23 @@ impl Input {
         } else {
             self.release_game_input();
         }
+        self.sync_cursor();
+    }
+
+    /// Raw pointer motion in window pixels while locked, scaled to game units like positions.
+    fn motion(&mut self, window: (u32, u32), dx: f64, dy: f64) {
+        if !self.locked || !self.focused || window.0 == 0 || window.1 == 0 {
+            return;
+        }
+        let (_, _, pw, ph) = picture(window, (self.width, self.height));
+        let x = self.remainder.0 + dx * f64::from(self.width) / pw as f64;
+        let y = self.remainder.1 + dy * f64::from(self.height) / ph as f64;
+        self.remainder = (x.fract(), y.fract());
+        let (x, y) = (x.trunc() as i32, y.trunc() as i32);
+        self.dx = self.dx.wrapping_add(x);
+        self.dy = self.dy.wrapping_add(y);
+        self.x = (self.x + x).clamp(0, self.width as i32 - 1);
+        self.y = (self.y + y).clamp(0, self.height as i32 - 1);
     }
 
     /// The pointer moved to window pixel (`x`, `y`): the game's position and motion.
@@ -346,7 +401,7 @@ impl Input {
         let Some(size) = self.window.as_ref().map(|window| window.inner_size()) else {
             return;
         };
-        if !self.focused || size.width == 0 || size.height == 0 {
+        if !self.focused || self.locked || size.width == 0 || size.height == 0 {
             return;
         }
         let (px, py, pw, ph) = picture((size.width, size.height), (self.width, self.height));
@@ -392,7 +447,16 @@ impl Input {
             self.closed = true;
         }
         let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor());
-        for event in pending.0 {
+        if let Some(size) = self.window.as_ref().map(|w| w.inner_size())
+            && !overlay::is_open()
+        {
+            self.motion(
+                (size.width, size.height),
+                pending.motion.0,
+                pending.motion.1,
+            );
+        }
+        for event in pending.events {
             match overlay::route(&event, scale) {
                 Routed::Game => {}
                 Routed::Consumed => continue,
@@ -609,9 +673,7 @@ pub fn rg_mouse_service(regs: &mut [u32; 7]) -> c_int {
             }
             1 | 2 => {
                 input.cursor = regs[0] & 65535 == 1;
-                if !overlay::is_open() {
-                    input.show_cursor(input.cursor);
-                }
+                input.sync_cursor();
             }
             3 => {
                 regs[1] = input.buttons;
@@ -627,7 +689,8 @@ pub fn rg_mouse_service(regs: &mut [u32; 7]) -> c_int {
                 let size = window.inner_size();
                 let (px, py, pw, ph) =
                     picture((size.width, size.height), (input.width, input.height));
-                if input.focused && !overlay::is_open() {
+                // A locked pointer stays put; elsewhere the warp recenters it for mouselook.
+                if input.focused && !input.locked && !overlay::is_open() {
                     let _ = window.set_cursor_position(winit::dpi::PhysicalPosition::new(
                         (px + i64::from(input.x) * pw / i64::from(input.width.max(1))) as i32,
                         (py + i64::from(input.y) * ph / i64::from(input.height.max(1))) as i32,
@@ -719,6 +782,23 @@ mod tests {
         assert!(input.queue.is_empty());
         input.mouse_button(1, true);
         assert_eq!(input.buttons, 0, "an unfocused window takes no clicks");
+    }
+
+    #[test]
+    fn locked_motion_scales_to_game_units_and_keeps_fractions() {
+        let mut input = Input {
+            focused: true,
+            locked: true,
+            x: 638,
+            ..Input::default()
+        };
+        input.motion((1280, 960), 3.0, -1.0);
+        input.motion((1280, 960), 3.0, -1.0);
+        assert_eq!((input.dx, input.dy), (3, -1));
+        assert_eq!((input.x, input.y), (639, 0), "positions stay on screen");
+        input.locked = false;
+        input.motion((1280, 960), 10.0, 10.0);
+        assert_eq!(input.dx, 3, "unlocked motion comes from positions");
     }
 
     #[test]

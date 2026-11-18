@@ -46,7 +46,7 @@ Use `--target windows` with the Windows kit, and `--v5-fixes` for the version 5 
 Extract the ZIP into **its own writable folder** (not the game folder) and start the launcher: `maiko-launcher.exe` on Windows, `./maiko` on Linux and macOS. It finds your game in the usual GOG, Wine, Heroic and Lutris folders and only asks if it finds nothing. Click **Play Redguard**.
 
 - **Windows:** 64-bit Windows 10 or newer.
-- **Linux:** x86-64 with glibc 2.36 or newer, X11 or XWayland, and a Vulkan or OpenGL driver.
+- **Linux:** x86-64 with glibc 2.36 or newer, Wayland or X11, and a Vulkan or OpenGL driver.
 - **macOS:** 11 or newer, Intel or Apple Silicon. Follow the [launch instructions](platforms/macos/LAUNCH.md) for the quarantine warning.
 
 The game can also be started directly as `redguard-native` with options such as `--fullscreen`, `--skip-intro` or `--load-save 1`. [docs/playing.md](docs/playing.md) lists every option, the controller layout, movies, saves and logs.
