@@ -187,55 +187,21 @@ fn listing(root: &Path, directory: &Path, depth: usize, text: &mut String) {
     }
 }
 
-/// A command's trimmed standard output, without flashing a console window on Windows.
-fn output(program: &str, args: &[&str]) -> Option<String> {
-    let mut command = std::process::Command::new(program);
-    command.args(args);
-    #[cfg(windows)]
-    std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
-    let out = command.output().ok().filter(|out| out.status.success())?;
-    let text = String::from_utf8_lossy(&out.stdout)
-        .trim()
-        .replace('\n', "; ");
-    (!text.is_empty()).then_some(text)
-}
-
 fn os() -> Option<String> {
-    if cfg!(windows) {
-        output("cmd", &["/c", "ver"])
-    } else if cfg!(target_os = "macos") {
-        output("sw_vers", &[])
-    } else {
-        let release = std::fs::read_to_string("/etc/os-release")
-            .ok()
-            .and_then(|text| {
-                text.lines()
-                    .find_map(|line| line.strip_prefix("PRETTY_NAME="))
-                    .map(|name| name.trim_matches('"').to_owned())
-            });
-        let kernel = output("uname", &["-sr"]);
-        Some(format!(
-            "{} ({})",
-            release.as_deref().unwrap_or("Linux"),
-            kernel.as_deref().unwrap_or("unknown kernel")
-        ))
-    }
+    let name = sysinfo::System::long_os_version().ok()?;
+    Some(match sysinfo::System::kernel_long_version() {
+        Ok(kernel) if !name.contains(&kernel) => format!("{name} ({kernel})"),
+        _ => name,
+    })
 }
 
 fn cpu() -> Option<String> {
-    if cfg!(windows) {
-        std::env::var("PROCESSOR_IDENTIFIER").ok()
-    } else if cfg!(target_os = "macos") {
-        output("sysctl", &["-n", "machdep.cpu.brand_string"])
-    } else {
-        std::fs::read_to_string("/proc/cpuinfo")
-            .ok()?
-            .lines()
-            .find_map(|line| {
-                let (key, value) = line.split_once(':')?;
-                (key.trim() == "model name").then(|| value.trim().to_owned())
-            })
-    }
+    let system = sysinfo::System::new_with_specifics(
+        sysinfo::RefreshKind::nothing().with_cpu(sysinfo::CpuRefreshKind::nothing()),
+    )
+    .ok()?;
+    let brand = system.cpus().first()?.brand().trim().to_owned();
+    (!brand.is_empty()).then_some(brand)
 }
 
 /// `YYYY-MM-DD` and `HH:MM:SS` in UTC for seconds since 1970.
@@ -260,6 +226,12 @@ fn utc(seconds: u64) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn system_details_name_the_os_and_cpu() {
+        assert!(os().is_some_and(|os| !os.is_empty()));
+        assert!(cpu().is_some());
+    }
 
     #[test]
     fn dates_are_utc_calendar_dates() {

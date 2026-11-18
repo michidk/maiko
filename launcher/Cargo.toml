@@ -10,10 +10,10 @@ publish = false
 # game runtime; the window is the `app` feature so the runtime does not pull in the launcher's UI.
 [features]
 default = ["app"]
-app = ["dep:sdl2", "dep:egui", "dep:egui_glow", "dep:glow", "dep:zip"]
+app = ["dep:winit", "dep:egui", "dep:egui-winit", "dep:egui-wgpu", "dep:wgpu", "dep:pollster", "dep:rodio", "dep:rfd", "dep:open", "dep:sysinfo", "dep:zip"]
 
 [lib]
-# The packages link the static library with a C `main`, against the SDL they ship.
+# The packages link the static library with a small C `main`.
 crate-type = ["rlib", "staticlib"]
 
 [[bin]]
@@ -25,14 +25,19 @@ required-features = ["app"]
 directories = "6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sdl2 = { version = "=0.38.0", default-features = false, features = ["mixer"], optional = true }
-egui = { version = "=0.33.3", default-features = false, features = ["default_fonts"], optional = true }
-egui_glow = { version = "=0.33.3", default-features = false, optional = true }
-glow = { version = "=0.16.0", optional = true }
+winit = { version = "=0.30.13", optional = true }
+egui = { version = "=0.36.2", default-features = false, features = ["default_fonts"], optional = true }
+egui-winit = { version = "=0.36.2", default-features = false, features = ["clipboard", "wayland", "x11"], optional = true }
+egui-wgpu = { version = "=0.36.2", default-features = false, optional = true }
+# The game's renderer (rustyglide) uses the same wgpu and backends.
+wgpu = { version = "=30.0.2", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan", "metal", "dx12", "gles"], optional = true }
+pollster = { version = "0.4", optional = true }
+rfd = { version = "=0.18.0", optional = true }
+open = { version = "=5.4.5", optional = true }
+sysinfo = { version = "=0.40.3", default-features = false, features = ["system"], optional = true }
+rodio = { version = "=0.21.1", default-features = false, features = ["playback", "hound"], optional = true }
 zip = { version = "4", default-features = false, features = ["deflate-flate2-zlib-rs"], optional = true }
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 tempfile = "=3.23.0"

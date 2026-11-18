@@ -6,6 +6,7 @@ objects that the patcher's LLD links with the user's engine objects) and OUTPUT/
 freshly built launcher). Nothing here reads RGFX.EXE or any other game file.
 """
 import argparse
+import json
 from pathlib import Path
 import subprocess
 import uuid
@@ -19,6 +20,10 @@ from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runti
 LINUX_IMAGE = 'redguard-recomp-linux:bookworm'
 
 # Mirrors patcher/src/link.rs. LLD's MinGW driver picks the first match per directory in this order.
+# Import libraries the launcher's crates name (`cargo rustc -- --print native-static-libs`) that MinGW
+# does not provide: windows-targets' for winit and wgpu, winapi's for sysinfo.
+CRATE_IMPORT_LIBRARIES = ['windows.0.52.0', 'winapi_ntdll', 'winapi_advapi32', 'winapi_credui', 'winapi_kernel32',
+                          'winapi_secur32']
 WINDOWS_LIBRARIES = sorted(set(
     'SDL2_mixer SDL2 stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
     'user32 shell32 ole32 mingw32 gcc moldname mingwex msvcrt kernel32 pthread'.split()))
@@ -42,8 +47,9 @@ resolve() {{
 for library in {' '.join(WINDOWS_LIBRARIES)}; do resolve $library; done
 echo '1 ICON "maiko.ico"' > maiko.rc
 x86_64-w64-mingw32-windres maiko.rc -O coff -o maiko-icon.o
-x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/maiko.exe launcher_main.c maiko-icon.o libmaiko_launcher.a -L/sdl/lib \\
-  -lSDL2_mixer -lSDL2 -lshell32 -lole32 -luser32 -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp
+x86_64-w64-mingw32-gcc -O2 -s -mwindows -o /out/runtime/maiko.exe launcher_main.c maiko-icon.o libmaiko_launcher.a -L/work \\
+  -lshell32 -lole32 -luser32 -lgdi32 -ladvapi32 -lopengl32 {' '.join('-l' + name for name in CRATE_IMPORT_LIBRARIES)} \\
+  -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp
 '''
 LINUX = '''set -e
 cd /work
@@ -58,12 +64,26 @@ for file in /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o /u
     /lib64/ld-linux-x86-64.so.2 /lib/x86_64-linux-gnu/libm.so.6 /lib/x86_64-linux-gnu/libstdc++.so.6; do
   cp -L $file /out/link/
 done
-gcc -O2 -s -o /out/runtime/maiko launcher_main.c libmaiko_launcher.a $(pkg-config --libs SDL2_mixer sdl2) \\
-  -Wl,-rpath,'$ORIGIN' -Wl,--as-needed -lgcc_s -lutil -lrt -lpthread -lm -ldl
+gcc -O2 -s -o /out/runtime/maiko launcher_main.c libmaiko_launcher.a \\
+  -Wl,--as-needed -lasound -lgcc_s -lutil -lrt -lpthread -lm -ldl
 '''
 
 # The launcher is a Rust static library (maiko-launcher); this is the executable's whole C side.
 LAUNCHER_MAIN = b'int maiko_launcher_main(void);\nint main(void) { return maiko_launcher_main(); }\n'
+
+
+def crate_import_libraries():
+    """The MinGW import libraries in CRATE_IMPORT_LIBRARIES, from the locked crates that ship them."""
+    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--format-version=1', '--locked', '--filter-platform',
+                                                   'x86_64-pc-windows-gnu'], cwd=ROOT, text=True))
+    folders = [Path(p['manifest_path']).parent / 'lib' for p in metadata['packages']
+               if p['name'] in ('windows_x86_64_gnu', 'winapi-x86_64-pc-windows-gnu')]
+    found = {name: next((folder / f'lib{name}.a' for folder in folders if (folder / f'lib{name}.a').is_file()), None)
+             for name in CRATE_IMPORT_LIBRARIES}
+    missing = [name for name, path in found.items() if path is None]
+    if missing:
+        raise SystemExit(f'Import libraries not found in the locked crates: {missing}')
+    return list(found.values())
 
 
 def main():
@@ -96,6 +116,9 @@ def main():
         stage_sr_audio(name)
         if windows:
             stage_windows_sdl(name)
+            # The launcher's crates link import libraries that their -sys crates ship for MinGW.
+            for library in crate_import_libraries():
+                run(['docker', 'cp', str(library), name + ':/work/'])
             run(['docker', 'cp', str(ROOT / 'platforms/windows/maiko.ico'), name + ':/work/maiko.ico'])
         run(['docker', 'exec', name, 'timeout', '1200', 'sh', '-c', WINDOWS if windows else LINUX])
         args.output.mkdir(parents=True)

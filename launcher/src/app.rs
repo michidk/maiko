@@ -4,15 +4,15 @@ use crate::artwork::{Artwork, BUTTON_POSITIONS, Image};
 use crate::font::Font;
 use crate::{locate, picker, report, settings};
 use egui::{Align2, Color32, Pos2, Rect, Sense, TextureHandle, TextureOptions, Vec2};
-use sdl2::event::{Event, WindowEvent};
-use sdl2::keyboard::{Keycode, Mod};
-use sdl2::mixer::{Chunk, LoaderRWops};
-use sdl2::mouse::MouseButton;
 use settings::Settings;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::window::{Window, WindowId};
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
@@ -78,7 +78,9 @@ struct App {
     settings: Settings,
     art: Option<Artwork>,
     textures: Option<Textures>,
-    sounds: HashMap<String, Chunk>,
+    /// The original's WAV sounds and the device they play on; without one the launcher is silent.
+    sounds: HashMap<String, Arc<[u8]>>,
+    audio: Option<rodio::OutputStream>,
     /// The game's gold menu font for dialog titles, and the titles drawn with it.
     title_font: Option<Font>,
     titles: HashMap<&'static str, TextureHandle>,
@@ -109,14 +111,7 @@ fn log_folder() -> Option<PathBuf> {
 
 /// Open a web page or folder with the system's default program.
 fn open(target: &std::ffi::OsStr) -> std::io::Result<()> {
-    let mut command = if cfg!(windows) {
-        std::process::Command::new("explorer")
-    } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-    } else {
-        std::process::Command::new("xdg-open")
-    };
-    command.arg(target).spawn().map(drop)
+    open::that_detached(target)
 }
 
 impl App {
@@ -134,6 +129,12 @@ impl App {
             art: None,
             textures: None,
             sounds: HashMap::new(),
+            audio: rodio::OutputStreamBuilder::open_default_stream()
+                .map(|mut stream| {
+                    stream.log_on_drop(false);
+                    stream
+                })
+                .ok(),
             title_font: None,
             titles: HashMap::new(),
             dialog: Dialog::None,
@@ -163,11 +164,7 @@ impl App {
         self.sounds.clear();
         if let Some(art) = &self.art {
             for (name, wave) in &art.sounds {
-                if let Ok(chunk) =
-                    sdl2::rwops::RWops::from_bytes(wave).and_then(|data| data.load_wav())
-                {
-                    self.sounds.insert(name.clone(), chunk);
-                }
+                self.sounds.insert(name.clone(), Arc::from(wave.as_slice()));
             }
         }
         self.game = Some(game);
@@ -186,8 +183,10 @@ impl App {
     }
 
     fn play_sound(&self, name: &str) {
-        if let Some(chunk) = self.sounds.get(name) {
-            let _ = sdl2::mixer::Channel::all().play(chunk, 0);
+        if let (Some(wave), Some(audio)) = (self.sounds.get(name), &self.audio)
+            && let Ok(sound) = rodio::Decoder::new(std::io::Cursor::new(wave.clone()))
+        {
+            audio.mixer().add(sound);
         }
     }
 
@@ -295,7 +294,8 @@ impl App {
         report::create(&self.program, &sources, exit).map_err(|error| error.to_string())
     }
 
-    fn ui(&mut self, context: &egui::Context) {
+    fn ui(&mut self, root: &mut egui::Ui) {
+        let context = &root.ctx().clone();
         if self.textures.is_none()
             && let Some(art) = &self.art
         {
@@ -317,12 +317,14 @@ impl App {
         }
         let modal = self.dialog != Dialog::None;
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(Color32::from_rgb(40, 28, 18)))
-            .show(context, |ui| {
+            .frame(egui::Frame::NONE)
+            .show(root, |ui| {
                 let mut clicked = None;
                 let mut hovered = None;
+                // The original's 640x480 screen, centred; the rest of the window stays black.
+                let full = Rect::from_center_size(ui.max_rect().center(), Vec2::new(WIDTH as f32, HEIGHT as f32));
+                ui.painter().rect_filled(full, 0.0, Color32::from_rgb(40, 28, 18));
                 if let Some(textures) = &self.textures {
-                    let full = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH as f32, HEIGHT as f32));
                     ui.painter().image(
                         textures.background.id(),
                         full,
@@ -335,7 +337,7 @@ impl App {
                         }
                         let (x, y) = BUTTON_POSITIONS[i];
                         let size = states[0].size_vec2();
-                        let rect = Rect::from_min_size(Pos2::new(x as f32, y as f32), size);
+                        let rect = Rect::from_min_size(full.min + Vec2::new(x as f32, y as f32), size);
                         let response = ui.interact(rect, ui.id().with(i), if modal { Sense::hover() } else { Sense::click() });
                         if !modal && response.hovered() {
                             hovered = Some(i);
@@ -358,6 +360,7 @@ impl App {
                         );
                     }
                 } else if self.game.is_some() {
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(full), |ui| {
                     ui.add_space(120.0);
                     ui.vertical_centered(|ui| {
                         ui.heading(egui::RichText::new("Redguard").size(40.0).color(Color32::from_rgb(200, 40, 30)));
@@ -376,11 +379,12 @@ impl App {
                             }
                         }
                     });
+                    });
                 }
                 // Maiko's own mark in the corner the original art leaves to the map.
                 let text = format!("Maiko {} · github.com/michidk/maiko", env!("CARGO_PKG_VERSION"));
                 let galley = ui.painter().layout_no_wrap(text, egui::FontId::proportional(12.0), PARCHMENT);
-                let rect = Rect::from_min_size(Pos2::new(10.0, HEIGHT as f32 - 28.0), galley.size() + Vec2::new(14.0, 8.0));
+                let rect = Rect::from_min_size(full.min + Vec2::new(10.0, HEIGHT as f32 - 28.0), galley.size() + Vec2::new(14.0, 8.0));
                 let link = ui.interact(rect, ui.id().with("project"), if modal { Sense::hover() } else { Sense::click() });
                 let hover = !modal && link.hovered();
                 ui.painter().rect(rect, 4.0, Color32::from_black_alpha(if hover { 200 } else { 150 }), egui::Stroke::new(1.0, if hover { GOLD } else { GOLD_DIM }), egui::StrokeKind::Inside);
@@ -676,53 +680,27 @@ impl App {
 
     /// Keyboard use as in the original dialog: arrows or Tab move between the buttons, Enter
     /// presses the focused one, Escape cancels.
-    fn key(&mut self, key: Keycode, keymod: Mod) {
+    fn key(&mut self, key: egui::Key, shift: bool) {
+        use egui::Key;
         if self.dialog != Dialog::None {
-            if key == Keycode::Escape && !matches!(self.dialog, Dialog::ChooseGame { .. }) {
+            if key == Key::Escape && !matches!(self.dialog, Dialog::ChooseGame { .. }) {
                 self.dialog = Dialog::None;
             }
             return;
         }
         match key {
-            Keycode::Down | Keycode::Right => self.move_focus(1),
-            Keycode::Up | Keycode::Left => self.move_focus(-1),
-            Keycode::Tab => {
-                self.move_focus(if keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD) {
-                    -1
-                } else {
-                    1
-                })
-            }
-            Keycode::Return | Keycode::KpEnter | Keycode::Space => {
+            Key::ArrowDown | Key::ArrowRight => self.move_focus(1),
+            Key::ArrowUp | Key::ArrowLeft => self.move_focus(-1),
+            Key::Tab => self.move_focus(if shift { -1 } else { 1 }),
+            Key::Enter | Key::Space => {
                 if let Some(focus) = self.focus {
                     self.activate(ACTIONS[focus]);
                 }
             }
-            Keycode::Escape => self.quit = true,
+            Key::Escape => self.quit = true,
             _ => {}
         }
     }
-}
-
-fn egui_key(key: Keycode) -> Option<egui::Key> {
-    Some(match key {
-        Keycode::Backspace => egui::Key::Backspace,
-        Keycode::Delete => egui::Key::Delete,
-        Keycode::Return | Keycode::KpEnter => egui::Key::Enter,
-        Keycode::Tab => egui::Key::Tab,
-        Keycode::Escape => egui::Key::Escape,
-        Keycode::Left => egui::Key::ArrowLeft,
-        Keycode::Right => egui::Key::ArrowRight,
-        Keycode::Up => egui::Key::ArrowUp,
-        Keycode::Down => egui::Key::ArrowDown,
-        Keycode::Home => egui::Key::Home,
-        Keycode::End => egui::Key::End,
-        Keycode::A => egui::Key::A,
-        Keycode::C => egui::Key::C,
-        Keycode::V => egui::Key::V,
-        Keycode::X => egui::Key::X,
-        _ => return None,
-    })
 }
 
 // The dialogs' palette, taken from the launcher art: dark leather, gold trim, parchment text.
@@ -755,7 +733,7 @@ fn dialog(context: &egui::Context, title: &Title, contents: impl FnOnce(&mut egu
         .fixed_size([DIALOG_WIDTH, 0.0])
         .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
         .frame(
-            egui::Frame::window(&context.style())
+            egui::Frame::window(&context.global_style())
                 .fill(INK)
                 .stroke(egui::Stroke::new(1.0, GOLD_DIM))
                 .corner_radius(8.0)
@@ -920,7 +898,7 @@ fn choice(ui: &mut egui::Ui, id: &str, value: &mut String, choices: &[(&str, &st
 }
 
 fn theme(context: &egui::Context) {
-    let mut style = (*context.style()).clone();
+    let mut style = (*context.global_style()).clone();
     use egui::{FontId, TextStyle};
     style.text_styles = [
         (TextStyle::Heading, FontId::proportional(22.0)),
@@ -962,22 +940,273 @@ fn theme(context: &egui::Context) {
     }
     // Labels take their colour from the non-interactive widget style.
     widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, PARCHMENT);
-    context.set_style(style);
+    context.set_global_style(style);
 }
 
-fn modifiers(keymod: Mod) -> egui::Modifiers {
-    let ctrl = keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD);
-    let command = keymod.intersects(Mod::LGUIMOD | Mod::RGUIMOD);
-    egui::Modifiers {
-        alt: keymod.intersects(Mod::LALTMOD | Mod::RALTMOD),
-        ctrl,
-        shift: keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD),
-        mac_cmd: cfg!(target_os = "macos") && command,
-        command: if cfg!(target_os = "macos") {
-            command
-        } else {
-            ctrl
-        },
+/// The window's drawing surface and the egui renderer that paints into it.
+struct Gpu {
+    surface: wgpu::Surface<'static>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    renderer: egui_wgpu::Renderer,
+}
+
+impl Gpu {
+    fn new(window: Arc<Window>) -> Result<Self, String> {
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let surface = instance
+            .create_surface(window.clone())
+            .map_err(|e| e.to_string())?;
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            compatible_surface: Some(&surface),
+            ..Default::default()
+        }))
+        .map_err(|e| format!("no graphics adapter: {e}"))?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("launcher"),
+            required_limits:
+                wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+            ..Default::default()
+        }))
+        .map_err(|e| e.to_string())?;
+        let size = window.inner_size();
+        let mut config = surface
+            .get_default_config(&adapter, size.width.max(1), size.height.max(1))
+            .ok_or("the window cannot be drawn to")?;
+        // egui blends in gamma space; a non-sRGB view keeps its colours as designed.
+        config.format = config.format.remove_srgb_suffix();
+        config.present_mode = wgpu::PresentMode::AutoVsync;
+        surface.configure(&device, &config);
+        let renderer = egui_wgpu::Renderer::new(
+            &device,
+            config.format,
+            egui_wgpu::RendererOptions::default(),
+        );
+        Ok(Self {
+            surface,
+            device,
+            queue,
+            config,
+            renderer,
+        })
+    }
+
+    fn resize(&mut self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            (self.config.width, self.config.height) = (width, height);
+            self.surface.configure(&self.device, &self.config);
+        }
+    }
+
+    fn paint(
+        &mut self,
+        primitives: &[egui::ClippedPrimitive],
+        textures: &egui::TexturesDelta,
+        pixels_per_point: f32,
+    ) {
+        let frame = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            _ => {
+                self.surface.configure(&self.device, &self.config);
+                return;
+            }
+        };
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.config.format),
+            ..Default::default()
+        });
+        let screen = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point,
+        };
+        for (id, deltas) in &textures.set {
+            for delta in deltas {
+                self.renderer
+                    .update_texture(&self.device, &self.queue, *id, delta);
+            }
+        }
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut commands = self.renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            primitives,
+            &screen,
+        );
+        {
+            let mut pass = encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("launcher"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                })
+                .forget_lifetime();
+            self.renderer.render(&mut pass, primitives, &screen);
+        }
+        commands.push(encoder.finish());
+        self.queue.submit(commands);
+        self.queue.present(frame);
+        for id in &textures.free {
+            self.renderer.free_texture(id);
+        }
+    }
+}
+
+/// The launcher window around [`App`]: winit events in, egui frames out. While the game runs
+/// the window is hidden and the loop only checks on the game twice a second.
+struct Shell {
+    app: App,
+    context: egui::Context,
+    window: Option<Arc<Window>>,
+    state: Option<egui_winit::State>,
+    gpu: Option<Gpu>,
+    hidden: bool,
+    repaint_at: Option<Instant>,
+    error: Option<String>,
+}
+
+impl Shell {
+    fn open(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
+        let mut attributes = Window::default_attributes()
+            .with_title("Maiko")
+            .with_inner_size(winit::dpi::LogicalSize::new(WIDTH, HEIGHT))
+            .with_min_inner_size(winit::dpi::LogicalSize::new(WIDTH / 2, HEIGHT / 2));
+        if let Some(monitor) = event_loop.primary_monitor() {
+            let (screen, scale) = (monitor.size(), monitor.scale_factor());
+            let x = (f64::from(screen.width) - f64::from(WIDTH) * scale) / 2.0;
+            let y = (f64::from(screen.height) - f64::from(HEIGHT) * scale) / 2.0;
+            attributes =
+                attributes.with_position(winit::dpi::PhysicalPosition::new(x.max(0.0), y.max(0.0)));
+        }
+        let window = Arc::new(
+            event_loop
+                .create_window(attributes)
+                .map_err(|e| e.to_string())?,
+        );
+        self.gpu = Some(Gpu::new(window.clone())?);
+        self.state = Some(egui_winit::State::new(
+            self.context.clone(),
+            egui::ViewportId::ROOT,
+            event_loop,
+            Some(window.scale_factor() as f32),
+            None,
+            None,
+        ));
+        self.window = Some(window);
+        Ok(())
+    }
+
+    fn frame(&mut self) {
+        let (Some(window), Some(state), Some(gpu)) = (&self.window, &mut self.state, &mut self.gpu)
+        else {
+            return;
+        };
+        // The 640x480 screen is zoomed to fit the window; App::ui centres it with black bars.
+        let size = window.inner_size();
+        let native = window.scale_factor() as f32;
+        let zoom = (size.width as f32 / (WIDTH as f32 * native))
+            .min(size.height as f32 / (HEIGHT as f32 * native));
+        if zoom > 0.0 && (self.context.zoom_factor() - zoom).abs() > 0.001 {
+            self.context.set_zoom_factor(zoom);
+        }
+        let input = state.take_egui_input(window);
+        for event in &input.events {
+            if let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            {
+                self.app.key(*key, modifiers.shift);
+            }
+        }
+        let output = self.context.run_ui(input, |ui| self.app.ui(ui));
+        state.handle_platform_output(window, output.platform_output);
+        let primitives = self
+            .context
+            .tessellate(output.shapes, output.pixels_per_point);
+        gpu.paint(&primitives, &output.textures_delta, output.pixels_per_point);
+        let delay = output
+            .viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .map_or(Duration::MAX, |viewport| viewport.repaint_delay);
+        self.repaint_at = Instant::now().checked_add(delay);
+    }
+}
+
+impl ApplicationHandler for Shell {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_none()
+            && let Err(error) = self.open(event_loop)
+        {
+            self.error = Some(error);
+            event_loop.exit();
+        }
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        let (Some(window), Some(state)) = (&self.window, &mut self.state) else {
+            return;
+        };
+        let response = state.on_window_event(window, &event);
+        match event {
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Resized(size) => {
+                if let Some(gpu) = &mut self.gpu {
+                    gpu.resize(size.width, size.height);
+                }
+                window.request_redraw();
+            }
+            WindowEvent::RedrawRequested => self.frame(),
+            _ if response.repaint => window.request_redraw(),
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.app.watch_game();
+        if self.app.quit {
+            event_loop.exit();
+            return;
+        }
+        let Some(window) = &self.window else { return };
+        if self.app.game_process.is_some() != self.hidden {
+            self.hidden = !self.hidden;
+            window.set_visible(!self.hidden);
+            if !self.hidden {
+                window.focus_window();
+                window.request_redraw();
+            }
+        }
+        if self.hidden {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + Duration::from_millis(500),
+            ));
+            return;
+        }
+        match self.repaint_at {
+            Some(at) if at <= Instant::now() => {
+                self.repaint_at = None;
+                window.request_redraw();
+            }
+            Some(at) => event_loop.set_control_flow(ControlFlow::WaitUntil(at)),
+            None => event_loop.set_control_flow(ControlFlow::Wait),
+        }
     }
 }
 
@@ -987,155 +1216,31 @@ fn run() -> Result<(), String> {
         .parent()
         .ok_or("the launcher has no folder")?
         .to_path_buf();
-    let sdl = sdl2::init()?;
-    let video = sdl.video()?;
-    // Sounds are a nicety: without audio the launcher still works.
-    let _audio = sdl.audio().ok().and_then(|audio| {
-        sdl2::mixer::open_audio(22050, sdl2::mixer::AUDIO_S16LSB, 2, 1024).ok()?;
-        sdl2::mixer::allocate_channels(4);
-        Some(audio)
-    });
-    let mut window = video
-        .window("Maiko", WIDTH, HEIGHT)
-        .opengl()
-        .allow_highdpi()
-        .position_centered()
-        .resizable()
-        .build()
-        .map_err(|e| e.to_string())?;
-    let _ = window.set_minimum_size(WIDTH / 2, HEIGHT / 2);
-    let _gl_context = window.gl_create_context()?;
-    let _ = video.gl_set_swap_interval(1);
-    let gl = unsafe {
-        glow::Context::from_loader_function(|name| video.gl_get_proc_address(name).cast())
-    };
-    let mut painter =
-        egui_glow::Painter::new(Arc::new(gl), "", None, false).map_err(|e| e.to_string())?;
+    let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
     let context = egui::Context::default();
     theme(&context);
-    let mut app = App::new(program);
-    let mut events = sdl.event_pump()?;
-    let started = Instant::now();
-    video.text_input().start();
-    let mut hidden = false;
-    while !app.quit {
-        app.watch_game();
-        if app.game_process.is_some() != hidden {
-            hidden = !hidden;
-            if hidden {
-                window.hide();
-            } else {
-                window.show();
-                window.raise();
-            }
-        }
-        if hidden {
-            // Nothing to draw; keep the event queue drained and check on the game twice a second.
-            for _ in events.poll_iter() {}
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            continue;
-        }
-        let mut input = Vec::new();
-        // The 640x480 screen is scaled to fit the window and centred with black bars.
-        let (points, pixels) = (window.size(), window.drawable_size());
-        let zoom = (points.0 as f32 / WIDTH as f32).min(points.1 as f32 / HEIGHT as f32);
-        let offset = Vec2::new(
-            (points.0 as f32 / zoom - WIDTH as f32) / 2.0,
-            (points.1 as f32 / zoom - HEIGHT as f32) / 2.0,
-        );
-        let at = |x: i32, y: i32| Pos2::new(x as f32, y as f32) / zoom - offset;
-        // Wait for input instead of spinning; egui asks for a repaint when it animates.
-        let first = events.wait_event_timeout(100);
-        for event in first.into_iter().chain(events.poll_iter()) {
-            match event {
-                Event::Quit { .. } => app.quit = true,
-                Event::MouseMotion { x, y, .. } => input.push(egui::Event::PointerMoved(at(x, y))),
-                Event::MouseButtonDown {
-                    mouse_btn: MouseButton::Left,
-                    x,
-                    y,
-                    ..
-                }
-                | Event::MouseButtonUp {
-                    mouse_btn: MouseButton::Left,
-                    x,
-                    y,
-                    ..
-                } => input.push(egui::Event::PointerButton {
-                    pos: at(x, y),
-                    button: egui::PointerButton::Primary,
-                    pressed: matches!(event, Event::MouseButtonDown { .. }),
-                    modifiers: egui::Modifiers::NONE,
-                }),
-                Event::Window {
-                    win_event: WindowEvent::Leave,
-                    ..
-                } => input.push(egui::Event::PointerGone),
-                Event::TextInput { text, .. } => input.push(egui::Event::Text(text)),
-                Event::KeyDown {
-                    keycode: Some(key),
-                    keymod,
-                    repeat,
-                    ..
-                } => {
-                    app.key(key, keymod);
-                    if let Some(key) = egui_key(key) {
-                        input.push(egui::Event::Key {
-                            key,
-                            physical_key: None,
-                            pressed: true,
-                            repeat,
-                            modifiers: modifiers(keymod),
-                        });
-                    }
-                }
-                Event::KeyUp {
-                    keycode: Some(key),
-                    keymod,
-                    ..
-                } => {
-                    if let Some(key) = egui_key(key) {
-                        input.push(egui::Event::Key {
-                            key,
-                            physical_key: None,
-                            pressed: false,
-                            repeat: false,
-                            modifiers: modifiers(keymod),
-                        });
-                    }
-                }
-                _ => {}
-            }
-        }
-        context.set_pixels_per_point(zoom * pixels.0 as f32 / points.0.max(1) as f32);
-        let raw = egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(
-                Pos2::ZERO,
-                Vec2::new(WIDTH as f32, HEIGHT as f32),
-            )),
-            time: Some(started.elapsed().as_secs_f64()),
-            events: input,
-            ..Default::default()
-        };
-        let output = context.run(raw, |context| app.ui(context));
-        let mut primitives = context.tessellate(output.shapes, output.pixels_per_point);
-        for clipped in &mut primitives {
-            clipped.clip_rect = clipped.clip_rect.translate(offset);
-            if let egui::epaint::Primitive::Mesh(mesh) = &mut clipped.primitive {
-                mesh.translate(offset);
-            }
-        }
-        painter.clear([pixels.0, pixels.1], [0.0, 0.0, 0.0, 1.0]);
-        painter.paint_and_update_textures(
-            [pixels.0, pixels.1],
-            output.pixels_per_point,
-            &primitives,
-            &output.textures_delta,
-        );
-        window.gl_swap_window();
-    }
-    painter.destroy();
-    Ok(())
+    let mut shell = Shell {
+        app: App::new(program),
+        context,
+        window: None,
+        state: None,
+        gpu: None,
+        hidden: false,
+        repaint_at: None,
+        error: None,
+    };
+    event_loop.run_app(&mut shell).map_err(|e| e.to_string())?;
+    shell.error.map_or(Ok(()), Err)
+}
+
+/// A modal error box with the system's own dialog.
+fn show_error(text: &str) {
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("Maiko")
+        .set_description(text)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
 }
 
 /// The launcher's entry point; the packaged executables call it from a small C `main` (see
@@ -1146,12 +1251,7 @@ pub extern "C" fn maiko_launcher_main() -> std::ffi::c_int {
         Ok(()) => 0,
         Err(error) => {
             eprintln!("Maiko launcher: {error}");
-            let _ = sdl2::messagebox::show_simple_message_box(
-                sdl2::messagebox::MessageBoxFlag::ERROR,
-                "Maiko",
-                &format!("The launcher could not start: {error}"),
-                None,
-            );
+            show_error(&format!("The launcher could not start: {error}"));
             1
         }
     }

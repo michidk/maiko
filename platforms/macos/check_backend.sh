@@ -99,8 +99,11 @@ fi
         clang -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
             --ld-path=/usr/lib/llvm-14/bin/ld64.lld -Wl,-platform_version,macos,11.0,11.3 \
             -Wl,-rpath,@executable_path/Frameworks /tmp/launcher_main.c \
-            "/results/libmaiko-launcher-$arch.a" -F/frameworks -framework SDL2 -framework SDL2_mixer \
-            -framework CoreFoundation -framework Security -liconv -lresolv -o "/results/maiko-$arch"
+            "/results/libmaiko-launcher-$arch.a" -framework AppKit -framework ApplicationServices -framework Carbon -framework IOKit \
+            -framework QuartzCore -framework CoreGraphics -framework CoreVideo -framework Metal -framework Foundation \
+            -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework Security \
+            -framework UniformTypeIdentifiers -lobjc \
+            -liconv -lresolv -o "/results/maiko-$arch"
     done
     llvm-lipo-14 -create /results/maiko-x86_64 /results/maiko-arm64 -output /results/runtime/maiko
     chmod +x /results/runtime/maiko
