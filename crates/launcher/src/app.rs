@@ -109,11 +109,6 @@ fn log_folder() -> Option<PathBuf> {
         .ok()
 }
 
-/// Open a web page or folder with the system's default program.
-fn open(target: &std::ffi::OsStr) -> std::io::Result<()> {
-    open::that_detached(target)
-}
-
 impl App {
     fn new(program: PathBuf) -> Self {
         let game = locate::find(
@@ -215,7 +210,7 @@ impl App {
             Action::Options => self.dialog = Dialog::Options(self.settings.clone()),
             Action::Support => self.dialog = Dialog::Support,
             Action::Website => {
-                let _ = open(BETHESDA.as_ref());
+                let _ = open::that_detached(BETHESDA);
             }
             Action::Uninstall => {}
             Action::Quit => self.quit = true,
@@ -392,7 +387,7 @@ impl App {
                     context.set_cursor_icon(egui::CursorIcon::PointingHand);
                 }
                 if link.clicked() {
-                    let _ = open(PROJECT.as_ref());
+                    let _ = open::that_detached(PROJECT);
                 }
                 if modal {
                     ui.painter().rect_filled(ui.max_rect(), 0.0, Color32::from_black_alpha(150));
@@ -596,7 +591,7 @@ impl App {
                             close = true;
                         }
                         if secondary(ui, "Maiko on GitHub").clicked() {
-                            let _ = open(PROJECT.as_ref());
+                            let _ = open::that_detached(PROJECT);
                         }
                         if primary(ui, "Create report").clicked() {
                             make_report = true;
@@ -609,7 +604,7 @@ impl App {
                                 .inner
                                 .clicked()
                         {
-                            let _ = open(logs.as_os_str());
+                            let _ = open::that_detached(logs);
                         }
                     });
                 });
@@ -644,13 +639,13 @@ impl App {
                             close = true;
                         }
                         if primary(ui, "Report an issue").clicked() {
-                            let _ = open(ISSUES.as_ref());
+                            let _ = open::that_detached(ISSUES);
                         }
                         if let Ok(path) = result
                             && let Some(folder) = path.parent()
                             && secondary(ui, "Show report").clicked()
                         {
-                            let _ = open(folder.as_os_str());
+                            let _ = open::that_detached(folder);
                         }
                     });
                 });

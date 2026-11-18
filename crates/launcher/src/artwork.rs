@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Resource names of the six buttons, in the original's top-to-bottom order.
-pub const BUTTONS: [&str; 6] = [
+const BUTTONS: [&str; 6] = [
     "PLAYREDGUARD",
     "GAMEOPTIONS",
     "TECHSUPPORT",
@@ -58,7 +58,7 @@ enum Name {
 }
 
 /// The original launcher in a game folder, whatever the case of its name.
-pub fn launcher_in(game: &Path) -> Option<PathBuf> {
+fn launcher_in(game: &Path) -> Option<PathBuf> {
     std::fs::read_dir(game).ok()?.flatten().find_map(|entry| {
         let name = entry.file_name();
         name.to_string_lossy()

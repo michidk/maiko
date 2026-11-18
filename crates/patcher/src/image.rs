@@ -3,7 +3,7 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
-pub const REFERENCE: &str = "844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852ac1607ee4dfdf";
+const REFERENCE: &str = "844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852ac1607ee4dfdf";
 pub const ALTERNATE: &str = "06d7a399cf01eec6bca3be39aaab1a39c42dc88116b6b74ae6f5f0547f7cdaf3";
 /// RGFX.EXE version 1.0, build 5.0, from the 1998 demo. Its code and data sit at other addresses.
 pub const BUILD5: &str = "900cbfe2d586a7d80796763b1449ba050f8517b7fc7cc4742710c11e46455a31";
@@ -34,7 +34,7 @@ fn label(field: &str) -> Result<u32> {
 }
 
 /// Build 1.0 address -> build 5.0 address for every address the metadata names.
-pub fn build5_addresses() -> Result<BTreeMap<u32, u32>> {
+fn build5_addresses() -> Result<BTreeMap<u32, u32>> {
     let mut map = BTreeMap::new();
     for line in build5_table("addresses.sci")?.lines() {
         if line.starts_with('#') || line.trim().is_empty() {

@@ -23,7 +23,7 @@ const LAYOUTS: [&str; 5] = [
 /// Environment variable that names the game folder.
 pub const ENV_VAR: &str = "REDGUARD_DIR";
 
-pub fn is_game_folder(folder: &Path) -> bool {
+fn is_game_folder(folder: &Path) -> bool {
     if REQUIRED.iter().all(|name| folder.join(name).exists()) {
         return true;
     }
@@ -89,7 +89,7 @@ impl Machine {
 
 /// Conventional install folders: next to the working directory, the GOG Games folders, the Windows
 /// GOG Galaxy folders, a Wine prefix, and the default Heroic and Lutris folders.
-pub fn standard_folders(machine: &Machine) -> Vec<PathBuf> {
+fn standard_folders(machine: &Machine) -> Vec<PathBuf> {
     let mut folders = vec![PathBuf::from("redguard"), PathBuf::from("Redguard")];
     if let Some(home) = &machine.home {
         folders.push(home.join("GOG Games/Redguard"));

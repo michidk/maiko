@@ -5,21 +5,7 @@ use std::{fs, path::Path, process::Command};
 pub(super) fn build() -> Result<()> {
     let cache = Path::new(".cache/client-toolchain");
     fs::create_dir_all(cache)?;
-    let archive_path = cache.join("wasi-sdk.tar.gz");
-    download(
-        "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-29/wasi-sdk-29.0-x86_64-linux.tar.gz",
-        &archive_path,
-        "87d1d1a2879d139cdc624b968efad3d4a97b8078cdff95e63ac88ecafd1a0171",
-    )?;
-    let sdk = cache.join("wasi-sdk-29.0-x86_64-linux");
-    if !sdk.exists() {
-        run(Command::new("tar")
-            .arg("-xzf")
-            .arg(&archive_path)
-            .arg("-C")
-            .arg(cache))?;
-    }
-    let sdk = fs::canonicalize(sdk)?.join("bin");
+    let sdk = super::wasi_sdk()?.join("bin");
     build_sr(cache, &sdk, false)?;
     let temporary = tempfile::tempdir_in(".cache")?;
     let nasm_archive = cache.join("nasm-2.16.01.tar.xz");
@@ -65,24 +51,7 @@ pub(super) fn build() -> Result<()> {
         .args(["nasm"]))?;
     fs::copy(nasm_source.join("nasm"), cache.join("nasm.wasm"))?;
     let mut notice = fs::read_to_string(nasm_source.join("LICENSE"))?;
-    let sr_notice = String::from_utf8(run(Command::new("git").args([
-        "-C",
-        ".cache/sr",
-        "show",
-        &format!("{SR}:SR/SR_main.c"),
-    ]))?)?;
-    notice.push_str(
-        sr_notice
-            .split("#include")
-            .next()
-            .ok_or("Missing SR licence")?,
-    );
-    notice.push_str(&String::from_utf8(run(Command::new("git").args([
-        "-C",
-        ".cache/sr",
-        "show",
-        &format!("{SR}:SR/udis86-1.6/LICENSE"),
-    ]))?)?);
+    notice.push_str(&super::sr_notices()?);
     notice.push_str("\nSR is MIT licensed. Upstream: https://github.com/M-HT/SR\n");
     fs::write(cache.join("LICENSES.txt"), notice)?;
     Ok(())

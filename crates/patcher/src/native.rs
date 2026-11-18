@@ -34,7 +34,7 @@ pub fn write_files(directory: &Path, files: &Files) -> Result<()> {
     Ok(())
 }
 
-pub fn read_sources(directory: &Path) -> Result<Files> {
+fn read_sources(directory: &Path) -> Result<Files> {
     let mut files = Files::new();
     for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
         let path = entry.map_err(|error| error.to_string())?.path();

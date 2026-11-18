@@ -81,7 +81,7 @@ pub fn safe_path(name: &str) -> bool {
         })
 }
 
-pub fn unzip(bytes: &[u8]) -> Result<Files> {
+pub(crate) fn unzip(bytes: &[u8]) -> Result<Files> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|error| error.to_string())?;
     if zip.len() > 4096 {
         return Err("Too many files in runtime kit".into());

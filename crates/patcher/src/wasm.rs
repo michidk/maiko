@@ -11,6 +11,14 @@ use wasm_bindgen::prelude::*;
 fn error(message: String) -> JsValue {
     JsValue::from_str(&message)
 }
+/// `[args, output]` as the worker expects a tool invocation.
+fn command(args: Vec<String>, output: String) -> Array {
+    let command = Array::new();
+    command.push(&args.into_iter().map(JsValue::from).collect::<Array>());
+    command.push(&output.into());
+    command
+}
+
 fn to_js(files: Files) -> Result<JsValue, JsValue> {
     let object = Object::new();
     for (name, bytes) in files {
@@ -100,27 +108,27 @@ impl Builder {
             .cloned()
             .ok_or_else(|| error("Missing compiler asset".into()))
     }
-    pub fn optimization(&self) -> Result<Array, JsValue> {
+    fn mac(&self) -> Result<(), JsValue> {
         if self.kit.manifest.target != Target::Macos {
             return Err(error("Expected a Mac kit".into()));
         }
+        Ok(())
+    }
+    pub fn optimization(&self) -> Result<Array, JsValue> {
+        self.mac()?;
         Ok(crate::macos::optimization()
             .into_iter()
             .map(JsValue::from)
             .collect())
     }
     pub fn compilation(&self, arch: &str) -> Result<Array, JsValue> {
-        if self.kit.manifest.target != Target::Macos {
-            return Err(error("Expected a Mac kit".into()));
-        }
+        self.mac()?;
         Ok(crate::macos::compilation(arch)
             .map_err(error)?
             .into_iter()
             .map(|(tool, args, output)| {
-                let command = Array::new();
-                command.push(&tool.into());
-                command.push(&args.into_iter().map(JsValue::from).collect::<Array>());
-                command.push(&output.into());
+                let command = command(args, output);
+                command.unshift(&tool.into());
                 JsValue::from(command)
             })
             .collect())
@@ -129,28 +137,19 @@ impl Builder {
         to_js(crate::macos::linker_files(&self.kit, arch).map_err(error)?)
     }
     pub fn universal(&self, intel: &[u8], arm64: &[u8]) -> Result<Vec<u8>, JsValue> {
-        if self.kit.manifest.target != Target::Macos {
-            return Err(error("Expected a Mac kit".into()));
-        }
+        self.mac()?;
         crate::macho::universal(intel, arm64).map_err(error)
     }
     pub fn assembly(&self) -> Array {
         assembly(self.kit.manifest.target)
             .into_iter()
-            .map(|(args, output)| {
-                let command = Array::new();
-                command.push(&args.into_iter().map(JsValue::from).collect::<Array>());
-                command.push(&output.into());
-                JsValue::from(command)
-            })
+            .map(|(args, output)| JsValue::from(command(args, output)))
             .collect()
     }
     /// LLD arguments, the executable they write and the kit files LLD reads.
     pub fn link(&self) -> Result<Array, JsValue> {
         let (args, output) = crate::link::command(self.kit.manifest.target).map_err(error)?;
-        let command = Array::new();
-        command.push(&args.into_iter().map(JsValue::from).collect::<Array>());
-        command.push(&output.into());
+        let command = command(args, output);
         command.push(&to_js(crate::link::files(&self.kit))?);
         Ok(command)
     }

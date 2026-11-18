@@ -8,7 +8,6 @@ use std::{
 };
 
 const D_REVISION: &str = "6a9b3a8e83c6c79248a7f7957c07280009f250fe";
-const SDK_HASH: &str = "87d1d1a2879d139cdc624b968efad3d4a97b8078cdff95e63ac88ecafd1a0171";
 
 fn extract(cache: &Path, archive: &Path, directory: &str, members: &[&str]) -> Result<PathBuf> {
     let destination = cache.join(directory);
@@ -30,13 +29,7 @@ fn extract(cache: &Path, archive: &Path, directory: &str, members: &[&str]) -> R
 pub(super) fn build() -> Result<()> {
     let cache = Path::new(".cache/client-macos-toolchain");
     fs::create_dir_all(cache)?;
-    let sdk_archive = cache.join("wasi-sdk.tar.gz");
-    download(
-        "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-29/wasi-sdk-29.0-x86_64-linux.tar.gz",
-        &sdk_archive,
-        SDK_HASH,
-    )?;
-    let sdk = extract(cache, &sdk_archive, "wasi-sdk-29.0-x86_64-linux", &[])?;
+    let sdk = super::wasi_sdk()?;
     tools::build_sr(cache, &sdk.join("bin"), true)?;
 
     let d_archive = cache.join("browser-d.tar.gz");
@@ -197,20 +190,7 @@ export async function compile(source, input, wasm) {{
         download(url, &path, digest)?;
         notices.push_str(&format!("\n{name}\n{}\n", fs::read_to_string(path)?));
     }
-    for path in ["SR/SR_main.c", "SR/udis86-1.6/LICENSE"] {
-        let source = String::from_utf8(run(Command::new("git").args([
-            "-C",
-            ".cache/sr",
-            "show",
-            &format!("{}:{path}", super::SR),
-        ]))?)?;
-        notices.push_str(
-            source
-                .split("#include")
-                .next()
-                .ok_or("Missing SR licence")?,
-        );
-    }
+    notices.push_str(&super::sr_notices()?);
     fs::write(cache.join("LICENSES.txt"), notices)?;
     Ok(())
 }

@@ -8,7 +8,7 @@ use maiko_patcher::{
 use std::{
     env, fs,
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -48,6 +48,36 @@ fn download(url: &str, path: &Path, expected: &str) -> Result<()> {
         return Err(format!("Checksum mismatch: {}", path.display()).into());
     }
     Ok(())
+}
+/// The pinned WASI SDK folder, downloaded once for both browser toolchains.
+fn wasi_sdk() -> Result<PathBuf> {
+    let cache = Path::new(".cache/wasi-sdk");
+    fs::create_dir_all(cache)?;
+    let archive = cache.join("wasi-sdk.tar.gz");
+    download(
+        "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-29/wasi-sdk-29.0-x86_64-linux.tar.gz",
+        &archive,
+        "87d1d1a2879d139cdc624b968efad3d4a97b8078cdff95e63ac88ecafd1a0171",
+    )?;
+    let sdk = cache.join("wasi-sdk-29.0-x86_64-linux");
+    if !sdk.exists() {
+        run(Command::new("tar")
+            .arg("-xzf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(cache))?;
+    }
+    Ok(fs::canonicalize(sdk)?)
+}
+/// A file from the pinned SR checkout.
+fn sr_file(path: &str) -> Result<Vec<u8>> {
+    run(Command::new("git").args(["-C", ".cache/sr", "show", &format!("{SR}:{path}")]))
+}
+/// SR's licence header and its bundled udis86 licence.
+fn sr_notices() -> Result<String> {
+    let main = String::from_utf8(sr_file("SR/SR_main.c")?)?;
+    let header = main.split("#include").next().ok_or("Missing SR licence")?;
+    Ok(header.to_owned() + &String::from_utf8(sr_file("SR/udis86-1.6/LICENSE")?)?)
 }
 fn archive(repo: &Path, revision: &str, directory: &Path) -> Result<()> {
     fs::create_dir_all(directory)?;
@@ -142,10 +172,7 @@ fn export(
             .file_name()
             .ok_or("Invalid support name")?
             .to_string_lossy();
-        files.insert(
-            format!("support/{name}"),
-            run(Command::new("git").args(["-C", ".cache/sr", "show", &format!("{SR}:{path}")]))?,
-        );
+        files.insert(format!("support/{name}"), sr_file(path)?);
     }
     // Link inputs are start files, libraries and runtime objects. None is built from the game.
     for entry in fs::read_dir(link)? {

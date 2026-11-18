@@ -108,7 +108,8 @@ pub(crate) fn dylibs(bytes: &[u8]) -> Result<std::collections::BTreeMap<String, 
     Ok(result)
 }
 
-pub fn check_universal(bytes: &[u8]) -> Result<()> {
+#[cfg(test)]
+pub(crate) fn check_universal(bytes: &[u8]) -> Result<()> {
     let big = |offset| -> Result<u32> {
         Ok(u32::from_be_bytes(
             bytes
