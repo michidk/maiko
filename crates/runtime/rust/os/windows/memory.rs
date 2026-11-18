@@ -28,15 +28,9 @@ pub(crate) fn memory() -> Option<(u64, u64)> {
         (GlobalMemoryStatusEx(&mut info) != 0).then_some((info.ullAvailPhys, info.ullTotalPhys))
     }
 }
-pub(crate) fn guest_space() -> Option<(u64, u64)> {
-    let base = crate::memory::guest_base() as u64;
-    #[cfg(feature = "llasm")]
-    let limit = base.checked_add(0x8000_0000)?;
-    #[cfg(not(feature = "llasm"))]
-    let limit = 0xe000_0000;
-    let (mut cursor, mut total, mut largest) = (base.checked_add(0x2000_0000)?, 0, 0);
-
+pub(crate) fn free_ranges(start: u64, limit: u64) -> Option<Vec<(u64, u64)>> {
     use windows_sys::Win32::System::Memory::*;
+    let (mut cursor, mut used) = (start, Vec::new());
     while cursor < limit {
         let mut info = std::mem::MaybeUninit::<MEMORY_BASIC_INFORMATION>::zeroed();
         if unsafe {
@@ -54,12 +48,31 @@ pub(crate) fn guest_space() -> Option<(u64, u64)> {
         if end <= cursor {
             return None;
         }
-        if info.State == MEM_FREE {
-            let bytes = end - cursor;
-            total += bytes;
-            largest = largest.max(bytes);
+        if info.State != MEM_FREE {
+            used.push((cursor, end));
         }
         cursor = end;
     }
-    Some((total, largest.min(0x10000000)))
+    Some(crate::memory::gaps(used, start, limit))
+}
+/// Map `size` bytes at exactly `address`; false if that range is taken.
+pub(crate) fn map_at(address: u64, size: usize, writable: bool) -> bool {
+    use windows_sys::Win32::System::Memory::*;
+    let (kind, protect) = if writable {
+        (MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
+    } else {
+        (MEM_RESERVE, PAGE_NOACCESS)
+    };
+    let mapped = unsafe { VirtualAlloc(address as usize as *const _, size, kind, protect) };
+    if mapped as u64 == address {
+        return true;
+    }
+    if !mapped.is_null() {
+        unsafe { VirtualFree(mapped, 0, MEM_RELEASE) };
+    }
+    false
+}
+pub(crate) fn unmap(address: u64, _size: usize) {
+    use windows_sys::Win32::System::Memory::*;
+    unsafe { VirtualFree(address as usize as *mut _, 0, MEM_RELEASE) };
 }

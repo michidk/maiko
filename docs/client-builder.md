@@ -40,7 +40,7 @@ Extract the generated ZIP into a separate writable folder. Windows users double-
 A kit holds everything needed to turn an owned `RGFX.EXE` into the native game, and no game code:
 
 - **Compilers**, built for WebAssembly: SR (the static recompiler), NASM and LLVM's LLD linker. The Mac kit adds SR's LLasm output, the browser D compiler, LLVM `opt` and `llc`.
-- **Link inputs**: C runtime start files, system import libraries, the Rust host (which includes the renderer) and SR's heap and audio objects. The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
+- **Link inputs**: C runtime start files, system import libraries, and the Rust host (which includes the renderer and the guest heap). The Mac kit has the same objects for both architectures and system-library stubs that list only library names, versions and imported symbol names; it contains no Apple SDK.
 - **The packaged runtime**: the launcher and licence notices.
 
 The browser or CLI checks the executable, translates it with SR, assembles the four engine objects with NASM (Mac: compiles them with LLVM for both architectures) and links them with LLD into the program. Browser and CLI produce byte-identical executables. Changed or unrecognized executables fail validation before anything is built.

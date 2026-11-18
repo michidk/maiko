@@ -9,13 +9,11 @@ cc='gcc -Wall -Wextra -Werror -O2 -I/work -I/linux'
 native_libs='-lasound -ludev'
 nasm -f elf64 main.asm -o main.o
 nasm -f elf64 service.asm -o service.o
-g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.o
 # Every runtime consumer gets its native dependencies after the Rust archive.
-# Group SR's allocator and Rust because their references are mutual.
 link() {
     $cc "$@" -Wl,--gc-sections \
-      -Wl,--start-group ${rust_library:-/work/libmaiko_runtime.a} guest_memory.o -Wl,--end-group \
-      -lstdc++ $native_libs -ldl -pthread -lm
+      ${rust_library:-/work/libmaiko_runtime.a} \
+      $native_libs -ldl -pthread -lm
 }
 rust_library=/work/libmaiko_host.a link -no-pie main.o service.o entry.o rgfx.o -Wl,-Map,linux.map -o redguard-native
 nasm -f elf64 -DABI_TEST -I/support/ native_entry.asm -o abi-entry.o

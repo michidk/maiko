@@ -15,7 +15,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 SR = 'ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3'
 IMAGE = 'redguard-recomp-macos:bookworm'
-PATCHES = ['sr-x64.patch', 'sr-llasm.patch', 'sr-heap-c-api.patch', 'sr-heap-macos.patch']
+PATCHES = ['sr-x64.patch', 'sr-llasm.patch']
 DOWNLOADS = {
     'MacOSX11.3.sdk.tar.xz': (
         'https://github.com/joseluisq/macosx-sdks/releases/download/11.3/MacOSX11.3.sdk.tar.xz',
@@ -84,7 +84,7 @@ def run(*args, **kwargs):
 def source_manifest(root=ROOT):
     paths = [root / name for name in ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']]
     paths += [root / 'tools' / name for name in
-              ('check_macos_backend.py', 'rust_runtime.py', 'sr_heap.py')]
+              ('check_macos_backend.py', 'rust_runtime.py')]
     paths += [root / 'patches' / name for name in PATCHES]
     extensions = {'.c', '.cpp', '.h', '.py', '.sh', '.asm', '.inc', '.cmd', '.command',
                   '.rs', '.toml', '.sci', '.json', '.md'}
@@ -174,8 +174,6 @@ def main():
         run('docker', 'exec', container, 'mkdir', '-p', '/results')
         report['rust_archives'] = stage_rust(container, game=bool(translation) or args.kit)
         if translation or args.kit:
-            from .sr_heap import stage_sr_heap
-            report['heap'] = stage_sr_heap(container)
             run('docker', 'exec', container, 'mkdir', '-p', '/game')
             for source in (translation.iterdir() if translation else []):
                 if source.suffix in ('.llasm', '.llinc'):

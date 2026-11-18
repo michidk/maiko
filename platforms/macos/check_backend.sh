@@ -42,9 +42,6 @@ fi
                 -I/work/SR/llasm-support -c "$source" \
                 -o "$directory/$(basename "$source" .c).o"
         done
-        clang++ -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
-            -x c++ -stdlib=libc++ -std=c++11 -O2 -DPTROFS_64BIT \
-            -I/work -c /work/sr_Game_memory.c -o "$directory/heap.o"
         mac_link() {
             clang++ -target "$arch-apple-macos11" -isysroot /sdk/MacOSX11.3.sdk \
                 -stdlib=libc++ --ld-path=/usr/lib/llvm-14/bin/ld64.lld \

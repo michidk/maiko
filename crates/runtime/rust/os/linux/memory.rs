@@ -41,34 +41,15 @@ pub(crate) fn memory() -> Option<(u64, u64)> {
         ))
     }
 }
-pub(crate) fn guest_space() -> Option<(u64, u64)> {
-    let base = crate::memory::guest_base() as u64;
-    #[cfg(feature = "llasm")]
-    let limit = base.checked_add(0x8000_0000)?;
-    #[cfg(not(feature = "llasm"))]
-    let limit = 0xe000_0000;
-    let (mut cursor, mut total, mut largest) = (base.checked_add(0x2000_0000)?, 0, 0);
-
+pub(crate) fn free_ranges(start: u64, limit: u64) -> Option<Vec<(u64, u64)>> {
     let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    let mut used = Vec::new();
     for line in maps.lines() {
-        let (start, end) = line.split_whitespace().next()?.split_once('-')?;
-        let (start, end) = (
-            u64::from_str_radix(start, 16).ok()?,
+        let (begin, end) = line.split_whitespace().next()?.split_once('-')?;
+        used.push((
+            u64::from_str_radix(begin, 16).ok()?,
             u64::from_str_radix(end, 16).ok()?,
-        );
-        if end <= cursor {
-            continue;
-        }
-        let start = start.min(limit);
-        if start > cursor {
-            let bytes = start - cursor;
-            total += bytes;
-            largest = largest.max(bytes);
-        }
-        cursor = cursor.max(end);
-        if cursor >= limit {
-            break;
-        }
+        ));
     }
-    Some((total, largest.min(0x10000000)))
+    Some(crate::memory::gaps(used, start, limit))
 }

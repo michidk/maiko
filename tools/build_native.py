@@ -11,7 +11,6 @@ import time
 import uuid
 import sys
 from .toolchain import IMAGE, ROOT, run, ensure_tool_image, collect_tool_notices, is_mountable, MOUNT_ROOT
-from .sr_heap import stage_sr_heap
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime, CRATE_IMPORT_LIBRARIES, crate_import_libraries
 from .gog_install import movie_bundle
 
@@ -75,7 +74,6 @@ def main():
         collect_tool_notices(name,ROOT/'.cache/sr/SR/x64-support',work/'notices')
         report['rust_runtime']=stage_rust_runtime(name,rust_runtime)
         report['rust_host']=stage_rust_runtime(name,rust_host)
-        report['sr_heap']=stage_sr_heap(name)
         # The runtime's crates link MinGW import libraries their -sys crates ship.
         for library in crate_import_libraries():
             run(['docker','cp',str(library),name+':/work/'])
@@ -89,7 +87,7 @@ def main():
         report['wine_original_gameplay_function_tests_verified']=True
         report['wine_original_audio_tests_verified']=True
         report['native_setup_build_test_seconds']=round(time.monotonic()-began,3)
-        for filename in ['redguard-native.exe','native.map','native-symbols.txt','libwinpthread-1.dll']:
+        for filename in ['redguard-native.exe','native.map','native-symbols.txt']:
             run(['docker','cp',name+':/work/'+filename,str(work/filename)])
         report['native_exe_sha256']=hashlib.sha256((work/'redguard-native.exe').read_bytes()).hexdigest()
         if a.link_only:

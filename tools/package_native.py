@@ -60,7 +60,7 @@ def main():
     shipped=args.output/'.stripped'
     shipped.mkdir(exist_ok=True)
     with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as package:
-        for filename in ['redguard-native.exe','libwinpthread-1.dll']:
+        for filename in ['redguard-native.exe']:
             source=work/filename
             if strip:
                 subprocess.run([strip,'-s','-o',str(shipped/filename),str(source)],check=True)

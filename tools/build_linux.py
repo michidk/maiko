@@ -9,7 +9,6 @@ import subprocess
 import time
 import uuid
 from .toolchain import ROOT,run,ensure_tool_image,is_mountable,MOUNT_ROOT
-from .sr_heap import stage_sr_heap
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
 from .gog_install import movie_bundle
 
@@ -85,7 +84,6 @@ def main():
         run(['docker','cp',str(header),name+':/work/game_build.h'])
         report['rust_runtime']=stage_rust_runtime(name,rust_runtime)
         report['rust_host']=stage_rust_runtime(name,rust_host)
-        report["sr_heap"]=stage_sr_heap(name)
         setup=time.monotonic()
         with (output/'build.log').open('w') as log:
             run(['docker','exec',name,'timeout','1800' if a.link_only else '240','sh','-c',('export MAIKO_LINK_ONLY=1; ' if a.link_only else '')+'sh /linux/build_runtime.sh'],stdout=log,stderr=subprocess.STDOUT)

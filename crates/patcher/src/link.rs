@@ -1,8 +1,7 @@
 //! Windows and Linux link commands for the kit's WebAssembly LLD.
 //!
 //! The kit ships only game-free link inputs under `support/link/`: C runtime
-//! start files, system import libraries, the Rust host and the SR heap
-//! object. The four engine objects are assembled from the user's own
+//! start files, system import libraries and the Rust host. The four engine objects are assembled from the user's own
 //! executable, then LLD links them with those inputs into the native program.
 use crate::{
     image::Result,
@@ -11,14 +10,13 @@ use crate::{
 };
 
 const WINDOWS_OBJECTS: [&str; 3] = ["crt2.o", "crtbegin.o", "crtend.o"];
-const WINDOWS_RUNTIME: [&str; 2] = ["libmaiko_host.a", "guest_memory.obj"];
+const WINDOWS_RUNTIME: [&str; 1] = ["libmaiko_host.a"];
 /// The library order GCC passes for the native build, including its implicit MinGW libraries.
-pub const WINDOWS_LIBRARIES: [&str; 31] = [
+pub const WINDOWS_LIBRARIES: [&str; 30] = [
     // MinGW import libraries the Rust host's crates link: windows-targets' (winit, cpal) and
     // OpenGL (wgpu's GL backend).
     "windows.0.52.0",
     "opengl32",
-    "stdc++",
     "ws2_32",
     "userenv",
     "ntdll",
@@ -49,9 +47,8 @@ pub const WINDOWS_LIBRARIES: [&str; 31] = [
     "msvcrt",
 ];
 const LINUX_START: [&str; 3] = ["crt1.o", "crti.o", "crtbegin.o"];
-const LINUX_RUNTIME: [&str; 2] = ["libmaiko_host.a", "guest_memory.o"];
-const LINUX_SYSTEM: [&str; 12] = [
-    "libstdc++.so.6",
+const LINUX_RUNTIME: [&str; 1] = ["libmaiko_host.a"];
+const LINUX_SYSTEM: [&str; 11] = [
     // Sound (cpal) and gamepads (gilrs) from the user's system.
     "libasound.so.2",
     "libudev.so.1",

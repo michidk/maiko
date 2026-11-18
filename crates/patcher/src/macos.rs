@@ -2,8 +2,7 @@
 use crate::{image::Result, kit::Kit, prepare::Files};
 
 pub const ARCHITECTURES: [&str; 2] = ["x86_64", "arm64"];
-const OBJECTS: [&str; 11] = [
-    "heap.o",
+const OBJECTS: [&str; 10] = [
     "llasm_cmps.o",
     "llasm_divide.o",
     "llasm_float.o",

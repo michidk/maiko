@@ -16,7 +16,6 @@ class SourceManifest(unittest.TestCase):
             root = Path(directory)
             for name in ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
                          'tools/check_macos_backend.py', 'tools/rust_runtime.py',
-                         'tools/sr_heap.py',
                          'platforms/macos/test.c', 'crates/runtime/test.h',
                          *('patches/' + name for name in backend.PATCHES)]:
                 path = root / name

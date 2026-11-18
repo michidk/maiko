@@ -115,24 +115,19 @@ pub fn memory() -> Option<(u64, u64)> {
     Some((available.min(total), total))
 }
 
-pub fn guest_space() -> Option<(u64, u64)> {
-    let base = crate::memory::guest_base() as u64;
-    let (mut cursor, mut total, mut largest) = (base.checked_add(0x2000_0000)?, 0, 0);
-    let end = base.checked_add(0x8000_0000)?;
-    while cursor < end {
-        let next = region(cursor).ok()?;
-        let (start, stop) = next.map_or((end, end), |(start, stop, _)| (start.min(end), stop));
-        if start > cursor {
-            let gap = start - cursor;
-            total += gap;
-            largest = largest.max(gap);
-        }
-        if stop <= cursor {
+pub(crate) fn free_ranges(start: u64, limit: u64) -> Option<Vec<(u64, u64)>> {
+    let (mut cursor, mut used) = (start, Vec::new());
+    while cursor < limit {
+        let Some((begin, end, _)) = region(cursor).ok()? else {
+            break;
+        };
+        if end <= cursor {
             return None;
         }
-        cursor = stop;
+        used.push((begin, end));
+        cursor = end;
     }
-    Some((total, largest.min(0x1000_0000)))
+    Some(crate::memory::gaps(used, start, limit))
 }
 
 /// # Safety
@@ -153,7 +148,7 @@ pub unsafe extern "C" fn rg_mac_memory(available: *mut u64, total: *mut u64) -> 
 /// Both outputs are writable for one u64.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rg_mac_guest_space(available: *mut u64, largest: *mut u64) -> i32 {
-    let Some((a, l)) = guest_space() else {
+    let Some((a, l)) = crate::memory::guest_space() else {
         return 0;
     };
     unsafe {

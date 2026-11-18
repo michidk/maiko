@@ -12,7 +12,8 @@ unsafe extern "C" {
 }
 static INVENTORY: Mutex<usize> = Mutex::new(0);
 
-use crate::os::{guest_space, memory};
+use crate::memory::guest_space;
+use crate::os::memory;
 
 /// # Safety
 /// The frame and the input/output register blocks point to mapped game memory.

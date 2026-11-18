@@ -2,7 +2,7 @@
 """Build the Linux, Windows and macOS runtime kits. No game file is needed.
 
 Each kit holds the compilers (SR, NASM, LLVM for macOS, LLD), game-free link inputs (start
-files, system libraries, the Rust host, SR's heap and audio objects) and the packaged runtime.
+files, system libraries and the Rust host) and the packaged runtime.
 A visitor's browser or the CLI translates their own RGFX.EXE and links it with these inputs.
 
 With --exe, the script also builds a package from every kit through the website's real worker
@@ -88,9 +88,9 @@ def runtime_directory(target, built, destination):
         for name in seed.namelist():
             if name.startswith('runtime/') and not name.endswith('/'):
                 leaf = name.removeprefix('runtime/')
-                # shortcut: skips the launcher's old name, the OpenGLide renderer and its GL libraries in the seed;
+                # shortcut: skips the launcher's old name, the OpenGLide renderer, its GL libraries and the old pthread DLL in the seed;
                 # drop once a release ships without them.
-                if (leaf.startswith(('RUN', 'libGL', 'libOpenGL', 'libredguard-', 'redguard-', 'libSDL2', 'SDL2'))
+                if (leaf.startswith(('RUN', 'libwinpthread', 'libGL', 'libOpenGL', 'libredguard-', 'redguard-', 'libSDL2', 'SDL2'))
                         or leaf.endswith('.tar.gz')
                         or leaf in ('README.txt', 'Maiko.exe', 'maiko.exe', 'maiko-launcher.exe')):
                     continue
