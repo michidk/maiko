@@ -38,7 +38,7 @@ The program also reads `REDGUARD_DIR`, the game folder; `--game-dir` takes prece
 
 ## Game controllers
 
-SDL2-compatible gamepads work on Windows and Linux. Connect one before starting or plug it in while playing. The layout uses the button positions below, with Xbox names as a reference. Multiple connected controllers can provide input.
+Gamepads work on Windows, Linux and macOS. Connect one before starting or plug it in while playing. The layout uses the button positions below, with Xbox names as a reference. Multiple connected controllers can provide input.
 
 | Control | Original key | Action with the default game settings |
 |---|---|---|

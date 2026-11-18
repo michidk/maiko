@@ -37,14 +37,14 @@ Both complete engine binaries have cross-linked. The same CPU-state/offset backe
 
 With the original disc image present, the Linux offset backend decodes movie PCM, skips the intro's configured frame points, detects CD music tracks and reaches initialized ship gameplay. A missing zero-flag producer for absent Smacker audio tracks previously sent a zero sample rate to the audio service; the flag metadata now preserves that producer at the shared branch. The longer movie probe still times out at its final Quit step, which also reproduces on the existing native Linux backend. It does not pass the complete movie acceptance check.
 
-Full-game builds stage `runtime/redguard-native` as a universal executable,
-SDL frameworks and launch instructions. No command launcher,
+Full-game builds stage `runtime/redguard-native` as a universal executable
+and launch instructions. No command launcher,
 original installation, disc image, SDK or compiler belongs in that runtime ZIP.
 The executable discovers an adjacent or remembered owned installation and uses
 macOS's built-in folder picker when necessary. Saves and logs use the user's
 standard directories. See [launch instructions](LAUNCH.md).
 
-After adding complete `LICENSES.txt` notices for Maiko, SR, SDL
+After adding complete `LICENSES.txt` notices for Maiko, SR
 and Rust dependencies, package the runtime with:
 
 ```sh
@@ -52,7 +52,7 @@ cargo run --locked -p maiko-patcher --bin maiko-macos-package -- \
   artifacts/<timestamp>-macos-backend/runtime redguard-macos-runtime.zip
 ```
 
-The packager accepts only the executable, the SDL framework,
+The packager accepts only the executable,
 `README.md` and `LICENSES.txt`. It rejects extra top-level files, game folders,
 disc media and command launchers. Framework symlinks must stay inside the runtime
 directory; the archive preserves them and executable permissions. Original game

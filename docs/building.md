@@ -5,7 +5,7 @@ For a runnable package from your own installation, use the [client-side browser 
 ## Requirements
 
 - Rust through [rustup](https://rustup.rs/). `rust-toolchain.toml` pins the compiler.
-- SDL2 and ALSA (`libasound2-dev`) development libraries and `pkg-config` for the runtime tests.
+- ALSA (`libasound2-dev`) and udev (`libudev-dev`) development libraries for the runtime tests on Linux.
 - Python 3.11 and a C/C++ compiler for the existing independent interface tests.
 - Bun for the static website.
 
@@ -30,6 +30,6 @@ A Linux or Wine check does not establish real-Windows acceptance. Dummy audio an
 
 ## Local development containers
 
-`platforms/windows/Dockerfile` defines the optional compiler, assembler and Wine environment used by the local build and test tools. `platforms/linux/Dockerfile` extends it with SDL development libraries, Mesa's Vulkan and EGL drivers and debugging tools. These images are development dependencies; the browser builder, release pipeline and generated game packages run without Docker.
+`platforms/windows/Dockerfile` defines the optional compiler, assembler and Wine environment used by the local build and test tools. `platforms/linux/Dockerfile` extends it with ALSA and udev development libraries, Mesa's Vulkan and EGL drivers and debugging tools. These images are development dependencies; the browser builder, release pipeline and generated game packages run without Docker.
 
 The tools build these images automatically when needed, using only the corresponding `platforms/<os>/` directory as the build context. Game files, caches and the rest of the checkout are excluded from that context without a `.dockerignore` file.
