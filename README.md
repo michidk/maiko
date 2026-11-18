@@ -65,7 +65,7 @@ Extract the ZIP into **its own writable folder** (not the game folder) and start
 - **Linux:** x86-64 with glibc 2.36 or newer, Wayland or X11, and a Vulkan or OpenGL driver.
 - **macOS:** 11 or newer, Intel or Apple Silicon. Follow the [launch instructions](platforms/macos/LAUNCH.md) for the quarantine warning.
 
-The game can also be started directly as `redguard-native` with options such as `--fullscreen`, `--skip-intro` or `--load-save 1`. [docs/playing.md](docs/playing.md) lists every option, the controller layout, movies, saves and logs.
+Use **Game Options** in the launcher to configure fullscreen, window size, renderer, textures and skipping movies. The [playing guide](docs/playing.md) covers controllers, movies, saves and logs.
 
 ## Problems
 
@@ -84,6 +84,16 @@ If the screen stays black, choose another **Renderer** in the launcher's Game Op
 ## Name
 
 Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the cartographer in *Redguard*. The name reflects how the project maps the original DOS executable to native code for modern systems.
+
+## Advanced use
+
+To start the game directly, run `redguard-native` on Linux or macOS, or `redguard-native.exe` on Windows. Command-line options apply to this game executable, **not the launcher**. For example, on Windows:
+
+```bat
+redguard-native.exe --fullscreen --skip-intro --load-save 1
+```
+
+See the [command-line reference](docs/playing.md#command-line-options) for all options and environment variables. For normal play, configure the game through the launcher's **Game Options**.
 
 ## Legal
 
