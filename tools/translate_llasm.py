@@ -10,8 +10,8 @@ import struct
 import subprocess
 import tempfile
 import time
-from le_image import Image
-from pipeline import ROOT, SR_COMMIT, metadata
+from .le_image import Image
+from .pipeline import ROOT, SR_COMMIT, metadata
 from glide.imports import inventory
 
 
@@ -59,7 +59,7 @@ def main():
             out.writelines(f'loc_{address:X}\n' for address in range(0x160000, 0x163000))
         report['metadata_sha256'] = {p.name: sha(p.read_bytes()) for p in sorted(work.glob('*.sci'))}
         report['source_sha256'] = {str(p.relative_to(ROOT)): sha(p.read_bytes()) for p in [
-            Path(__file__), ROOT / 'pipeline.py', ROOT / 'le_image.py', ROOT / 'glide/imports.py',
+            Path(__file__), ROOT / 'tools/pipeline.py', ROOT / 'tools/le_image.py', ROOT / 'glide/imports.py',
             *(ROOT / 'llasm-metadata').glob('*')] if p.is_file()}
         raw = bytearray((args.install / 'RGFX.EXE').read_bytes())
         le = struct.unpack_from('<I', raw, 0x3c)[0]

@@ -9,9 +9,9 @@ import subprocess
 import tempfile
 import time
 import uuid
-from build_windows import ROOT,run,ensure_tool_image
-from sr_heap import stage_sr_heap
-from sr_audio import stage_sr_audio
+from .build_windows import ROOT,run,ensure_tool_image
+from .sr_heap import stage_sr_heap
+from .sr_audio import stage_sr_audio
 
 IMAGE='redguard-recomp-linux:bookworm'
 BACKEND='9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'

@@ -22,7 +22,7 @@ Verification goals: ABI registers/x87/callback/stack, low-address heap, POSIX ca
 
 ## Checkpoint, 2026-11-12 09:26 UTC
 
-`python3 check_macos_backend.py` recreates the separate bounded Docker toolchain, checks SDK/SDL download hashes, archives pinned SR/OpenGLide sources, applies recorded patches and emits diagnostic Mach-O executables for x86-64 and ARM64. No game assets are inputs. It removes its container by default. `--keep-container` retains a bounded container for at most 30 minutes for follow-up compilation.
+`python3 -m tools.check_macos_backend` recreates the separate bounded Docker toolchain, checks SDK/SDL download hashes, archives pinned SR/OpenGLide sources, applies recorded patches and emits diagnostic Mach-O executables for x86-64 and ARM64. No game assets are inputs. It removes its container by default. `--keep-container` retains a bounded container for at most 30 minutes for follow-up compilation.
 
 Latest clean result: `artifacts/20261112T092457027776Z-macos-backend/report.json`. The generated LLVM fixture runs on Linux and checks BSWAP, all combinations of the six arithmetic condition flags, offset memory access, x87 arithmetic, shared-flag branches and balanced guest returns. Both Mac architectures link that fixture, Darwin memory-query diagnostics, the Glide renderer and a textured-triangle test. None ran on macOS. The Darwin query diagnostic does not implement or prove a guest allocator.
 
@@ -36,7 +36,7 @@ Latest clean backend check: `artifacts/20261112T094057335470Z-macos-backend/repo
 
 The check now uses upstream's inline-division LLasm flags and opt/llc path. Signed/unsigned division and shared signed-comparison flags, including overflow boundaries, execute on native x86-64 Linux and emulated ARM64 Linux. QEMU does not establish Darwin ABI or Mac hardware correctness. Both architectures cross-link Mac diagnostics and compile the shared POSIX host, paths, save storage, file services and SDL input/timers. The initial POSIX compile caught a missing framework search path, now corrected. Memory-query diagnostics also contain code/stack/library readability cases, but no Darwin execution or game allocator proof is claimed.
 
-Original-game flag metadata is preserved under `llasm-metadata/`. `translate_llasm.py` rebuilds its inputs from the owned, hash-checked image and records metadata and translator hashes. It moves past the earlier signed-comparison and CMPSB carry boundaries and the inspected texture-size dispatch branches. The next failure is incoming carry/zero at 0xE6703. The analysis target still omits most native substitutions and does not compile/link a game. Its overlap expansions lack independent execution tests. A caller-supplied translator is identified by hash, with source verification false; a reference commit is not presented as verified executable provenance.
+Original-game flag metadata is preserved under `llasm-metadata/`. `tools/translate_llasm.py` rebuilds its inputs from the owned, hash-checked image and records metadata and translator hashes. It moves past the earlier signed-comparison and CMPSB carry boundaries and the inspected texture-size dispatch branches. The next failure is incoming carry/zero at 0xE6703. The analysis target still omits most native substitutions and does not compile/link a game. Its overlap expansions lack independent execution tests. A caller-supplied translator is identified by hash, with source verification false; a reference commit is not presented as verified executable provenance.
 
 ## Opcode checkpoint, 2026-11-12 10:08 UTC
 

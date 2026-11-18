@@ -12,7 +12,7 @@ import time
 import urllib.request
 import uuid
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 SR = 'ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3'
 IMAGE = 'redguard-recomp-macos:bookworm'
 OPENGLIDE = '9f8a2cb73af3b6d26e9ec67bb9e1873d3e211726'
@@ -41,7 +41,7 @@ def run(*args, **kwargs):
 
 
 def source_manifest(root=ROOT):
-    paths = [root / 'check_macos_backend.py', *(root / 'patches' / name for name in PATCHES)]
+    paths = [root / 'tools/check_macos_backend.py', *(root / 'patches' / name for name in PATCHES)]
     extensions = {'.c', '.cpp', '.h', '.py', '.sh', '.asm', '.inc', '.cmd'}
     for directory in ['macos', 'tests', 'runtime', 'glide', 'linux']:
         paths.extend(path for path in (root / directory).rglob('*')

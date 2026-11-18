@@ -9,7 +9,7 @@ These files support an incomplete LLasm translation investigation. They are not 
 From the repository root, with the independently built patched OUT_LLASM translator:
 
 ```sh
-python3 translate_llasm.py \
+python3 -m tools.translate_llasm \
   --install /path/to/Redguard \
   --sr .cache/sr-llasm/SR/SR.exe
 ```

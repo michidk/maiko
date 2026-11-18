@@ -1,3 +1,5 @@
+> Layout note: this history predates the standalone repository cleanup. Python tooling now lives under `tools/`; plans and validation notes live under `docs/development/`. Historical artifact paths refer to the repository root or the original development workspace.
+
 # Recompilation spike findings
 
 ## Scope and current result

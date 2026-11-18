@@ -1,8 +1,8 @@
 """Stage the pinned SR heap sources without trusting cached working-tree edits."""
 import hashlib
 import subprocess
-from build_windows import ROOT
-from pipeline import SR_COMMIT
+from .build_windows import ROOT
+from .pipeline import SR_COMMIT
 
 def stage_sr_heap(container):
     repo=ROOT/'.cache/sr'
