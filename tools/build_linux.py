@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 import subprocess
 import time
-import uuid
-from .toolchain import ROOT,run,ensure_tool_image,ensure_linux_image,is_mountable,MOUNT_ROOT,LINUX_IMAGE as IMAGE
+from .toolchain import (ROOT,run,ensure_tool_image,ensure_linux_image,is_mountable,MOUNT_ROOT,LINUX_IMAGE as IMAGE,
+                        container_name,start_container,remove_container,copy_in,copy_out,game_build_header)
+from . import probes
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime
 from .gog_install import movie_bundle
 
@@ -60,7 +61,7 @@ def main():
                 wine_used=False,menu_verified=False,native_windows_verified=False)
     report['patch_sha256']={file.name:hashlib.sha256(file.read_bytes()).hexdigest()
                             for file in sorted((ROOT/'patches').glob('*.patch'))}
-    began=time.monotonic();name='rg-linux-'+uuid.uuid4().hex[:10]
+    began=time.monotonic();name=container_name('linux')
     try:
         report['base_toolchain']=ensure_tool_image()
         with (output/'toolchain-build.log').open('w') as log:
@@ -68,16 +69,16 @@ def main():
         # Cargo can wait for another project; do this before the container lease starts.
         rust_runtime=build_rust_runtime('x86_64-unknown-linux-gnu')
         rust_host=build_rust_runtime('x86_64-unknown-linux-gnu',component='host')
-        run(['docker','run','-d','--network','none','--memory','3g','--memory-swap','3g','--cpus','2','--name',name,
-             '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '1800' if a.keep_container else '480'])
+        start_container(name,IMAGE,'3g',3600 if a.link_only else 1800 if a.keep_container else 480,
+                        [(install,'/game')]+([(media,'/media/game.gog')] if media else []))
         if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
-        for directory,destination in [('crates/runtime','/work'),('platforms/linux','/work'),('platforms/linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]:
-            run(['docker','cp',str(ROOT/directory)+'/.',name+':'+destination])
+        copy_in(name,[(str(ROOT/directory)+'/.',destination) for directory,destination in
+                      [('crates/runtime','/work'),('platforms/linux','/work'),('platforms/linux','/linux'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]])
         # Generated macros include checked game fixes and must overwrite template includes.
         for file in source.iterdir():
             if file.suffix in ['.asm','.inc','.h']:run(['docker','cp',str(file),name+':/work/'+file.name])
         header=output/'game_build.h'
-        header.write_text('#define RGFX_SHA256 "'+variants['translated_image_sha256']+'"\n#define RGFX_ALTERNATE_SHA256 "'+variants['alternate_image_sha256']+'"\n')
+        game_build_header(header,variants)
         run(['docker','cp',str(header),name+':/work/game_build.h'])
         report['rust_runtime']=stage_rust_runtime(name,rust_runtime)
         report['rust_host']=stage_rust_runtime(name,rust_host)
@@ -115,52 +116,15 @@ def main():
         report['linux_menu_sequence_verified']=True
         report['status']='linux_menu_sequence_passed'
         if a.gameplay:
-            report['gameplay_probes']={}
-            actions=['continue','new'] if a.gameplay=='both' else [a.gameplay]
-            for action in actions:
-                with (output/f'gameplay-{action}-runner.log').open('w') as log:
-                    result=subprocess.run(['docker','exec',name,'timeout','-k','5',str(int(a.gameplay_seconds)+60),
-                        'xvfb-run','-a','python3','/tests/probe_gameplay.py','--action',action,
-                        '--seconds',str(a.gameplay_seconds)]+(['--controls'] if a.world_controls and action=='continue' else [])+(['--exercise'] if a.exercise and (a.gameplay!='both' or action=='new') else [])+(['--modal-ui'] if a.modal_ui and action=='continue' else [])+
-                        (['--user-dir',f'/work/gameplay-{action}-user'] if a.writable_gameplay else []),stdout=log,stderr=subprocess.STDOUT)
-                for suffix in ['.log','.json','-menu.ppm','-latest.ppm','-world-before.ppm','-world-after.ppm','-world-book.ppm','-inventory.ppm','-inventory-close.ppm','-sword.ppm','-attack.ppm','-attack-2.ppm','-attack-3.ppm','-jump.ppm','-logbook.ppm','-logbook-close.ppm','-map.ppm','-map-close.ppm']:
-                    file=f'gameplay-{action}'+suffix
-                    subprocess.run(['docker','cp',name+':/work/'+file,str(output/file)],
-                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-                evidence=output/f'gameplay-{action}.json'
-                report['gameplay_probes'][action]=json.loads(evidence.read_text()) if evidence.exists() else {'harness_error':'No probe report'}
-                if result.returncode:raise RuntimeError(f'{action} probe harness failed; inspect exported evidence')
+            report['gameplay_probes']=probes.gameplay(name,output,a,wine=False)
             report['status']='linux_menu_passed_gameplay_probed'
 
         if a.save_roundtrip:
-            with (output/'save-roundtrip-runner.log').open('w') as log:
-                saved=subprocess.run(['docker','exec',name,'timeout','-k','5','220','xvfb-run','-a',
-                                      'python3','/tests/check_save_roundtrip.py'],stdout=log,stderr=subprocess.STDOUT)
-            for file in ['save-roundtrip.json','save-roundtrip-1.log','save-roundtrip-2.log',
-                         'save-roundtrip-1.json','save-roundtrip-2.json']:
-                subprocess.run(['docker','cp',name+':/work/'+file,str(output/file)],
-                               stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-            if saved.returncode:raise RuntimeError('Original autosave/reload regression failed; inspect exported evidence')
+            probes.save_roundtrip(name,output,wine=False)
             report['linux_original_save_reload_verified']=True
 
         if a.movie_skip:
-            with (output/'movie-runner.log').open('w') as log:
-                movie=subprocess.run(['docker','exec','-e','RG_MOVIE_PCM_CAPTURE=/work/movie-source.pcm',name,'timeout','-k','5','100','xvfb-run','-a',
-                    'python3','/tests/probe_gameplay.py','--action','new','--movie-skip','--seconds','50',
-                    '--user-dir','/work/movie-user']+(['--cd-image','/media/game.gog'] if a.cd_image else []),stdout=log,stderr=subprocess.STDOUT)
-            for suffix in ['.json','.log','-movie-skip-0.ppm','-movie-skip-1.ppm','-movie-skip-2.ppm','-movie-skip-3.ppm']:
-                subprocess.run(['docker','cp',name+':/work/gameplay-new'+suffix,str(output/('movie'+suffix))],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-            evidence=output/'movie.json'
-            report['movie_probe']=json.loads(evidence.read_text()) if evidence.exists() else {'harness_error':'No movie report'}
-            if movie.returncode:raise RuntimeError('Original movie/CD-image probe failed; inspect exported evidence')
-            report['movie_video_skip_to_ship_verified']=True
-            report['movie_audio_mixed_verified']=report['movie_probe'].get('movie_audio_mixed_verified',False)
-            if a.sound and not report['movie_audio_mixed_verified']:raise RuntimeError('Movie audio did not mix nonzero PCM while video advanced')
-            report['movie_audio_verified']=False  # Audible hardware playback remains separate.
-            report['cd_image_files_verified']=bool(a.cd_image)
-            report['installed_gog_movies_verified']=a.installed_gog
-            if a.installed_gog and 'GOG movies: using bundled installed data' not in (output/'movie.log').read_text():
-                raise RuntimeError('Movie probe did not discover the installed GOG data')
+            probes.movie_skip(name,output,a,False,report,environment=['-e','RG_MOVIE_PCM_CAPTURE=/work/movie-source.pcm'])
             if a.sound:
                 with (output/'movie-pcm-reference.log').open('w') as log:
                     run(['docker','exec',name,'python3','/tests/check_movie_pcm.py'],stdout=log,stderr=subprocess.STDOUT)
@@ -171,13 +135,12 @@ def main():
     except Exception:
         report['status']='failed'
         # Preserve the real game boundary even when the menu assertion fails.
-        for file in ['linux-menu.log','linux-menu-before.ppm','linux-menu-options.ppm','linux-menu-return.ppm']:
-            subprocess.run(['docker','cp',name+':/work/'+file,str(output/file)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        copy_out(name,[('/work/'+file,output/file) for file in ['linux-menu.log','linux-menu-before.ppm','linux-menu-options.ppm','linux-menu-return.ppm']])
         raise
     finally:
         report['elapsed_seconds']=round(time.monotonic()-began,3)
         if a.keep_container:report['development_container']=name
-        else:subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        else:remove_container(name)
         (output/'report.json').write_text(json.dumps(report,indent=2)+'\n')
         print(output,flush=True)
 

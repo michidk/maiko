@@ -10,8 +10,7 @@ pub fn exit_cleanly(code: i32) -> ! {
     crate::logging::exit("crt-cleanup", code);
     unsafe { libc::exit(code) }
 }
-#[unsafe(no_mangle)]
-pub extern "C" fn rg_host_exit(code: u32) {
+pub fn rg_host_exit(code: u32) {
     crate::logging::exit("host-termination", code as i32);
     os::exit(code);
 }
@@ -25,27 +24,16 @@ pub extern "C" fn rg_host_readable(pointer: *const c_void, size: usize) -> c_int
 }
 /// # Safety
 /// `pointer` and `size` describe the live mapping to pin or unpin.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_host_lock(pointer: *mut c_void, size: usize, unlock: c_int) -> c_int {
+pub unsafe fn rg_host_lock(pointer: *mut c_void, size: usize, unlock: c_int) -> c_int {
     unsafe { os::lock(pointer, size, unlock) }
 }
-/// # Safety
-/// Both output pointers are writable u64 values.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_host_disk(drive: u32, available: *mut u64, total: *mut u64) -> c_int {
-    if available.is_null() || total.is_null() {
-        return 0;
-    }
-    unsafe { os::disk(drive, available, total) }
+/// Free and total bytes of a DOS drive number.
+pub fn rg_host_disk(drive: u32) -> Option<(u64, u64)> {
+    os::disk(drive)
 }
-/// # Safety
-/// `parts` is writable for four u32 fields: hour, minute, second, centisecond.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_host_time(parts: *mut u32) {
-    if parts.is_null() {
-        return;
-    }
-    unsafe { os::time(parts) }
+/// Local hour, minute, second and centisecond.
+pub fn rg_host_time() -> [u32; 4] {
+    os::time()
 }
 
 #[cfg(test)]
@@ -58,14 +46,10 @@ mod tests {
         assert_eq!(rg_host_readable(data.as_ptr().cast(), data.len()), 1);
         assert_eq!(rg_host_readable(std::ptr::null(), 0), 0);
         assert_eq!(rg_host_readable(usize::MAX as *const c_void, 2), 0);
-        let mut parts = [u32::MAX; 4];
-        unsafe {
-            rg_host_time(parts.as_mut_ptr());
-        }
+        let parts = rg_host_time();
         assert!(parts[0] < 24 && parts[1] < 60 && parts[2] < 61 && parts[3] < 100);
-        let (mut available, mut total) = (0, 0);
-        assert_eq!(unsafe { rg_host_disk(0, &mut available, &mut total) }, 1);
+        let (available, total) = rg_host_disk(0).unwrap();
         assert!(available <= total && total > 0);
-        assert_eq!(unsafe { rg_host_disk(27, &mut available, &mut total) }, 0);
+        assert_eq!(rg_host_disk(27), None);
     }
 }

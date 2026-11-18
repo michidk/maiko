@@ -583,20 +583,13 @@ pub fn drawable_size() -> Option<(u32, u32)> {
     })
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn rg_input_take_scan() -> c_int {
+pub fn rg_input_take_scan() -> c_int {
     INPUT.with(|input| input.borrow_mut().queue.pop_front().map_or(-1, c_int::from))
 }
 
-/// # Safety
-/// `registers` points to seven writable u32 values. All input/window calls
+/// The DOS mouse services (INT 33h) on the seven guest registers. All input/window calls
 /// belong to the game thread that opened the window.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
-    if registers.is_null() {
-        return 0;
-    }
-    let regs = unsafe { &mut *registers.cast::<[u32; 7]>() };
+pub fn rg_mouse_service(regs: &mut [u32; 7]) -> c_int {
     INPUT.with(|input| {
         let mut input = input.borrow_mut();
         if !input.pump() {

@@ -229,7 +229,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             return;
         }
         if service & 0xf000 == 0x2000 {
-            if maiko_glide::rg_glide_service(service - 0x2000, f) != 0 {
+            if maiko_glide::rg_glide_service(service - 0x2000, f) {
                 if service == 0x200c {
                     runtime_state();
                 }
@@ -238,7 +238,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             close_requested();
         }
         if service & 0xff00 == 0x3100
-            && maiko_runtime::redbook::rg_redbook_service(service & 0xff, f) != 0
+            && maiko_runtime::redbook::rg_redbook_service(service & 0xff, f)
         {
             return;
         }
@@ -500,11 +500,10 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
             0x1010 if rg_video_service(f) != 0 => return,
             0x1021 => {
                 if (f.eax >> 8) & 255 == 0x36 {
-                    let (mut available, mut total) = (0, 0);
-                    if rg_host_disk(f.edx as u32 & 255, &mut available, &mut total) == 0 {
+                    let Some((available, total)) = rg_host_disk(f.edx as u32 & 255) else {
                         f.eax = 65535;
                         return;
-                    }
+                    };
                     f.eax = 64;
                     f.ecx = 512;
                     f.ebx = (available / 32768).min(65535);
@@ -533,8 +532,7 @@ pub unsafe extern "C" fn rg_host_service(service: u32, frame: *mut GuestFrame) {
                     return;
                 }
                 if (f.eax >> 8) & 255 == 0x2c {
-                    let mut t = [0; 4];
-                    rg_host_time(t.as_mut_ptr());
+                    let t = rg_host_time();
                     f.ecx = (f.ecx & 0xffff0000) | u64::from((t[0] << 8) | t[1]);
                     f.edx = (f.edx & 0xffff0000) | u64::from((t[2] << 8) | t[3]);
                     return;

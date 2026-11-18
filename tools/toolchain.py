@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = 'redguard-recomp-tools:bookworm'
@@ -17,6 +18,40 @@ def is_mountable(path):
 
 def run(args, **kwargs):
     return subprocess.run(args, check=True, text=True, **kwargs)
+
+
+def container_name(purpose):
+    return f'rg-{purpose}-'+uuid.uuid4().hex[:10]
+
+
+def start_container(name, image, memory, seconds, mounts=()):
+    """Start an offline, memory- and CPU-capped container that lives at most `seconds`.
+    `mounts` are (host path, container path) pairs, mounted read-only."""
+    run(['docker','run','-d','--network','none','--memory',memory,'--memory-swap',memory,'--cpus','2','--name',name,
+         *[arg for source,destination in mounts for arg in ('--mount',f'type=bind,src={source},dst={destination},readonly')],
+         image,'sleep',str(seconds)],stdout=subprocess.DEVNULL)
+
+
+def remove_container(name):
+    subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
+
+def copy_in(name, pairs):
+    """Copy (host path, container path) pairs; a trailing '/.' on a folder copies its contents."""
+    for source,destination in pairs:
+        run(['docker','cp',str(source),f'{name}:{destination}'])
+
+
+def copy_out(name, pairs):
+    """Copy (container path, host path) pairs that exist; evidence a failed run did not write is skipped."""
+    for source,destination in pairs:
+        subprocess.run(['docker','cp',f'{name}:{source}',str(destination)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
+
+def game_build_header(path, variants):
+    """The RGFX.EXE hashes the native build checks the user's image against."""
+    path.write_text('#define RGFX_SHA256 "'+variants['translated_image_sha256']+'"\n'
+                    '#define RGFX_ALTERNATE_SHA256 "'+variants['alternate_image_sha256']+'"\n')
 
 
 def collect_tool_notices(container, support, destination):

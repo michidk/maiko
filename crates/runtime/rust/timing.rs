@@ -228,8 +228,7 @@ pub extern "C" fn rg_clock_stop() {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn rg_clock_milliseconds() -> u32 {
+pub fn rg_clock_milliseconds() -> u32 {
     CLOCK
         .locked()
         .as_ref()

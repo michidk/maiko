@@ -12,7 +12,6 @@ use crate::Locked;
 use crate::guest::GuestFrame;
 use crate::host::rg_host_readable;
 use crate::rg_log;
-use std::ffi::c_int;
 use std::fs::File;
 use std::io;
 use std::path::Path;
@@ -328,14 +327,10 @@ unsafe fn put_u32(address: u32, value: u32) {
 ///
 /// # Safety
 /// `frame` is the live guest register frame; its stack holds the call's arguments.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame) -> c_int {
-    let Some(frame) = (unsafe { frame.as_mut() }) else {
-        return 0;
-    };
+pub unsafe fn rg_redbook_service(service: u32, frame: &mut GuestFrame) -> bool {
     let stack = crate::memory::guest_ptr::<u32>(frame.esp as u32);
     if rg_host_readable(stack.cast(), 5 * 4) == 0 {
-        return 0;
+        return false;
     }
     let a = unsafe { std::slice::from_raw_parts(stack, 5) };
     let mut player = player();
@@ -426,10 +421,10 @@ pub unsafe extern "C" fn rg_redbook_service(service: u32, frame: *mut GuestFrame
             player.volume = a[2].min(127);
             u64::from(player.volume)
         }
-        _ => return 0,
+        _ => return false,
     };
     frame.flags &= !1;
-    1
+    true
 }
 
 #[cfg(test)]

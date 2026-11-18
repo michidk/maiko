@@ -422,246 +422,26 @@ impl App {
             text: name,
             texture: self.titles.get(name).cloned(),
         };
-        let mut close = false;
-        let mut choose = None;
-        let mut make_report = false;
-        match &mut self.dialog {
-            Dialog::None => {}
+        let outcome = match &mut self.dialog {
+            Dialog::None => Outcome::default(),
             Dialog::ChooseGame { typed, error } => {
-                dialog(context, &title, |ui| {
-                    ui.label("Maiko could not find your Redguard installation. Choose the folder that contains RGFX.EXE, or the GOG folder around it.");
-                    ui.add_space(12.0);
-                    if primary(ui, "Browse…").clicked()
-                        && let Some(folder) = picker::choose_folder()
-                    {
-                        choose = Some(folder);
-                    }
-                    ui.add_space(12.0);
-                    ui.label(muted("Or enter its path:"));
-                    ui.horizontal(|ui| {
-                        let field = ui.add(
-                            egui::TextEdit::singleline(typed)
-                                .hint_text("/path/to/Redguard")
-                                .desired_width(ui.available_width() - 70.0),
-                        );
-                        let entered = field.lost_focus()
-                            && ui.input(|input| input.key_pressed(egui::Key::Enter));
-                        if (secondary(ui, "Use").clicked() || entered) && !typed.trim().is_empty() {
-                            choose = Some(PathBuf::from(typed.trim()));
-                        }
-                    });
-                    if let Some(error) = error {
-                        ui.add_space(6.0);
-                        ui.label(egui::RichText::new(error.as_str()).color(ERROR));
-                    }
-                    footer(ui, |ui| {
-                        if secondary(ui, "Quit").clicked() {
-                            self.quit = true;
-                        }
-                    });
-                });
+                choose_game_dialog(context, &title, typed, error)
             }
             Dialog::Options(draft) => {
-                let mut save = false;
-                dialog(context, &title, |ui| {
-                    section(ui, "Display");
-                    row(
-                        ui,
-                        "Fullscreen",
-                        "Borderless, at your desktop's resolution",
-                        |ui| {
-                            toggle(ui, &mut draft.fullscreen);
-                        },
-                    );
-                    row(ui, "Window size", "Used when not in fullscreen", |ui| {
-                        ui.add_enabled_ui(!draft.fullscreen, |ui| {
-                            choice(ui, "window size", &mut draft.window_size, &WINDOW_SIZES)
-                        });
-                    });
-                    row(
-                        ui,
-                        "Textures",
-                        "Original is the game's own soft, filtered look",
-                        |ui| {
-                            choice(
-                                ui,
-                                "texture filter",
-                                &mut draft.texture_filter,
-                                &TEXTURE_FILTERS,
-                            );
-                        },
-                    );
-                    row(
-                        ui,
-                        "Renderer",
-                        "Try another if the game shows nothing or runs badly",
-                        |ui| {
-                            choice(ui, "renderer", &mut draft.renderer, RENDERERS);
-                        },
-                    );
-                    if cfg!(windows) {
-                        row(
-                            ui,
-                            "Console window",
-                            "Shows the game's log while it runs",
-                            |ui| {
-                                toggle(ui, &mut draft.console);
-                            },
-                        );
-                    }
-                    section(ui, "Movies");
-                    row(
-                        ui,
-                        "Skip the intro",
-                        "New Game goes straight to the ship",
-                        |ui| {
-                            toggle(ui, &mut draft.skip_intro);
-                        },
-                    );
-                    row(
-                        ui,
-                        "Skip the outro",
-                        "Quit closes the book without its animation",
-                        |ui| {
-                            toggle(ui, &mut draft.skip_outro);
-                        },
-                    );
-                    section(ui, "Game files");
-                    let game = self
-                        .game
-                        .as_deref()
-                        .map_or("Not chosen".into(), |game| game.display().to_string());
-                    row(ui, "Redguard folder", &game, |ui| {
-                        if secondary(ui, "Change…").clicked()
-                            && let Some(folder) = picker::choose_folder()
-                        {
-                            choose = Some(folder);
-                        }
-                    });
-                    let music = draft
-                        .cd_image
-                        .as_deref()
-                        .map_or("From the game folder's disc image".into(), |image| {
-                            image.display().to_string()
-                        });
-                    row(ui, "CD music", &music, |ui| {
-                        if draft.cd_image.is_some() && secondary(ui, "Reset").clicked() {
-                            draft.cd_image = None;
-                        }
-                        if secondary(ui, "Choose…").clicked()
-                            && let Some(folder) = picker::choose_folder()
-                        {
-                            draft.cd_image = Some(folder);
-                        }
-                    });
-                    ui.add_space(6.0);
-                    ui.label(muted(
-                        "Subtitles, sound and controls are in the game's own Options menu.",
-                    ));
-                    footer(ui, |ui| {
-                        if primary(ui, "Save").clicked() {
-                            save = true;
-                        }
-                        if secondary(ui, "Cancel").clicked() {
-                            close = true;
-                        }
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            if ui.link("Restore defaults").clicked() {
-                                *draft = Settings::default();
-                            }
-                        });
-                    });
-                });
-                if save {
+                let outcome = options_dialog(context, &title, draft, self.game.as_deref());
+                if outcome.save {
                     self.settings = draft.clone();
                     let _ = self.settings.save();
-                    close = true;
                 }
+                outcome
             }
-            Dialog::Support => {
-                let logs = log_folder();
-                dialog(context, &title, |ui| {
-                    ui.label("Every start of the game writes a log. If something goes wrong, create a report and attach it to an issue. When the game crashes, the launcher creates one by itself.");
-                    if let Some(logs) = &logs {
-                        ui.add_space(8.0);
-                        path(ui, &logs.display().to_string());
-                    }
-                    footer(ui, |ui| {
-                        if secondary(ui, "Close").clicked() {
-                            close = true;
-                        }
-                        if secondary(ui, "Maiko on GitHub").clicked() {
-                            let _ = open::that_detached(PROJECT);
-                        }
-                        if primary(ui, "Create report").clicked() {
-                            make_report = true;
-                        }
-                        if let Some(logs) = &logs
-                            && ui
-                                .add_enabled_ui(logs.is_dir(), |ui| {
-                                    secondary(ui, "Open log folder")
-                                })
-                                .inner
-                                .clicked()
-                        {
-                            let _ = open::that_detached(logs);
-                        }
-                    });
-                });
-            }
-            Dialog::Report(crashed, result) => {
-                dialog(context, &title, |ui| {
-                    if *crashed {
-                        ui.label("Redguard stopped unexpectedly. Maiko saved a report with the game's log, its last screenshot, your system details, your settings and newest save (no game files).");
-                    } else {
-                        ui.label("Maiko saved a report with the newest log and screenshot, your system details, your settings and newest save (no game files).");
-                    }
-                    ui.add_space(8.0);
-                    match result {
-                        Ok(path) => {
-                            self::path(ui, &path.display().to_string());
-                            ui.add_space(6.0);
-                            ui.label(muted(
-                                "Attach it to an issue so the problem can be looked into.",
-                            ));
-                        }
-                        Err(error) => {
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "The report could not be written: {error}"
-                                ))
-                                .color(ERROR),
-                            );
-                        }
-                    }
-                    footer(ui, |ui| {
-                        if secondary(ui, "Close").clicked() {
-                            close = true;
-                        }
-                        if primary(ui, "Report an issue").clicked() {
-                            let _ = open::that_detached(ISSUES);
-                        }
-                        if let Ok(path) = result
-                            && let Some(folder) = path.parent()
-                            && secondary(ui, "Show report").clicked()
-                        {
-                            let _ = open::that_detached(folder);
-                        }
-                    });
-                });
-            }
-            Dialog::Error(text) => {
-                dialog(context, &title, |ui| {
-                    ui.label(text.as_str());
-                    footer(ui, |ui| {
-                        if primary(ui, "OK").clicked() {
-                            close = true;
-                        }
-                    });
-                });
-            }
-        }
-        if let Some(folder) = choose {
+            Dialog::Support => support_dialog(context, &title),
+            Dialog::Report(crashed, result) => report_dialog(context, &title, *crashed, result),
+            Dialog::Error(text) => error_dialog(context, &title, text),
+        };
+        self.quit |= outcome.quit;
+        let mut close = outcome.close || outcome.save;
+        if let Some(folder) = outcome.choose {
             match self.choose(&folder) {
                 Ok(()) => {
                     if matches!(self.dialog, Dialog::ChooseGame { .. }) {
@@ -677,7 +457,7 @@ impl App {
         if close {
             self.dialog = Dialog::None;
         }
-        if make_report {
+        if outcome.report {
             self.dialog = Dialog::Report(false, self.report(None));
         }
     }
@@ -717,6 +497,266 @@ const MUTED: Color32 = Color32::from_rgb(170, 150, 118);
 const RED: Color32 = Color32::from_rgb(148, 30, 20);
 const ERROR: Color32 = Color32::from_rgb(232, 112, 92);
 const DIALOG_WIDTH: f32 = 470.0;
+
+/// What a dialog asked for this frame.
+#[derive(Default)]
+struct Outcome {
+    close: bool,
+    save: bool,
+    quit: bool,
+    report: bool,
+    choose: Option<PathBuf>,
+}
+
+fn choose_game_dialog(
+    context: &egui::Context,
+    title: &Title,
+    typed: &mut String,
+    error: &Option<String>,
+) -> Outcome {
+    let mut outcome = Outcome::default();
+    dialog(context, title, |ui| {
+        ui.label("Maiko could not find your Redguard installation. Choose the folder that contains RGFX.EXE, or the GOG folder around it.");
+        ui.add_space(12.0);
+        if primary(ui, "Browse…").clicked()
+            && let Some(folder) = picker::choose_folder()
+        {
+            outcome.choose = Some(folder);
+        }
+        ui.add_space(12.0);
+        ui.label(muted("Or enter its path:"));
+        ui.horizontal(|ui| {
+            let field = ui.add(
+                egui::TextEdit::singleline(typed)
+                    .hint_text("/path/to/Redguard")
+                    .desired_width(ui.available_width() - 70.0),
+            );
+            let entered =
+                field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+            if (secondary(ui, "Use").clicked() || entered) && !typed.trim().is_empty() {
+                outcome.choose = Some(PathBuf::from(typed.trim()));
+            }
+        });
+        if let Some(error) = error {
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(error.as_str()).color(ERROR));
+        }
+        footer(ui, |ui| {
+            if secondary(ui, "Quit").clicked() {
+                outcome.quit = true;
+            }
+        });
+    });
+    outcome
+}
+
+fn options_dialog(
+    context: &egui::Context,
+    title: &Title,
+    draft: &mut Settings,
+    game: Option<&Path>,
+) -> Outcome {
+    let mut outcome = Outcome::default();
+    dialog(context, title, |ui| {
+        section(ui, "Display");
+        row(
+            ui,
+            "Fullscreen",
+            "Borderless, at your desktop's resolution",
+            |ui| {
+                toggle(ui, &mut draft.fullscreen);
+            },
+        );
+        row(ui, "Window size", "Used when not in fullscreen", |ui| {
+            ui.add_enabled_ui(!draft.fullscreen, |ui| {
+                choice(ui, "window size", &mut draft.window_size, &WINDOW_SIZES)
+            });
+        });
+        row(
+            ui,
+            "Textures",
+            "Original is the game's own soft, filtered look",
+            |ui| {
+                choice(
+                    ui,
+                    "texture filter",
+                    &mut draft.texture_filter,
+                    &TEXTURE_FILTERS,
+                );
+            },
+        );
+        row(
+            ui,
+            "Renderer",
+            "Try another if the game shows nothing or runs badly",
+            |ui| {
+                choice(ui, "renderer", &mut draft.renderer, RENDERERS);
+            },
+        );
+        if cfg!(windows) {
+            row(
+                ui,
+                "Console window",
+                "Shows the game's log while it runs",
+                |ui| {
+                    toggle(ui, &mut draft.console);
+                },
+            );
+        }
+        section(ui, "Movies");
+        row(
+            ui,
+            "Skip the intro",
+            "New Game goes straight to the ship",
+            |ui| {
+                toggle(ui, &mut draft.skip_intro);
+            },
+        );
+        row(
+            ui,
+            "Skip the outro",
+            "Quit closes the book without its animation",
+            |ui| {
+                toggle(ui, &mut draft.skip_outro);
+            },
+        );
+        section(ui, "Game files");
+        let game = game.map_or("Not chosen".into(), |game| game.display().to_string());
+        row(ui, "Redguard folder", &game, |ui| {
+            if secondary(ui, "Change…").clicked()
+                && let Some(folder) = picker::choose_folder()
+            {
+                outcome.choose = Some(folder);
+            }
+        });
+        let music = draft
+            .cd_image
+            .as_deref()
+            .map_or("From the game folder's disc image".into(), |image| {
+                image.display().to_string()
+            });
+        row(ui, "CD music", &music, |ui| {
+            if draft.cd_image.is_some() && secondary(ui, "Reset").clicked() {
+                draft.cd_image = None;
+            }
+            if secondary(ui, "Choose…").clicked()
+                && let Some(folder) = picker::choose_folder()
+            {
+                draft.cd_image = Some(folder);
+            }
+        });
+        ui.add_space(6.0);
+        ui.label(muted(
+            "Subtitles, sound and controls are in the game's own Options menu.",
+        ));
+        footer(ui, |ui| {
+            if primary(ui, "Save").clicked() {
+                outcome.save = true;
+            }
+            if secondary(ui, "Cancel").clicked() {
+                outcome.close = true;
+            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                if ui.link("Restore defaults").clicked() {
+                    *draft = Settings::default();
+                }
+            });
+        });
+    });
+    outcome
+}
+
+fn support_dialog(context: &egui::Context, title: &Title) -> Outcome {
+    let mut outcome = Outcome::default();
+    let logs = log_folder();
+    dialog(context, title, |ui| {
+        ui.label("Every start of the game writes a log. If something goes wrong, create a report and attach it to an issue. When the game crashes, the launcher creates one by itself.");
+        if let Some(logs) = &logs {
+            ui.add_space(8.0);
+            path(ui, &logs.display().to_string());
+        }
+        footer(ui, |ui| {
+            if secondary(ui, "Close").clicked() {
+                outcome.close = true;
+            }
+            if secondary(ui, "Maiko on GitHub").clicked() {
+                let _ = open::that_detached(PROJECT);
+            }
+            if primary(ui, "Create report").clicked() {
+                outcome.report = true;
+            }
+            if let Some(logs) = &logs
+                && ui
+                    .add_enabled_ui(logs.is_dir(), |ui| secondary(ui, "Open log folder"))
+                    .inner
+                    .clicked()
+            {
+                let _ = open::that_detached(logs);
+            }
+        });
+    });
+    outcome
+}
+
+fn report_dialog(
+    context: &egui::Context,
+    title: &Title,
+    crashed: bool,
+    result: &Result<PathBuf, String>,
+) -> Outcome {
+    let mut outcome = Outcome::default();
+    dialog(context, title, |ui| {
+        if crashed {
+            ui.label("Redguard stopped unexpectedly. Maiko saved a report with the game's log, its last screenshot, your system details, your settings and newest save (no game files).");
+        } else {
+            ui.label("Maiko saved a report with the newest log and screenshot, your system details, your settings and newest save (no game files).");
+        }
+        ui.add_space(8.0);
+        match result {
+            Ok(path) => {
+                self::path(ui, &path.display().to_string());
+                ui.add_space(6.0);
+                ui.label(muted(
+                    "Attach it to an issue so the problem can be looked into.",
+                ));
+            }
+            Err(error) => {
+                ui.label(
+                    egui::RichText::new(format!("The report could not be written: {error}"))
+                        .color(ERROR),
+                );
+            }
+        }
+        footer(ui, |ui| {
+            if secondary(ui, "Close").clicked() {
+                outcome.close = true;
+            }
+            if primary(ui, "Report an issue").clicked() {
+                let _ = open::that_detached(ISSUES);
+            }
+            if let Ok(path) = result
+                && let Some(folder) = path.parent()
+                && secondary(ui, "Show report").clicked()
+            {
+                let _ = open::that_detached(folder);
+            }
+        });
+    });
+    outcome
+}
+
+fn error_dialog(context: &egui::Context, title: &Title, text: &str) -> Outcome {
+    let mut outcome = Outcome::default();
+    dialog(context, title, |ui| {
+        ui.label(text);
+        footer(ui, |ui| {
+            if primary(ui, "OK").clicked() {
+                outcome.close = true;
+            }
+        });
+    });
+    outcome
+}
 
 fn muted(text: &str) -> egui::RichText {
     egui::RichText::new(text).color(MUTED).size(12.5)

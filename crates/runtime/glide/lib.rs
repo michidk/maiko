@@ -11,7 +11,6 @@ use rustyglide::texture::{self, NccData, TexInfo};
 use rustyglide::types::*;
 use rustyglide::{Blend, Glide, GrVertex, LockInfo, PresentFrame, Settings, Target};
 use std::cell::RefCell;
-use std::ffi::c_int;
 use std::io::Write;
 use std::time::{Duration, Instant};
 
@@ -605,11 +604,7 @@ pub fn set_movie(active: bool) {
     });
 }
 /// # Safety
-/// `frame` and the arguments for this Glide import point to mapped guest memory.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rg_glide_service(index: u32, frame: *mut GuestFrame) -> c_int {
-    let Some(frame) = (unsafe { frame.as_mut() }) else {
-        return 0;
-    };
-    BRIDGE.with(|bridge| unsafe { bridge.borrow_mut().service(index, frame) }) as c_int
+/// The arguments for this Glide import point to mapped guest memory.
+pub unsafe fn rg_glide_service(index: u32, frame: &mut GuestFrame) -> bool {
+    BRIDGE.with(|bridge| unsafe { bridge.borrow_mut().service(index, frame) })
 }

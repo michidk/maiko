@@ -8,9 +8,9 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
-import uuid
 
-from .toolchain import ROOT, IMAGE, LINUX_IMAGE, run, ensure_tool_image, ensure_linux_image
+from .toolchain import (ROOT, IMAGE, LINUX_IMAGE, run, ensure_tool_image, ensure_linux_image, container_name,
+                        start_container, remove_container, copy_in)
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime, CRATE_IMPORT_LIBRARIES, crate_import_libraries
 
 
@@ -76,8 +76,8 @@ def main():
     rust_target = 'x86_64-pc-windows-gnu' if windows else 'x86_64-unknown-linux-gnu'
     host = build_rust_runtime(rust_target, component='host')
     launcher, _ = build_rust_runtime(rust_target, component='launcher')
-    name = 'rg-link-' + uuid.uuid4().hex[:10]
-    run(['docker', 'run', '-d', '--network', 'none', '--memory', '4g', '--cpus', '2', '--name', name, image, 'sleep', '1800'])
+    name = container_name('link')
+    start_container(name, image, '4g', 1800)
     try:
         for directory, destination in [('crates/runtime', '/work'), ('platforms/linux', '/linux')]:
             run(['docker', 'cp', str(ROOT / directory) + '/.', name + ':' + destination])
@@ -94,7 +94,7 @@ def main():
         args.output.mkdir(parents=True)
         run(['docker', 'cp', name + ':/out/.', str(args.output)])
     finally:
-        subprocess.run(['docker', 'rm', '-f', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        remove_container(name)
     print(args.output)
 
 

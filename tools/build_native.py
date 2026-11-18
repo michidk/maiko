@@ -8,9 +8,10 @@ import re
 from pathlib import Path
 import subprocess
 import time
-import uuid
 import sys
-from .toolchain import IMAGE, ROOT, run, ensure_tool_image, collect_tool_notices, is_mountable, MOUNT_ROOT
+from .toolchain import (IMAGE, ROOT, run, ensure_tool_image, collect_tool_notices, is_mountable, MOUNT_ROOT,
+                        container_name, start_container, remove_container, copy_in, copy_out, game_build_header)
+from . import probes
 from .rust_runtime import build as build_rust_runtime, stage as stage_rust_runtime, CRATE_IMPORT_LIBRARIES, crate_import_libraries
 from .gog_install import movie_bundle
 
@@ -46,7 +47,7 @@ def main():
     install = a.install.resolve()
     media=movie_bundle(install) if a.installed_gog else a.cd_image.resolve() if a.cd_image else None
     if not is_mountable(install): p.error(f'Docker game mount must be under {MOUNT_ROOT}')
-    name = 'rg-native-' + uuid.uuid4().hex[:10]
+    name = container_name('native')
     report.update(native_build_status='started', native_crt_verified=False,
                   native_config_verified=False, native_glide_window_verified=False, menu_verified=False, native_windows_verified=False,full_game_verified=False)
     for key in ['native_wine_exit','native_exe_sha256','native_boundary_symbols']:
@@ -55,22 +56,19 @@ def main():
     if report['image']['sha256']!=variants['translated_image_sha256']:
         raise ValueError('Image variant guards require the inspected local translation')
     report['image_variants']=variants
-    (work/'game_build.h').write_text('#define RGFX_SHA256 "'+report['image']['sha256']+'"\n'
-        '#define RGFX_ALTERNATE_SHA256 "'+variants['alternate_image_sha256']+'"\n')
+    game_build_header(work/'game_build.h',variants)
     began = time.monotonic()
     try:
         report['toolchain']=ensure_tool_image()
         # Cargo can wait for another project; do this before the container lease starts.
         rust_runtime=build_rust_runtime('x86_64-pc-windows-gnu')
         rust_host=build_rust_runtime('x86_64-pc-windows-gnu',component='host')
-        run(['docker','run','-d','--network','none','--memory','4g','--memory-swap','4g','--cpus','2','--name',name,
-             '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '600'])
-        for file in work.glob('*'):
-            if file.suffix in ['.asm','.inc','.h']: run(['docker','cp',str(file),name+':/work/'+file.name])
-        for directory,destination in [(ROOT/'crates/runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support')]:
-            run(['docker','cp',str(directory)+'/.',name+':'+destination])
-        for include in ['extern.inc','macros.inc']:
-            run(['docker','cp',str(work/include),name+':/work/'+include])
+        start_container(name,IMAGE,'4g',3600 if a.link_only else 600,
+                        [(install,'/game')]+([(media,'/media/game.gog')] if media else []))
+        copy_in(name,[(file,'/work/'+file.name) for file in work.glob('*') if file.suffix in ['.asm','.inc','.h']])
+        copy_in(name,[(str(ROOT/directory)+'/.',destination) for directory,destination in
+                      [('crates/runtime','/work'),('platforms/windows','/work'),('tests','/tests'),('.cache/sr/SR/x64-support','/support')]])
+        copy_in(name,[(work/include,'/work/'+include) for include in ['extern.inc','macros.inc']])
         collect_tool_notices(name,ROOT/'.cache/sr/SR/x64-support',work/'notices')
         report['rust_runtime']=stage_rust_runtime(name,rust_runtime)
         report['rust_host']=stage_rust_runtime(name,rust_host)
@@ -81,7 +79,6 @@ def main():
         with (work/'native-build.log').open('w') as log:
             run(['docker','exec',name,'timeout','1800' if a.link_only else '360','sh','-c',commands],stdout=log,stderr=subprocess.STDOUT)
         report['native_build_status']='linked'
-        report['wine_original_audio_tests_verified']=True
         report['native_setup_build_test_seconds']=round(time.monotonic()-began,3)
         for filename in ['redguard-native.exe','native.map','native-symbols.txt']:
             run(['docker','cp',name+':/work/'+filename,str(work/filename)])
@@ -103,8 +100,7 @@ def main():
         with (work/'native-wine.log').open('w') as log:
             result = subprocess.run(['docker','exec',name,'timeout','-k','5',str(a.run_seconds),'env','WINEDEBUG=-all','WINEPREFIX=/tmp/rg-wine','LIBGL_ALWAYS_SOFTWARE=1','RG_CAPTURE_DIR=Z:\\work','xvfb-run','-a','/usr/lib/wine/wine64','redguard-native.exe','--game-dir',game_directory],stdout=log,stderr=subprocess.STDOUT,text=True)
         report['native_run_seconds']=round(time.monotonic()-run_began,3)
-        for capture in ['game-frame-first.ppm','game-frame-latest.ppm']:
-            subprocess.run(['docker','cp',name+':/work/'+capture,str(work/capture)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        copy_out(name,[('/work/'+capture,work/capture) for capture in ['game-frame-first.ppm','game-frame-latest.ppm']])
         output = (work/'native-wine.log').read_text()
         report['native_wine_exit'] = result.returncode
         report['native_crt_verified'] = 'CRT complete' in output
@@ -126,45 +122,13 @@ def main():
                     boundaries.append(dict(host_pc=hex(pc),original_label=hex(original),translated_byte_offset=pc-host))
         report['native_boundary_symbols']=boundaries
         if a.gameplay:
-            report['wine_gameplay_probes']={}
-            for action in (['continue','new'] if a.gameplay=='both' else [a.gameplay]):
-                with (work/f'gameplay-{action}-runner.log').open('w') as log:
-                    probe=subprocess.run(['docker','exec',name,'timeout','-k','5',str(a.gameplay_seconds+60),
-                        'xvfb-run','-a','python3','/tests/probe_gameplay.py','--wine','--action',action,
-                        '--seconds',str(a.gameplay_seconds)]+(['--user-dir',f'/work/gameplay-{action}-user'] if a.writable_gameplay else [])+(['--controls'] if a.world_controls and action=='continue' else [])+(['--exercise'] if a.exercise and (a.gameplay!='both' or action=='new') else [])+(['--modal-ui'] if a.modal_ui and action=='continue' else []),stdout=log,stderr=subprocess.STDOUT)
-                for suffix in ['.json','.log','-menu.ppm','-latest.ppm','-inventory.ppm','-inventory-close.ppm','-sword.ppm','-attack.ppm','-attack-2.ppm','-attack-3.ppm','-jump.ppm','-logbook.ppm','-logbook-close.ppm','-map.ppm','-map-close.ppm']:
-                    file='gameplay-'+action+suffix
-                    subprocess.run(['docker','cp',name+':/work/'+file,str(work/file)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-                evidence=work/f'gameplay-{action}.json'
-                report['wine_gameplay_probes'][action]=json.loads(evidence.read_text()) if evidence.exists() else {'harness_error':'No probe report'}
-                if probe.returncode:raise RuntimeError(f'Wine {action} probe failed; inspect exported evidence')
+            report['wine_gameplay_probes']=probes.gameplay(name,work,a,wine=True)
         if a.save_roundtrip:
-            with (work/'save-roundtrip-runner.log').open('w') as log:
-                saved=subprocess.run(['docker','exec',name,'timeout','-k','5','220','xvfb-run','-a',
-                                      'python3','/tests/check_save_roundtrip.py','--wine'],stdout=log,stderr=subprocess.STDOUT)
-            for file in ['save-roundtrip.json','save-roundtrip-1.log','save-roundtrip-2.log','save-roundtrip-1.json','save-roundtrip-2.json']:
-                subprocess.run(['docker','cp',name+':/work/'+file,str(work/file)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-            if saved.returncode:raise RuntimeError('Wine original autosave/reload regression failed')
+            probes.save_roundtrip(name,work,wine=True)
             report['wine_original_save_reload_verified']=True
         if a.movie_skip:
             if a.installed_gog:run(['docker','exec',name,'ln','-s','/media/game.gog','/work/game.gog'])
-            with (work/'movie-runner.log').open('w') as log:
-                movie=subprocess.run(['docker','exec',name,'timeout','-k','5','100','xvfb-run','-a',
-                    'python3','/tests/probe_gameplay.py','--action','new','--movie-skip','--seconds','50',
-                    '--user-dir','/work/movie-user']+(['--cd-image','/media/game.gog'] if a.cd_image else [])+['--wine'],stdout=log,stderr=subprocess.STDOUT)
-            for suffix in ['.json','.log','-movie-skip-0.ppm','-movie-skip-1.ppm','-movie-skip-2.ppm','-movie-skip-3.ppm']:
-                subprocess.run(['docker','cp',name+':/work/gameplay-new'+suffix,str(work/('movie'+suffix))],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-            evidence=work/'movie.json'
-            report['movie_probe']=json.loads(evidence.read_text()) if evidence.exists() else {'harness_error':'No movie report'}
-            if movie.returncode:raise RuntimeError('Original movie/CD-image probe failed; inspect exported evidence')
-            report['movie_video_skip_to_ship_verified']=True
-            report['movie_audio_mixed_verified']=report['movie_probe'].get('movie_audio_mixed_verified',False)
-            if a.sound and not report['movie_audio_mixed_verified']:raise RuntimeError('Movie audio did not mix nonzero PCM while video advanced')
-            report['movie_audio_verified']=False  # Audible hardware playback remains separate.
-            report['cd_image_files_verified']=bool(a.cd_image)
-            report['installed_gog_movies_verified']=a.installed_gog
-            if a.installed_gog and 'GOG movies: using bundled installed data' not in (work/'movie.log').read_text():
-                raise RuntimeError('Movie probe did not discover the installed GOG data')
+            probes.movie_skip(name,work,a,True,report)
 
         report['tool_versions'] = subprocess.check_output(['docker','exec',name,'dpkg-query','-W','nasm','gcc-mingw-w64-x86-64-posix','wine-stable-amd64'],text=True).splitlines()
         print(output)
@@ -176,6 +140,6 @@ def main():
     finally:
         report['native_build_run_seconds'] = round(time.monotonic()-began,3)
         (work/'report.json').write_text(json.dumps(report,indent=2)+'\n')
-        subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        remove_container(name)
 
 if __name__ == '__main__': sys.exit(main())

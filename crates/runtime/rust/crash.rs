@@ -46,8 +46,7 @@ impl Write for Report {
         Ok(())
     }
 }
-#[unsafe(no_mangle)]
-pub extern "C" fn rg_dump_calls() {
+pub fn rg_dump_calls() {
     let mut report = Report::new();
     report.calls();
     report.output();

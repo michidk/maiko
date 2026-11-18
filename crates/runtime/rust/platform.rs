@@ -24,7 +24,7 @@ pub unsafe extern "C" fn rg_int386(frame: *mut GuestFrame) -> c_int {
     let mut registers = unsafe { (guest_ptr::<[u32; 7]>(frame.edx as u32)).read_unaligned() };
     match frame.eax & 255 {
         0x33 => {
-            if unsafe { rg_mouse_service(registers.as_mut_ptr()) } == 0 {
+            if rg_mouse_service(&mut registers) == 0 {
                 return 0;
             }
         }

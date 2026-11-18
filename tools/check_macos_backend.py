@@ -10,7 +10,6 @@ import subprocess
 import sys
 import time
 import urllib.request
-import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 SR = 'ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3'
@@ -153,7 +152,8 @@ def main():
     if translation:
         report['game_llvm_driver'] = 'opt -O2 then llc -O=2 -filetype=obj --relocation-model=pic, with target-specific -mtriple'
     began = time.monotonic()
-    container = 'rg-macos-' + uuid.uuid4().hex[:10]
+    from .toolchain import container_name, start_container, remove_container
+    container = container_name('macos')
     exported = False
     try:
         downloads = {name: download(cache, name, *values) for name, values in DOWNLOADS.items()}
@@ -168,9 +168,7 @@ def main():
         report['toolchain_image'] = subprocess.check_output(
             ['docker', 'image', 'inspect', IMAGE, '--format', '{{.Id}}'], text=True).strip()
         memory = '6g' if translation else '3g'
-        run('docker', 'run', '-d', '--network', 'none', '--memory', memory, '--memory-swap', memory,
-            '--cpus', '2', '--name', container, IMAGE, 'sleep', '3600' if translation or args.kit or args.keep_container else '900',
-            stdout=subprocess.DEVNULL)
+        start_container(container, IMAGE, memory, 3600 if translation or args.kit or args.keep_container else 900)
         run('docker', 'exec', container, 'mkdir', '-p', '/results')
         report['rust_archives'] = stage_rust(container, game=bool(translation) or args.kit)
         if translation or args.kit:
@@ -224,7 +222,7 @@ def main():
         if args.keep_container:
             report['development_container'] = container
         else:
-            subprocess.run(['docker', 'rm', '-f', container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            remove_container(container)
         (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         print(output)
 
