@@ -111,10 +111,7 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
             if !safe_path(&name)
                 || !(name == "maiko"
                     || name == "README.md"
-                    || name == "LICENSES.txt"
-                    || name == "Frameworks"
-                    || (name == "Frameworks/SDL2.framework"
-                        || name.starts_with("Frameworks/SDL2.framework/")))
+                    || name == "LICENSES.txt")
             {
                 return Err(format!("Unexpected runtime file or game data: {name}").into());
             }

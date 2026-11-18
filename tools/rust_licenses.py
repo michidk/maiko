@@ -68,12 +68,6 @@ def notices(target='x86_64-pc-windows-gnu'):
                  if path.is_file() and path.name.upper().startswith(('LICENSE', 'COPYING', 'COPYRIGHT', 'NOTICE'))}
         if package.get('license_file'):
             files.add(directory/package['license_file'])
-        if package['name'] == 'sdl2-sys':
-            files.add(directory/'SDL/LICENSE.txt')
-            # The sys crate comes from rust-sdl2, whose root MIT notice is
-            # distributed in the sibling sdl2 crate rather than this package.
-            sdl = next(p for p in packages.values() if p['name'] == 'sdl2')
-            files.add(Path(sdl['manifest_path']).parent/'LICENSE')
         # Crates that embed fonts ship their licences beside the fonts.
         files |= {path for path in (directory/'fonts').glob('*.txt')} if (directory/'fonts').is_dir() else set()
         generated = None

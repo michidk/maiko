@@ -13,8 +13,7 @@ use crate::{
 const WINDOWS_OBJECTS: [&str; 3] = ["crt2.o", "crtbegin.o", "crtend.o"];
 const WINDOWS_RUNTIME: [&str; 2] = ["libmaiko_host.a", "guest_memory.obj"];
 /// The library order GCC passes for the native build, including its implicit MinGW libraries.
-pub const WINDOWS_LIBRARIES: [&str; 31] = [
-    "SDL2",
+pub const WINDOWS_LIBRARIES: [&str; 30] = [
     // The MinGW import library of windows-targets, which cpal's `windows` crate links.
     "windows.0.52.0",
     "stdc++",
@@ -49,9 +48,11 @@ pub const WINDOWS_LIBRARIES: [&str; 31] = [
 ];
 const LINUX_START: [&str; 3] = ["crt1.o", "crti.o", "crtbegin.o"];
 const LINUX_RUNTIME: [&str; 2] = ["libmaiko_host.a", "guest_memory.o"];
-const LINUX_SYSTEM: [&str; 11] = [
+const LINUX_SYSTEM: [&str; 12] = [
     "libstdc++.so.6",
+    // Sound (cpal) and gamepads (gilrs) from the user's system.
     "libasound.so.2",
+    "libudev.so.1",
     "libm.so.6",
     "libgcc.a",
     "libgcc_s.so.1",
@@ -62,8 +63,6 @@ const LINUX_SYSTEM: [&str; 11] = [
     "crtend.o",
     "crtn.o",
 ];
-/// Libraries the Linux program links against from the package itself.
-const LINUX_PACKAGED: [&str; 1] = ["libSDL2-2.0.so.0"];
 
 fn support(name: &str) -> String {
     format!("support/link/{name}")
@@ -91,24 +90,16 @@ pub fn required(target: Target) -> Vec<String> {
             .chain(&LINUX_RUNTIME)
             .chain(&LINUX_SYSTEM)
             .map(|name| support(name))
-            .chain(LINUX_PACKAGED.iter().map(|name| format!("runtime/{name}")))
             .collect(),
         Target::Macos => Vec::new(),
     }
 }
 
-/// The files LLD reads: all of `support/link/`, plus the packaged Linux libraries.
+/// The files LLD reads: all of `support/link/`.
 pub fn files(kit: &Kit) -> Files {
-    let target = kit.manifest.target;
     kit.files
         .iter()
-        .filter(|(name, _)| {
-            name.starts_with("support/link/")
-                || (target == Target::Linux
-                    && LINUX_PACKAGED
-                        .iter()
-                        .any(|library| name.as_str() == format!("runtime/{library}")))
-        })
+        .filter(|(name, _)| name.starts_with("support/link/"))
         .map(|(name, bytes)| (name.clone(), bytes.clone()))
         .collect()
 }
@@ -176,7 +167,6 @@ pub fn command(target: Target) -> Result<(Vec<String>, String)> {
             ]));
             args.extend(LINUX_RUNTIME.iter().map(|name| support(name)));
             args.push("--end-group".into());
-            args.extend(LINUX_PACKAGED.iter().map(|name| format!("runtime/{name}")));
             args.extend(LINUX_SYSTEM.iter().map(|name| support(name)));
         }
         Target::Macos => {

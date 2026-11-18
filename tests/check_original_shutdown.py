@@ -13,5 +13,5 @@ for mode,status,line in [('--close',0,'PASS native close ran exit cleanup'),
     print(result.stdout,flush=True)
     assert result.returncode==status,(mode,result.returncode)
     assert line in result.stdout
-    assert 'PASS native shutdown preserves SDL video through exit callbacks' in result.stdout
-print('PASS original close and DOS exit preserve callbacks and SDL lifetime',flush=True)
+    assert 'PASS native shutdown preserves the window through exit callbacks' in result.stdout
+print('PASS original close and DOS exit preserve callbacks and the window',flush=True)

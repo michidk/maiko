@@ -18,7 +18,7 @@ fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
                 .strip_prefix(root)
                 .map_err(|_| invalid("Input outside runtime directory"))?;
             let first = relative.components().next().unwrap().as_os_str();
-            if !["redguard-native", "Frameworks", "README.md", "LICENSES.txt"]
+            if !["redguard-native", "README.md", "LICENSES.txt"]
                 .iter()
                 .any(|name| first == *name)
             {
@@ -26,37 +26,18 @@ fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
                     "Runtime directory contains an unexpected file, game installation or launcher",
                 ));
             }
-            if first == "Frameworks" && relative.components().count() > 1 {
-                let framework = relative.components().nth(1).unwrap().as_os_str();
-                if framework != "SDL2.framework" {
-                    return Err(invalid("Unexpected runtime framework"));
-                }
-            }
             let kind = fs::symlink_metadata(&path)?.file_type();
-            if kind.is_symlink() {
-                let target = fs::read_link(&path)?;
-                if target.is_absolute() || !path.canonicalize()?.starts_with(root) {
-                    return Err(invalid("Framework symlink escapes the runtime directory"));
-                }
-                files.push(path);
-            } else if kind.is_dir() {
-                pending.push(path);
-            } else if kind.is_file() {
+            if kind.is_file() {
                 files.push(path);
             } else {
                 return Err(invalid("Unexpected runtime file type"));
             }
         }
     }
-    for name in [
-        "redguard-native",
-        "README.md",
-        "LICENSES.txt",
-        "Frameworks/SDL2.framework/SDL2",
-    ] {
+    for name in ["redguard-native", "README.md", "LICENSES.txt"] {
         if !root.join(name).is_file() {
             return Err(invalid(
-                "Incomplete runtime: executable, frameworks and notices are required",
+                "Incomplete runtime: the executable and notices are required",
             ));
         }
     }
@@ -122,7 +103,6 @@ mod tests {
             "redguard-native",
             "README.md",
             "LICENSES.txt",
-            "Frameworks/SDL2.framework/SDL2",
         ] {
             let path = root.join(name);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -150,7 +130,7 @@ mod tests {
         fs::remove_file(&output).unwrap();
         package(source.path(), &output).unwrap();
         let mut archive = zip::ZipArchive::new(File::open(&output).unwrap()).unwrap();
-        assert_eq!(archive.len(), 4);
+        assert_eq!(archive.len(), 3);
         assert_eq!(
             archive
                 .by_name("Maiko Mac Runtime/redguard-native")
@@ -164,27 +144,17 @@ mod tests {
     }
     #[cfg(unix)]
     #[test]
-    fn rejects_symlink_escape_and_preserves_internal_framework_links() {
-        let source = tempfile::tempdir().unwrap();
-        runtime(source.path());
-        let link = source.path().join("Frameworks/SDL2.framework/Current");
-        std::os::unix::fs::symlink("SDL2", &link).unwrap();
-        let output = tempfile::NamedTempFile::new().unwrap().into_temp_path();
-        fs::remove_file(&output).unwrap();
-        package(source.path(), &output).unwrap();
-        let mut archive = zip::ZipArchive::new(File::open(&output).unwrap()).unwrap();
-        assert_eq!(
-            archive
-                .by_name("Maiko Mac Runtime/Frameworks/SDL2.framework/Current")
-                .unwrap()
-                .unix_mode()
-                .unwrap()
-                & 0o170000,
-            0o120000
-        );
-        fs::remove_file(output).unwrap();
-        fs::remove_file(&link).unwrap();
-        std::os::unix::fs::symlink("/etc/passwd", &link).unwrap();
-        assert!(package(source.path(), &source.path().with_extension("zip")).is_err());
+    fn rejects_links_and_folders() {
+        for extra in ["link", "folder"] {
+            let source = tempfile::tempdir().unwrap();
+            runtime(source.path());
+            let path = source.path().join("Frameworks");
+            if extra == "link" {
+                std::os::unix::fs::symlink("/etc/passwd", &path).unwrap();
+            } else {
+                fs::create_dir(&path).unwrap();
+            }
+            assert!(package(source.path(), &source.path().with_extension("zip")).is_err());
+        }
     }
 }

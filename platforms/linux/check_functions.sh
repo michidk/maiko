@@ -2,9 +2,10 @@
 set -eu
 cd /work
 cc='gcc -Wall -Wextra -Werror -O2 -I/work -I/linux -DRG_USE_SDL'
+native_libs='-lasound -ludev'
 objects='service.o entry.o rgfx.o -Wl,--start-group /work/libmaiko_host.a guest_memory.o -Wl,--end-group'
 for name in clip numeric heap directory input rob_vertex file_read animation_flags attribute animation_advance critical movie_clock audio close; do
-    $cc $(pkg-config --cflags sdl2) /tests/original_$name.c $objects -Wl,--gc-sections -no-pie $(pkg-config --libs sdl2) -lasound -lstdc++ -pthread -lm -o original-$name
+    $cc /tests/original_$name.c $objects -Wl,--gc-sections -no-pie $native_libs -lstdc++ -ldl -pthread -lm -o original-$name
     if [ "$name" = file_read ] && [ -n "${MAIKO_LINK_ONLY:-}" ]; then
         : # reads SYSTEM.INI from a real game folder; release kit builds only have RGFX.EXE
     elif [ "$name" = input ]; then
@@ -15,9 +16,9 @@ for name in clip numeric heap directory input rob_vertex file_read animation_fla
         env SDL_AUDIODRIVER=dummy ./original-$name
     fi
 done
-$cc $(pkg-config --cflags sdl2) /tests/native_timing.c /work/libmaiko_runtime.a -Wl,--gc-sections $(pkg-config --libs sdl2) -lasound -pthread -lm -o linux-timing
+$cc /tests/native_timing.c /work/libmaiko_runtime.a -Wl,--gc-sections $native_libs -ldl -pthread -lm -o linux-timing
 ./linux-timing
-$cc /tests/linux_fault.c $objects -Wl,--gc-sections -no-pie $(pkg-config --libs sdl2) -lasound -lstdc++ -pthread -lm -o linux-fault
+$cc /tests/linux_fault.c $objects -Wl,--gc-sections -no-pie $native_libs -lstdc++ -ldl -pthread -lm -o linux-fault
 python3 - <<'PY'
 import subprocess
 for args in [[],['--worker']]:

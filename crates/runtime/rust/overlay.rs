@@ -1,8 +1,7 @@
 //! In-game overlay drawn over the finished Glide frame, toggled with the backtick key.
 //! While it is open the game receives no keyboard, mouse or controller input.
-use sdl2::event::Event;
-use sdl2::keyboard::Scancode;
-use sdl2::mouse::MouseButton;
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::keyboard::{KeyCode, PhysicalKey};
 use std::cell::RefCell;
 use std::time::Instant;
 
@@ -17,6 +16,8 @@ struct Overlay {
     context: egui::Context,
     painter: Option<egui_wgpu::Renderer>,
     events: Vec<egui::Event>,
+    /// The last pointer position; winit's button events carry none.
+    pointer: egui::Pos2,
     panel: Option<Panel>,
     started: Instant,
 }
@@ -27,6 +28,7 @@ thread_local! {
         context: egui::Context::default(),
         painter: None,
         events: Vec::new(),
+        pointer: egui::Pos2::ZERO,
         panel: None,
         started: Instant::now(),
     });
@@ -40,7 +42,7 @@ pub fn is_open() -> bool {
     OVERLAY.with(|overlay| overlay.borrow().open)
 }
 
-/// What the input pump should do with an SDL event.
+/// What the input pump should do with a window event.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Routed {
     Game,
@@ -48,70 +50,78 @@ pub(crate) enum Routed {
     Toggled(bool),
 }
 
-/// Takes the toggle key and, while open, every keyboard and mouse event.
-/// Mouse positions are window pixels, which are also the overlay's points.
-pub(crate) fn route(event: &Event) -> Routed {
+/// Takes the toggle key and, while open, every keyboard and mouse event. Positions arrive in
+/// window pixels and become the overlay's points through `scale`.
+pub(crate) fn route(event: &WindowEvent, scale: f64) -> Routed {
+    if let WindowEvent::KeyboardInput { event: key, .. } = event {
+        return match key.physical_key {
+            PhysicalKey::Code(code) => {
+                route_key(code, key.state == ElementState::Pressed, key.repeat)
+            }
+            _ if is_open() => Routed::Consumed,
+            _ => Routed::Game,
+        };
+    }
     OVERLAY.with(|overlay| {
         let mut overlay = overlay.borrow_mut();
-        match event {
-            Event::KeyDown {
-                scancode: Some(Scancode::Grave),
-                repeat: false,
-                ..
-            } => {
-                overlay.open = !overlay.open;
-                overlay.events.clear();
-                return Routed::Toggled(overlay.open);
-            }
-            Event::KeyDown {
-                scancode: Some(Scancode::Grave),
-                ..
-            }
-            | Event::KeyUp {
-                scancode: Some(Scancode::Grave),
-                ..
-            } => return Routed::Consumed,
-            _ => {}
-        }
         if !overlay.open {
             return Routed::Game;
         }
-        let pointer = |button: &MouseButton| match button {
-            MouseButton::Left => Some(egui::PointerButton::Primary),
-            MouseButton::Right => Some(egui::PointerButton::Secondary),
-            MouseButton::Middle => Some(egui::PointerButton::Middle),
-            _ => None,
-        };
-        let translated = match *event {
-            Event::MouseMotion { x, y, .. } => {
-                Some(egui::Event::PointerMoved(egui::pos2(x as f32, y as f32)))
+        let at = |x: f64, y: f64| egui::pos2((x / scale) as f32, (y / scale) as f32);
+        let translated = match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                overlay.pointer = at(position.x, position.y);
+                Some(egui::Event::PointerMoved(overlay.pointer))
             }
-            Event::MouseButtonDown {
-                mouse_btn, x, y, ..
+            WindowEvent::MouseInput { state, button, .. } => {
+                let button = match button {
+                    MouseButton::Left => Some(egui::PointerButton::Primary),
+                    MouseButton::Right => Some(egui::PointerButton::Secondary),
+                    MouseButton::Middle => Some(egui::PointerButton::Middle),
+                    _ => None,
+                };
+                button.map(|button| egui::Event::PointerButton {
+                    pos: overlay.pointer,
+                    button,
+                    pressed: *state == ElementState::Pressed,
+                    modifiers: egui::Modifiers::NONE,
+                })
             }
-            | Event::MouseButtonUp {
-                mouse_btn, x, y, ..
-            } => pointer(&mouse_btn).map(|button| egui::Event::PointerButton {
-                pos: egui::pos2(x as f32, y as f32),
-                button,
-                pressed: matches!(event, Event::MouseButtonDown { .. }),
-                modifiers: egui::Modifiers::NONE,
-            }),
-            Event::MouseWheel {
-                precise_x,
-                precise_y,
-                ..
-            } => Some(egui::Event::MouseWheel {
-                unit: egui::MouseWheelUnit::Line,
-                delta: egui::vec2(precise_x, precise_y),
-                phase: egui::TouchPhase::Move,
-                modifiers: egui::Modifiers::NONE,
-            }),
-            Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => None,
+            WindowEvent::MouseWheel { delta, .. } => {
+                let (unit, delta) = match *delta {
+                    MouseScrollDelta::LineDelta(x, y) => (egui::MouseWheelUnit::Line, egui::vec2(x, y)),
+                    MouseScrollDelta::PixelDelta(p) => {
+                        (egui::MouseWheelUnit::Point, egui::vec2((p.x / scale) as f32, (p.y / scale) as f32))
+                    }
+                };
+                Some(egui::Event::MouseWheel {
+                    unit,
+                    delta,
+                    phase: egui::TouchPhase::Move,
+                    modifiers: egui::Modifiers::NONE,
+                })
+            }
+            WindowEvent::Ime(_) => None,
             _ => return Routed::Game,
         };
         overlay.events.extend(translated);
         Routed::Consumed
+    })
+}
+
+/// The backtick toggles the overlay; while it is open it keeps every key from the game.
+fn route_key(code: KeyCode, pressed: bool, repeat: bool) -> Routed {
+    OVERLAY.with(|overlay| {
+        let mut overlay = overlay.borrow_mut();
+        if code == KeyCode::Backquote {
+            if pressed && !repeat {
+                overlay.open = !overlay.open;
+                overlay.events.clear();
+                return Routed::Toggled(overlay.open);
+            }
+            return Routed::Consumed;
+        }
+        if overlay.open { Routed::Consumed } else { Routed::Game }
     })
 }
 
@@ -217,51 +227,28 @@ pub(crate) fn draw(target: Target<'_>, points: (u32, u32), pixels: (u32, u32)) {
 mod tests {
     use super::*;
 
-    fn key(down: bool, scancode: Scancode) -> Event {
-        let (keycode, keymod) = (None, sdl2::keyboard::Mod::NOMOD);
-        if down {
-            Event::KeyDown {
-                timestamp: 0,
-                window_id: 0,
-                keycode,
-                scancode: Some(scancode),
-                keymod,
-                repeat: false,
-            }
-        } else {
-            Event::KeyUp {
-                timestamp: 0,
-                window_id: 0,
-                keycode,
-                scancode: Some(scancode),
-                keymod,
-                repeat: false,
-            }
-        }
-    }
-
     #[test]
     fn backtick_toggles_and_open_overlay_takes_input() {
-        let motion = Event::MouseMotion {
-            timestamp: 0,
-            window_id: 0,
-            which: 0,
-            mousestate: sdl2::mouse::MouseState::from_sdl_state(0),
-            x: 5,
-            y: 7,
-            xrel: 0,
-            yrel: 0,
+        // SAFETY: a placeholder device for a synthetic event.
+        let device_id = unsafe { winit::event::DeviceId::dummy() };
+        let motion = WindowEvent::CursorMoved {
+            device_id,
+            position: winit::dpi::PhysicalPosition::new(10.0, 14.0),
         };
-        assert_eq!(route(&key(true, Scancode::W)), Routed::Game);
-        assert_eq!(route(&motion), Routed::Game);
-        assert_eq!(route(&key(true, Scancode::Grave)), Routed::Toggled(true));
-        assert_eq!(route(&key(false, Scancode::Grave)), Routed::Consumed);
+        assert_eq!(route_key(KeyCode::KeyW, true, false), Routed::Game);
+        assert_eq!(route(&motion, 2.0), Routed::Game);
+        assert_eq!(route_key(KeyCode::Backquote, true, false), Routed::Toggled(true));
+        assert_eq!(route_key(KeyCode::Backquote, false, false), Routed::Consumed);
         assert!(is_open());
-        assert_eq!(route(&key(true, Scancode::W)), Routed::Consumed);
-        assert_eq!(route(&motion), Routed::Consumed);
-        assert_eq!(OVERLAY.with(|o| o.borrow().events.len()), 1);
-        assert_eq!(route(&key(true, Scancode::Grave)), Routed::Toggled(false));
+        assert_eq!(route_key(KeyCode::KeyW, true, false), Routed::Consumed);
+        assert_eq!(route(&motion, 2.0), Routed::Consumed);
+        OVERLAY.with(|o| {
+            let o = o.borrow();
+            assert_eq!(o.events.len(), 1);
+            assert_eq!(o.pointer, egui::pos2(5.0, 7.0), "pixels become points");
+        });
+        assert_eq!(route_key(KeyCode::Backquote, true, false), Routed::Toggled(false));
         assert!(OVERLAY.with(|o| o.borrow().events.is_empty()));
-        assert_eq!(route(&key(true, Scancode::W)), Routed::Game);
+        assert_eq!(route_key(KeyCode::KeyW, true, false), Routed::Game);
     }
 }

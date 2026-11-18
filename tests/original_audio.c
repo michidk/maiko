@@ -2,7 +2,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <SDL.h>
+#ifdef _WIN32
+#include <windows.h>
+#define pause_ms Sleep
+#else
+#include <unistd.h>
+#define pause_ms(ms) usleep((ms) * 1000)
+#endif
 #include "guest_abi.h"
 #include "audio.h"
 extern void rg_original_audio_startup(void),rg_original_cd_open(void);
@@ -30,15 +36,15 @@ int main(void) {
     word(memory,22,8192);word(memory,26,(uint32_t)(uintptr_t)(memory+1024));
     int16_t *pcm=(void *)(memory+1024);for(unsigned i=0;i<4096;++i) pcm[i]=10000;
     uint32_t handle=call(rg_original_sample_start,(uint32_t)(uintptr_t)memory,0,63,0);assert(handle<16);
-    assert(call(rg_original_sample_status,handle,0,0,0)==4);SDL_Delay(350);
+    assert(call(rg_original_sample_status,handle,0,0,0)==4);pause_ms(350);
     assert(call(rg_original_sample_status,handle,0,0,0)==2);
     RgAudioStats stats;rg_audio_stats(&stats);assert(stats.started==1 && stats.nonzero_frames>0);
     memory[13]=255;word(memory,14,0);word(memory,18,UINT32_MAX);
     handle=call(rg_original_sample_start,(uint32_t)(uintptr_t)memory,0,63,127);assert(handle<16);
     call(rg_original_sample_set_user,handle,3,0xabcdef,0);assert(call(rg_original_sample_get_user,handle,3,0,0)==0xabcdef);
-    SDL_Delay(350);assert(call(rg_original_sample_status,handle,0,0,0)==4);
-    call(rg_original_sample_volume,handle,0,0,0);SDL_Delay(60);
-    rg_audio_stats(&stats);uint64_t silent=stats.nonzero_frames;SDL_Delay(80);rg_audio_stats(&stats);assert(stats.nonzero_frames==silent);
+    pause_ms(350);assert(call(rg_original_sample_status,handle,0,0,0)==4);
+    call(rg_original_sample_volume,handle,0,0,0);pause_ms(60);
+    rg_audio_stats(&stats);uint64_t silent=stats.nonzero_frames;pause_ms(80);rg_audio_stats(&stats);assert(stats.nonzero_frames==silent);
     call(rg_original_sample_end,handle,0,0,0);assert(call(rg_original_sample_status,handle,0,0,0)==2);
     call(rg_original_audio_close,0,0,0,0);assert(!rg_sound_open);
     assert(call(rg_original_audio_startup,0,0,0,0)==1);

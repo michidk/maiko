@@ -14,6 +14,8 @@ RgWindow rg_input_window(unsigned width, unsigned height);
 int rg_mouse_service(uint32_t registers[7]);
 int rg_input_pump(void);
 int rg_input_take_scan(void);
+/* Tests only: one window event through the real input paths (see input.rs). */
+int rg_input_test_event(unsigned kind, unsigned value);
 #ifdef __cplusplus
 }
 #endif
