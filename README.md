@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/michidk/maiko/releases/latest"><img src="https://img.shields.io/github/v/release/michidk/maiko?color=4a1a2a" alt="Latest release"></a>
+  <a href="https://github.com/michidk/maiko/releases/latest"><img src="https://img.shields.io/github/v/release/michidk/maiko?color=green" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4a1a2a" alt="MIT license"></a>
   <a href="https://discord.com/invite/xjCCyqbxkp"><img src="https://img.shields.io/badge/Discord-Redguard%20community-5865F2?logo=discord&amp;logoColor=white" alt="Redguard community on Discord"></a>
 </p>
