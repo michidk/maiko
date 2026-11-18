@@ -24,7 +24,7 @@ The game installation is read-only. `cap-std` confines save and settings writes 
 - `metadata/`: the translation tables. `image/` describes the original executable, `native/` and `llasm/` hold the patches for the native (Windows, Linux) and LLasm (macOS) backends, and `build5/` maps build 1.0 addresses to build 5.0 for that executable (`crates/patcher/src/image.rs`).
 - `platforms/linux/`, `platforms/windows/` and `platforms/macos/`: platform build scripts, launchers, native headers and development container definitions.
 - `web/`: the static website and browser builder.
-- `tools/` and `audio/`: shared build and packaging support.
+- `tools/`: shared build and packaging support.
 - `tests/`: independent fixtures, interface checks and runtime checks.
 - `patches/`: documented changes to licensed upstream dependencies.
 

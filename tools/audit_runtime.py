@@ -3,7 +3,7 @@ import argparse
 import json
 from .pipeline import ROOT
 
-PRODUCTION = ('crates/runtime', 'platforms', 'audio')
+PRODUCTION = ('crates/runtime', 'platforms')
 
 
 def inventory():

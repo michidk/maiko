@@ -91,7 +91,7 @@ def source_manifest(root=ROOT):
     paths += [root / 'patches' / name for name in PATCHES]
     extensions = {'.c', '.cpp', '.h', '.py', '.sh', '.asm', '.inc', '.cmd', '.command',
                   '.rs', '.toml', '.sci', '.json', '.md'}
-    for directory in ['platforms', 'tests', 'crates/runtime', 'audio', 'metadata/llasm']:
+    for directory in ['platforms', 'tests', 'crates/runtime', 'metadata/llasm']:
         paths.extend(path for path in (root / directory).rglob('*')
                      if path.is_file() and '__pycache__' not in path.parts
                      and (path.suffix in extensions or path.name == 'Dockerfile'))
