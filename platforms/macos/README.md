@@ -16,7 +16,7 @@ From the repository root:
 python3 -m tools.check_macos_backend
 ```
 
-Requires Python 3.11 or newer, Docker, Rust 1.95 and the pinned SR checkout under `.cache/`. Install Rust's `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-apple-darwin` targets with `rustup target add`. The script downloads the SDK and SDL frameworks if absent. The SDK comes from the third-party joseluisq/macosx-sdks mirror; its hash matches that mirror's published checksum, not an Apple-signed checksum. SDL downloads use official release URLs with locally pinned content hashes. These checks detect changed bytes; they do not independently authenticate the initial downloads. The SDK stays in local build tooling and is excluded from runtime packages.
+Requires Python 3.11 or newer, Docker, Rust 1.95 and the pinned SR checkout under `.cache/`. Install Rust's `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-apple-darwin` targets with `rustup target add`. The script downloads the SDK if absent. The SDK comes from the third-party joseluisq/macosx-sdks mirror; its hash matches that mirror's published checksum, not an Apple-signed checksum. These checks detect changed bytes; they do not independently authenticate the initial downloads. The SDK stays in local build tooling and is excluded from runtime packages.
 
 The script builds pinned upstream source archives without modifying the existing Windows translator. The Debian image tag and package versions are recorded, but apt package resolution is not fully pinned. Every build records content hashes of its local source inputs in `source-manifest.json` and the report, and rejects a source change during the build. Upstream archives, patches and output artifacts are hashed separately.
 
