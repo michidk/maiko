@@ -47,11 +47,7 @@ Versions before 1.0 kept saves and settings in a `user-data` folder next to the 
 
 ## If something goes wrong
 
-If the game cannot start, it shows a message. To see everything it prints, start it from a Command Prompt in its folder and keep the output:
-
-```bat
-redguard-native.exe > maiko-log.txt 2>&1
-```
+If the game cannot start, it shows a message. When launched through the launcher, use its crash-report prompt or **Technical Support › Create report**. See [Reporting problems](#reporting-problems) for the report contents and log locations.
 
 Typical causes:
 
@@ -78,7 +74,7 @@ settings, your INI files and your newest save; never any game files. **Technical
 Create report** makes the same ZIP at any time. A game that stops drawing for 15 seconds logs
 `event=stall` with where it was, so a freeze leaves evidence too.
 
-Open an issue and attach the report, or the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
+Open an issue and attach the report, or the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your operating system version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
 
 ## Known limitations
 
@@ -138,3 +134,11 @@ The renderer picks a graphics backend by itself. To choose one, set **Renderer**
 Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.
 
 The program also reads `REDGUARD_DIR`, the game folder; `--game-dir` takes precedence over it. Two variables help when reporting problems: `RG_FLASH_LOG=1` makes the program log every frame that is a single flat colour, and `RG_CAPTURE_DIR=FOLDER` makes it save a still of the game picture there from time to time. They are not needed to play.
+
+### Capture terminal output
+
+Session logs are written automatically. To also capture the game executable's terminal output on Windows, open a Command Prompt in the extracted package folder and run:
+
+```bat
+redguard-native.exe > maiko-log.txt 2>&1
+```
