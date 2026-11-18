@@ -1,3 +1,10 @@
+#ifdef _WIN32
+#include <windows.h>
+#define pause_ms Sleep
+#else
+#include <unistd.h>
+#define pause_ms(ms) usleep((ms) * 1000)
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -33,6 +40,9 @@ int main(void) {
     GuestFrame frame={0};
     rg_service(16,&frame);
     RgWindow window=rg_input_window(640,480); assert(window);
+    /* Let the new window's own events (focus, size) arrive first: without a window manager the
+       window starts unfocused, and losing focus releases every held key. */
+    for(int i=0;i<20;++i){assert(rg_input_pump());pause_ms(10);}
     assert(rg_input_test_event(2,0)); assert(rg_input_test_event(0,1));
     GuestFrame saved=frame;
     rg_service(23,&frame);

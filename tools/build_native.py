@@ -68,7 +68,7 @@ def main():
              '--mount',f'type=bind,src={install},dst=/game,readonly']+(['--mount',f'type=bind,src={media},dst=/media/game.gog,readonly'] if media else [])+[IMAGE,'sleep','3600' if a.link_only else '600'])
         for file in work.glob('*'):
             if file.suffix in ['.asm','.inc','.h']: run(['docker','cp',str(file),name+':/work/'+file.name])
-        for directory,destination in [(ROOT/'crates/runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support'),(ROOT/'glide','/work')]:
+        for directory,destination in [(ROOT/'crates/runtime','/work'),(ROOT/'platforms/windows','/work'),(ROOT/'tests','/tests'),(ROOT/'.cache/sr/SR/x64-support','/support')]:
             run(['docker','cp',str(directory)+'/.',name+':'+destination])
         for include in ['extern.inc','macros.inc']:
             run(['docker','cp',str(work/include),name+':/work/'+include])
