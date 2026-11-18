@@ -1,7 +1,7 @@
 //! Build the WebAssembly tools and export game-free runtime kits.
 use maiko_patcher::{
     image::hash,
-    kit::{FORMAT, Kit, Manifest, Target, zip},
+    kit::{FORMAT, Kit, MAX_KIT_FILE, Manifest, Target, zip},
     native::read_limited,
     prepare::Files,
 };
@@ -189,6 +189,17 @@ fn export(
         );
         package_files.push(name.to_owned());
     }
+    write_kit(target, revision, files, package_files, output)
+}
+
+/// Add the manifest, repeat the consumer validation, and write the kit without overwriting.
+fn write_kit(
+    target: Target,
+    revision: &str,
+    mut files: Files,
+    mut package_files: Vec<String>,
+    output: &Path,
+) -> Result<()> {
     package_files.sort();
     let manifest = Manifest {
         format: FORMAT,
@@ -196,36 +207,36 @@ fn export(
         revision: revision.into(),
         files: files.iter().map(|(n, b)| (n.clone(), hash(b))).collect(),
         package_files,
-        package_links: Default::default(),
     };
     files.insert(
         "manifest.json".into(),
         serde_json::to_vec_pretty(&manifest)?,
     );
     let bytes = zip(&files, None)?;
-    // Repeat the consumer validation before exporting anything.
     Kit::load(&bytes, target)?;
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output)?;
-    file.write_all(&bytes)?;
+    write_new(output, &bytes)?;
     println!("{}  {}", hash(&bytes), output.display());
     Ok(())
 }
-fn web_tools(kit: &Path, output: &Path) -> Result<()> {
-    let kit = maiko_patcher::kit::Kit::load(&read_limited(kit, 768 * 1024 * 1024)?, Target::Macos)?;
-    fs::create_dir_all(output)?;
+
+fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(output.join("dlang.js"))?
-        .write_all(
-            kit.files
-                .get("tools/dlang.js")
-                .ok_or("Missing D compiler driver")?,
-        )?;
+        .open(path)?
+        .write_all(bytes)?;
     Ok(())
+}
+
+fn web_tools(kit: &Path, output: &Path) -> Result<()> {
+    let kit = Kit::load(&read_limited(kit, MAX_KIT_FILE)?, Target::Macos)?;
+    fs::create_dir_all(output)?;
+    write_new(
+        &output.join("dlang.js"),
+        kit.files
+            .get("tools/dlang.js")
+            .ok_or("Missing D compiler driver")?,
+    )
 }
 
 fn main() -> Result<()> {

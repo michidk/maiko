@@ -71,10 +71,10 @@ pub fn build(options: BuildOptions<'_>) -> Result<()> {
     if options.output.exists() {
         return Err("Output already exists; choose a new ZIP path".into());
     }
-    let input = read_limited(options.input, 32 * 1024 * 1024)?;
+    let input = read_limited(options.input, crate::image::MAX_IMAGE as u64)?;
     Image::load(&input)?;
     let kit = Kit::load(
-        &read_limited(options.kit, 768 * 1024 * 1024)?,
+        &read_limited(options.kit, crate::kit::MAX_KIT_FILE)?,
         options.target,
     )?;
     let wasmtime = if Path::new(options.wasmtime).components().count() > 1 {

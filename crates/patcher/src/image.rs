@@ -7,7 +7,7 @@ pub const REFERENCE: &str = "844a316b5f71e3c7fadf4b012ab63c5c13aa3606a4f1504f852
 pub const ALTERNATE: &str = "06d7a399cf01eec6bca3be39aaab1a39c42dc88116b6b74ae6f5f0547f7cdaf3";
 /// RGFX.EXE version 1.0, build 5.0, from the 1998 demo. Its code and data sit at other addresses.
 pub const BUILD5: &str = "900cbfe2d586a7d80796763b1449ba050f8517b7fc7cc4742710c11e46455a31";
-const MAX_IMAGE: usize = 32 * 1024 * 1024;
+pub const MAX_IMAGE: usize = 32 * 1024 * 1024;
 
 /// The recognized layout. Maiko's metadata names reference-image (build 1.0) addresses;
 /// build 5.0 inputs are translated through metadata/build5/addresses.sci.

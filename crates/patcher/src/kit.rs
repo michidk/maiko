@@ -8,9 +8,12 @@ use std::io::{Cursor, Read, Write};
 
 const MAX_KIT: u64 = 384 * 1024 * 1024;
 const MAX_ENTRY: u64 = 256 * 1024 * 1024;
-/// Format 2 kits carry link inputs instead of a prebuilt executable template.
+/// The largest kit archive the builders read.
+pub const MAX_KIT_FILE: u64 = 768 * 1024 * 1024;
 /// The launcher executables a runtime kit may carry (Windows; Linux and macOS).
+// shortcut: v1.0.2 Windows kits name the launcher maiko.exe; drop it after the next release.
 pub const LAUNCHERS: [&str; 3] = ["maiko-launcher.exe", "maiko.exe", "maiko"];
+/// Format 2 kits carry link inputs instead of a prebuilt executable template.
 pub const FORMAT: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -58,8 +61,6 @@ pub struct Manifest {
     pub revision: String,
     pub files: std::collections::BTreeMap<String, String>,
     pub package_files: Vec<String>,
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub package_links: std::collections::BTreeMap<String, String>,
 }
 
 pub struct Kit {
@@ -121,14 +122,6 @@ pub fn unzip(bytes: &[u8]) -> Result<Files> {
 }
 
 pub fn zip(files: &Files, executable: Option<&str>) -> Result<Vec<u8>> {
-    zip_with_links(files, executable, &Default::default())
-}
-
-fn zip_with_links(
-    files: &Files,
-    executable: Option<&str>,
-    links: &std::collections::BTreeMap<String, String>,
-) -> Result<Vec<u8>> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     for (name, bytes) in files {
         if !safe_path(name) {
@@ -148,17 +141,6 @@ fn zip_with_links(
         zip.start_file(name, options)
             .map_err(|error| error.to_string())?;
         zip.write_all(bytes).map_err(|error| error.to_string())?;
-    }
-    for (name, target) in links {
-        if !safe_path(name) || !safe_path(target) || files.contains_key(name) {
-            return Err("Unsafe or duplicate framework link".into());
-        }
-        zip.add_symlink(
-            name,
-            target,
-            zip::write::SimpleFileOptions::default().unix_permissions(0o777),
-        )
-        .map_err(|error| error.to_string())?;
     }
     Ok(zip
         .finish()
@@ -211,10 +193,6 @@ impl Kit {
             if !safe_path(name) || !files.contains_key(&format!("runtime/{name}")) {
                 return Err(format!("Missing runtime package file {name}"));
             }
-        }
-        // Packages hold only regular files.
-        if !manifest.package_links.is_empty() {
-            return Err("Runtime kit lists package links".into());
         }
         for name in crate::link::required(target) {
             if !files.contains_key(&name) {
@@ -270,7 +248,7 @@ impl Kit {
         let target = self.manifest.target;
         let mut files = Files::new();
         for name in &self.manifest.package_files {
-            if name == "LICENSES.txt" || name == "build.json" {
+            if name == "LICENSES.txt" {
                 continue;
             }
             let destination = if target == Target::Windows && name == "maiko.exe" {
@@ -284,11 +262,7 @@ impl Kit {
             );
         }
         files.insert(target.executable().into(), executable.to_vec());
-        zip_with_links(
-            &files,
-            Some(target.executable()),
-            &self.manifest.package_links,
-        )
+        zip(&files, Some(target.executable()))
     }
 }
 
@@ -297,13 +271,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn windows_package_renames_the_launcher_and_omits_build_and_licence_files() {
+    fn windows_package_renames_the_launcher_and_omits_licence_notices() {
         for launcher in ["maiko.exe", "maiko-launcher.exe"] {
             let runtime = Files::from([
                 (launcher.into(), b"launcher".to_vec()),
                 ("README.txt".into(), b"Instructions".to_vec()),
                 ("LICENSES.txt".into(), b"Notices".to_vec()),
-                ("build.json".into(), b"{}".to_vec()),
             ]);
             let kit = Kit {
                 manifest: Manifest {
@@ -312,7 +285,6 @@ mod tests {
                     revision: "test".into(),
                     files: Default::default(),
                     package_files: runtime.keys().cloned().collect(),
-                    package_links: Default::default(),
                 },
                 files: runtime
                     .into_iter()
@@ -331,7 +303,7 @@ mod tests {
         }
     }
 
-    fn macos_kit(links: &[(&str, &str)]) -> (Vec<u8>, Vec<u8>) {
+    fn macos_kit() -> (Vec<u8>, Vec<u8>) {
         let thin = |cpu, subtype| {
             [0xfeedfacfu32, cpu, subtype, 2, 0, 0, 0, 0]
                 .into_iter()
@@ -367,10 +339,6 @@ mod tests {
                 .map(|(name, bytes)| (name.clone(), hash(bytes)))
                 .collect(),
             package_files,
-            package_links: links
-                .iter()
-                .map(|(name, link)| ((*name).to_owned(), (*link).to_owned()))
-                .collect(),
         };
         files.insert(
             "manifest.json".into(),
@@ -381,7 +349,7 @@ mod tests {
 
     #[test]
     fn macos_package_contains_both_architectures_and_no_compiler() {
-        let (bytes, executable) = macos_kit(&[]);
+        let (bytes, executable) = macos_kit();
         let kit = Kit::load(&bytes, Target::Macos).unwrap();
         assert!(kit.package(b"").is_err());
         let package = kit.package(&executable).unwrap();
@@ -390,7 +358,6 @@ mod tests {
         assert!(names.iter().all(|name| !name.starts_with("tools/")
             && !name.starts_with("support/")
             && !name.ends_with(".command")
-            && name != "build.json"
             && name != "LICENSES.txt"
             && name != "RGFX.EXE"));
         let mut binary = Vec::new();
@@ -413,14 +380,14 @@ mod tests {
     }
 
     #[test]
-    fn kits_with_package_links_are_refused() {
-        let (bytes, _) = macos_kit(&[("Frameworks/X.framework/X", "../../outside")]);
-        assert!(
-            Kit::load(&bytes, Target::Macos)
-                .err()
-                .unwrap()
-                .contains("package links")
-        );
+    fn kits_with_unknown_manifest_fields_are_refused() {
+        let manifest = br#"{"format":2,"target":"macos","revision":"r","files":{},"package_files":[],"package_links":{"a":"b"}}"#;
+        let bytes = zip(
+            &Files::from([("manifest.json".into(), manifest.to_vec())]),
+            None,
+        )
+        .unwrap();
+        assert!(Kit::load(&bytes, Target::Macos).is_err());
     }
 
     #[test]

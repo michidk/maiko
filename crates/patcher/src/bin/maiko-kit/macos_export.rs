@@ -2,13 +2,13 @@
 use super::Result;
 use maiko_patcher::{
     image::hash,
-    kit::{Kit, Manifest, Target, safe_path, zip},
+    kit::{Target, safe_path},
     macos,
     native::read_limited,
     prepare::Files,
 };
 use serde::Deserialize;
-use std::{collections::BTreeMap, fs, io::Write, path::Path};
+use std::{collections::BTreeMap, fs, path::Path};
 
 #[derive(Deserialize)]
 struct Report {
@@ -93,86 +93,30 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
             files.insert(name, checked(build, &report, &source)?);
         }
     }
-    let runtime = runtime.canonicalize()?;
-    let mut pending = vec![runtime.clone()];
     let mut package_files = Vec::new();
-    let mut package_links = BTreeMap::new();
-    while let Some(directory) = pending.pop() {
-        for entry in fs::read_dir(directory)? {
-            let path = entry?.path();
-            let name = path
-                .strip_prefix(&runtime)?
-                .to_str()
-                .ok_or("Invalid runtime path")?
-                .replace('\\', "/");
-            if name == "redguard-native" {
-                continue;
-            }
-            if !safe_path(&name)
-                || !(name == "maiko" || name == "README.md" || name == "LICENSES.txt")
-            {
-                return Err(format!("Unexpected runtime file or game data: {name}").into());
-            }
-            let kind = fs::symlink_metadata(&path)?.file_type();
-            if kind.is_symlink() {
-                let target = fs::read_link(&path)?
-                    .to_str()
-                    .ok_or("Invalid framework target")?
-                    .to_owned();
-                if !name.starts_with("Frameworks/")
-                    || !safe_path(&target)
-                    || !path.canonicalize()?.starts_with(&runtime)
-                {
-                    return Err("Framework link escapes the runtime".into());
-                }
-                package_links.insert(name, target);
-            } else if kind.is_dir() {
-                pending.push(path);
-            } else if kind.is_file() {
-                let bytes = read_limited(&path, 128 * 1024 * 1024)?;
-                if name != "LICENSES.txt"
-                    && report.artifact_sha256.get(&format!("runtime/{name}")) != Some(&hash(&bytes))
-                {
-                    return Err(
-                        format!("Runtime differs from the checked native build: {name}").into(),
-                    );
-                }
-                files.insert(format!("runtime/{name}"), bytes);
-                package_files.push(name);
-            } else {
-                return Err("Unexpected runtime file type".into());
-            }
+    for entry in fs::read_dir(runtime)? {
+        let path = entry?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("Invalid runtime path")?
+            .to_owned();
+        if name == "redguard-native" {
+            continue;
         }
+        if !["maiko", "README.md", "LICENSES.txt"].contains(&name.as_str())
+            || !fs::symlink_metadata(&path)?.is_file()
+        {
+            return Err(format!("Unexpected runtime file or game data: {name}").into());
+        }
+        let bytes = read_limited(&path, 128 * 1024 * 1024)?;
+        if name != "LICENSES.txt"
+            && report.artifact_sha256.get(&format!("runtime/{name}")) != Some(&hash(&bytes))
+        {
+            return Err(format!("Runtime differs from the checked native build: {name}").into());
+        }
+        files.insert(format!("runtime/{name}"), bytes);
+        package_files.push(name);
     }
-    if !package_files.iter().any(|name| name == "LICENSES.txt") {
-        return Err("Runtime needs complete licence notices".into());
-    }
-    package_files.sort();
-    let manifest = Manifest {
-        format: maiko_patcher::kit::FORMAT,
-        target: Target::Macos,
-        revision: revision.into(),
-        files: files
-            .iter()
-            .map(|(name, bytes)| (name.clone(), hash(bytes)))
-            .collect(),
-        package_files,
-        package_links,
-    };
-    files.insert(
-        "manifest.json".into(),
-        serde_json::to_vec_pretty(&manifest)?,
-    );
-    let bytes = zip(&files, None)?;
-    let kit = Kit::load(&bytes, Target::Macos)?;
-    for arch in macos::ARCHITECTURES {
-        macos::linker_files(&kit, arch)?;
-    }
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output)?
-        .write_all(&bytes)?;
-    println!("{}  {}", hash(&bytes), output.display());
-    Ok(())
+    super::write_kit(Target::Macos, revision, files, package_files, output)
 }

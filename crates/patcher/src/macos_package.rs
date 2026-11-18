@@ -8,33 +8,26 @@ fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
 
+const FILES: [&str; 3] = ["redguard-native", "README.md", "LICENSES.txt"];
+
 fn inputs(root: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut pending = vec![root.to_path_buf()];
     let mut files = Vec::new();
-    while let Some(directory) = pending.pop() {
-        for entry in fs::read_dir(directory)? {
-            let path = entry?.path();
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|_| invalid("Input outside runtime directory"))?;
-            let first = relative.components().next().unwrap().as_os_str();
-            if !["redguard-native", "README.md", "LICENSES.txt"]
-                .iter()
-                .any(|name| first == *name)
-            {
-                return Err(invalid(
-                    "Runtime directory contains an unexpected file, game installation or launcher",
-                ));
-            }
-            let kind = fs::symlink_metadata(&path)?.file_type();
-            if kind.is_file() {
-                files.push(path);
-            } else {
-                return Err(invalid("Unexpected runtime file type"));
-            }
+    for entry in fs::read_dir(root)? {
+        let path = entry?.path();
+        if !FILES
+            .iter()
+            .any(|name| path.file_name() == Some(name.as_ref()))
+        {
+            return Err(invalid(
+                "Runtime directory contains an unexpected file, game installation or launcher",
+            ));
         }
+        if !fs::symlink_metadata(&path)?.is_file() {
+            return Err(invalid("Unexpected runtime file type"));
+        }
+        files.push(path);
     }
-    for name in ["redguard-native", "README.md", "LICENSES.txt"] {
+    for name in FILES {
         if !root.join(name).is_file() {
             return Err(invalid(
                 "Incomplete runtime: the executable and notices are required",
@@ -63,28 +56,20 @@ pub fn package(source: &Path, output: &Path) -> io::Result<()> {
             );
             let options =
                 SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-            if path.is_symlink() {
-                archive.add_symlink(
-                    name,
-                    fs::read_link(&path)?.to_string_lossy(),
-                    options.unix_permissions(0o777),
-                )?;
+            #[cfg(unix)]
+            let original_mode = {
+                use std::os::unix::fs::PermissionsExt;
+                path.metadata()?.permissions().mode() & 0o777
+            };
+            #[cfg(not(unix))]
+            let original_mode = 0o644;
+            let mode = if relative == Path::new("redguard-native") {
+                0o755
             } else {
-                #[cfg(unix)]
-                let original_mode = {
-                    use std::os::unix::fs::PermissionsExt;
-                    path.metadata()?.permissions().mode() & 0o777
-                };
-                #[cfg(not(unix))]
-                let original_mode = 0o644;
-                let mode = if relative == Path::new("redguard-native") {
-                    0o755
-                } else {
-                    original_mode
-                };
-                archive.start_file(name, options.unix_permissions(mode))?;
-                io::copy(&mut File::open(path)?, &mut archive)?;
-            }
+                original_mode
+            };
+            archive.start_file(name, options.unix_permissions(mode))?;
+            io::copy(&mut File::open(path)?, &mut archive)?;
         }
         archive.finish()?.flush()?;
         Ok(())
@@ -99,7 +84,7 @@ pub fn package(source: &Path, output: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
     fn runtime(root: &Path) {
-        for name in ["redguard-native", "README.md", "LICENSES.txt"] {
+        for name in FILES {
             let path = root.join(name);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, b"fixture").unwrap();
