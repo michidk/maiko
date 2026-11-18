@@ -8,7 +8,7 @@ cc='x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -O2 -I/work'
 x86_64-w64-mingw32-g++ -Wall -Wextra -Werror -O2 -I/work -x c++ -c sr_Game_memory.c -o guest_memory.obj
 link() {
     $cc "$@" -Wl,--gc-sections -Wl,--start-group ${rust_library:-/work/libmaiko_runtime.a} guest_memory.obj -Wl,--end-group \
-      -L/work -lstdc++ $CRATE_LIBRARIES \
+      -L/work -lstdc++ $CRATE_LIBRARIES -lopengl32 \
       -lws2_32 -luserenv -lntdll -ladvapi32 -ldbghelp -lgcc_eh -lwinpthread -luser32 -lshell32 -lole32 \
       -Wl,--image-base,0x10000000,--disable-dynamicbase,--no-insert-timestamp
 }

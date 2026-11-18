@@ -19,7 +19,7 @@ LINUX_IMAGE = 'redguard-recomp-linux:bookworm'
 
 # Mirrors crates/patcher/src/link.rs. LLD's MinGW driver picks the first match per directory in this order.
 WINDOWS_LIBRARIES = sorted(set(
-    'stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
+    'opengl32 stdc++ ws2_32 userenv ntdll advapi32 dbghelp gcc_eh winpthread '
     'user32 shell32 ole32 mingw32 gcc moldname mingwex msvcrt kernel32 pthread'.split() + CRATE_IMPORT_LIBRARIES))
 WINDOWS = f'''set -e
 cd /work

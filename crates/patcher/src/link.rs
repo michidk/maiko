@@ -13,9 +13,11 @@ use crate::{
 const WINDOWS_OBJECTS: [&str; 3] = ["crt2.o", "crtbegin.o", "crtend.o"];
 const WINDOWS_RUNTIME: [&str; 2] = ["libmaiko_host.a", "guest_memory.obj"];
 /// The library order GCC passes for the native build, including its implicit MinGW libraries.
-pub const WINDOWS_LIBRARIES: [&str; 30] = [
-    // The MinGW import library of windows-targets, which cpal's `windows` crate links.
+pub const WINDOWS_LIBRARIES: [&str; 31] = [
+    // MinGW import libraries the Rust host's crates link: windows-targets' (winit, cpal) and
+    // OpenGL (wgpu's GL backend).
     "windows.0.52.0",
+    "opengl32",
     "stdc++",
     "ws2_32",
     "userenv",
