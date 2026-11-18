@@ -63,14 +63,21 @@ fn every_button_presses_its_key_once_and_releases_it() {
     assert!(scans(&mut input).is_empty());
     press(&mut input, &mut pads, 0, Button::Start, false);
     assert_eq!(scans(&mut input), [0x81]);
-    assert!(!pads[0].press(Button::RightTrigger2, true), "unmapped buttons are ignored");
+    assert!(
+        !pads[0].press(Button::RightTrigger2, true),
+        "unmapped buttons are ignored"
+    );
 }
 
 #[test]
 fn the_stick_ignores_drift_and_does_not_chatter() {
     assert_eq!(direction(0.25, 0), 0);
     assert_eq!(direction(0.52, 0), 1);
-    assert_eq!(direction(0.45, 1), 1, "stays on above the release threshold");
+    assert_eq!(
+        direction(0.45, 1),
+        1,
+        "stays on above the release threshold"
+    );
     assert_eq!(direction(0.3, 1), 0);
     assert_eq!(direction(-1.0, 0), -1);
     let mut input = Input {

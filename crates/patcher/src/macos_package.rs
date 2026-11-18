@@ -99,11 +99,7 @@ pub fn package(source: &Path, output: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
     fn runtime(root: &Path) {
-        for name in [
-            "redguard-native",
-            "README.md",
-            "LICENSES.txt",
-        ] {
+        for name in ["redguard-native", "README.md", "LICENSES.txt"] {
             let path = root.join(name);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, b"fixture").unwrap();

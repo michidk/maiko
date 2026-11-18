@@ -377,11 +377,7 @@ impl Input {
             }
             self.controller_keys();
         }
-        if self
-            .controllers
-            .as_mut()
-            .is_some_and(Controllers::poll)
-        {
+        if self.controllers.as_mut().is_some_and(Controllers::poll) {
             self.controller_keys();
         }
         let mut pending = Pending::default();
@@ -464,7 +460,9 @@ fn window_failed(error: &str) -> ! {
 fn window_hint(linux: bool, display: bool, wayland: bool) -> &'static str {
     match (linux, display || wayland) {
         (false, _) => "",
-        (true, false) => " (neither DISPLAY nor WAYLAND_DISPLAY is set: Maiko needs a desktop session)",
+        (true, false) => {
+            " (neither DISPLAY nor WAYLAND_DISPLAY is set: Maiko needs a desktop session)"
+        }
         (true, true) => " (Maiko needs a Vulkan or OpenGL driver)",
     }
 }
@@ -624,8 +622,8 @@ pub unsafe extern "C" fn rg_mouse_service(registers: *mut u32) -> c_int {
                     picture((size.width, size.height), (input.width, input.height));
                 if input.focused && !overlay::is_open() {
                     let _ = window.set_cursor_position(winit::dpi::PhysicalPosition::new(
-                        px + i64::from(input.x) * pw / i64::from(input.width.max(1)),
-                        py + i64::from(input.y) * ph / i64::from(input.height.max(1)),
+                        (px + i64::from(input.x) * pw / i64::from(input.width.max(1))) as i32,
+                        (py + i64::from(input.y) * ph / i64::from(input.height.max(1))) as i32,
                     ));
                 }
                 input.dx = 0;

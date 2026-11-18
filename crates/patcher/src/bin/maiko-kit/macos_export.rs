@@ -109,9 +109,7 @@ pub(super) fn export(build: &Path, runtime: &Path, revision: &str, output: &Path
                 continue;
             }
             if !safe_path(&name)
-                || !(name == "maiko"
-                    || name == "README.md"
-                    || name == "LICENSES.txt")
+                || !(name == "maiko" || name == "README.md" || name == "LICENSES.txt")
             {
                 return Err(format!("Unexpected runtime file or game data: {name}").into());
             }

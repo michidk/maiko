@@ -1,9 +1,9 @@
 //! In-game overlay drawn over the finished Glide frame, toggled with the backtick key.
 //! While it is open the game receives no keyboard, mouse or controller input.
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::keyboard::{KeyCode, PhysicalKey};
 use std::cell::RefCell;
 use std::time::Instant;
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 pub use egui;
 
@@ -89,10 +89,13 @@ pub(crate) fn route(event: &WindowEvent, scale: f64) -> Routed {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let (unit, delta) = match *delta {
-                    MouseScrollDelta::LineDelta(x, y) => (egui::MouseWheelUnit::Line, egui::vec2(x, y)),
-                    MouseScrollDelta::PixelDelta(p) => {
-                        (egui::MouseWheelUnit::Point, egui::vec2((p.x / scale) as f32, (p.y / scale) as f32))
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        (egui::MouseWheelUnit::Line, egui::vec2(x, y))
                     }
+                    MouseScrollDelta::PixelDelta(p) => (
+                        egui::MouseWheelUnit::Point,
+                        egui::vec2((p.x / scale) as f32, (p.y / scale) as f32),
+                    ),
                 };
                 Some(egui::Event::MouseWheel {
                     unit,
@@ -121,7 +124,11 @@ fn route_key(code: KeyCode, pressed: bool, repeat: bool) -> Routed {
             }
             return Routed::Consumed;
         }
-        if overlay.open { Routed::Consumed } else { Routed::Game }
+        if overlay.open {
+            Routed::Consumed
+        } else {
+            Routed::Game
+        }
     })
 }
 
@@ -229,16 +236,21 @@ mod tests {
 
     #[test]
     fn backtick_toggles_and_open_overlay_takes_input() {
-        // SAFETY: a placeholder device for a synthetic event.
-        let device_id = unsafe { winit::event::DeviceId::dummy() };
+        let device_id = winit::event::DeviceId::dummy();
         let motion = WindowEvent::CursorMoved {
             device_id,
             position: winit::dpi::PhysicalPosition::new(10.0, 14.0),
         };
         assert_eq!(route_key(KeyCode::KeyW, true, false), Routed::Game);
         assert_eq!(route(&motion, 2.0), Routed::Game);
-        assert_eq!(route_key(KeyCode::Backquote, true, false), Routed::Toggled(true));
-        assert_eq!(route_key(KeyCode::Backquote, false, false), Routed::Consumed);
+        assert_eq!(
+            route_key(KeyCode::Backquote, true, false),
+            Routed::Toggled(true)
+        );
+        assert_eq!(
+            route_key(KeyCode::Backquote, false, false),
+            Routed::Consumed
+        );
         assert!(is_open());
         assert_eq!(route_key(KeyCode::KeyW, true, false), Routed::Consumed);
         assert_eq!(route(&motion, 2.0), Routed::Consumed);
@@ -247,7 +259,10 @@ mod tests {
             assert_eq!(o.events.len(), 1);
             assert_eq!(o.pointer, egui::pos2(5.0, 7.0), "pixels become points");
         });
-        assert_eq!(route_key(KeyCode::Backquote, true, false), Routed::Toggled(false));
+        assert_eq!(
+            route_key(KeyCode::Backquote, true, false),
+            Routed::Toggled(false)
+        );
         assert!(OVERLAY.with(|o| o.borrow().events.is_empty()));
         assert_eq!(route_key(KeyCode::KeyW, true, false), Routed::Game);
     }
