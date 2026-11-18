@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-glide"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "maiko-runtime",
  "rustyglide",
@@ -1501,7 +1501,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-host"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "maiko-glide",
  "maiko-runtime",
@@ -1509,7 +1509,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-launcher"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "directories",
  "egui",
@@ -1530,7 +1530,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-patcher"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "js-sys",
  "object",
@@ -1545,7 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-runtime"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
