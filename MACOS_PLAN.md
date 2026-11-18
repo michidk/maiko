@@ -16,7 +16,7 @@ Reuse the game/runtime service contracts, SDL input/timers/audio and POSIX files
 2. Build Darwin-specific host query/crash adapters, share portable file and save services and SDL. Exercise portable behavior on Linux and compile Darwin code with an SDK. No success stubs for memory queries.
 3. Cross-build original game, renderer and runnable boundary test executables. Inspect all Mach-O segments, symbols, relocations, dylib dependencies and low-address layout. Package runtime dependencies and a path-selectable RUN.command. Keep game assets out of source control; the requested personal runtime ZIP includes the owned game files.
 4. Run the boundary/game gates on macOS if a machine is available. Otherwise retain macOS runtime verification false and hand over exact executable/tests, with the missing runtime gate explicit. Do not claim parity from cross-compilation.
-5. Review source/evidence across models once; preserve decision log and resource limits. No Git publishing or PR creation.
+5. Review source/evidence across models once; preserve decision log and resource limits. Publishing is authorized by the later extraction request; keep Mac work in its separate draft PR.
 
 Verification goals: ABI registers/x87/callback/stack, low-address heap, POSIX case/path/save behavior, renderer and input, original menu, ship jump, movies when installed, save/reload and clean exit. Hardware/macOS acceptance is distinct from Linux tests and static Mach-O inspection.
 
@@ -32,7 +32,7 @@ The full Redguard LLVM attempt remains incomplete. The NASM native replacements 
 
 Sonnet 5.5 confirmed the checkpoint's claim scope, upstream architecture targets, artifact hashes and the first flag contracts. Its source-provenance and coverage findings triggered the following fixes. No further delegate was used for this fix pass.
 
-Latest clean backend check: `artifacts/20261112T094057335470Z-macos-backend/report.json`, 52.566 seconds with a warm toolchain. The report identifies 134 source inputs, 46 output files, upstream archive hashes and the actual LLVM driver. All source and output hashes were reread. The source-manifest gate rejects changed or added source files. Source remains uncommitted.
+Latest clean backend check: `artifacts/20261112T094057335470Z-macos-backend/report.json`, 52.566 seconds with a warm toolchain. The report identifies 134 source inputs, 46 output files, upstream archive hashes and the actual LLVM driver. All source and output hashes were reread. The source-manifest gate rejects changed or added source files. Source was uncommitted at this checkpoint and is now published in draft PR #1.
 
 The check now uses upstream's inline-division LLasm flags and opt/llc path. Signed/unsigned division and shared signed-comparison flags, including overflow boundaries, execute on native x86-64 Linux and emulated ARM64 Linux. QEMU does not establish Darwin ABI or Mac hardware correctness. Both architectures cross-link Mac diagnostics and compile the shared POSIX host, paths, save storage, file services and SDL input/timers. The initial POSIX compile caught a missing framework search path, now corrected. Memory-query diagnostics also contain code/stack/library readability cases, but no Darwin execution or game allocator proof is claimed.
 
