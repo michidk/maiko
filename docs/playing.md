@@ -2,39 +2,11 @@
 
 The reference behind the [README](../README.md): every option, the controller layout, movies, saves, logs and the optional version 5 fixes.
 
-## Command-line options
+## Launcher settings
 
-```
-redguard-native [--game-dir FOLDER | --choose-game-dir] [--user-dir FOLDER] [--cd-image PATH]
-                [--fullscreen | --window-size WIDTHxHEIGHT]
-                [--skip-intro] [--skip-outro] [--load-save N]
-                [--texture-filter original|smooth|sharp]
-```
+Start `maiko-launcher.exe` on Windows or `./maiko` on Linux and macOS. Open **Game Options** to configure fullscreen, window size, renderer, textures and skipping movies, then click **Play Redguard**.
 
-These are the options of the game itself, `redguard-native`, which the launcher starts with the settings from Game Options. You can also start it directly. Every option is optional. With none, the program finds the game and starts the original book menu. An unknown option, or a missing or invalid value, makes the program print this usage line and exit with code 1. On Windows, to use options without a terminal, make a shortcut to `redguard-native.exe` and add them after the path in the shortcut's **Target**; from a terminal, add them to the command, for example:
-
-```bat
-redguard-native.exe --fullscreen --skip-intro --load-save 1
-```
-
-| Option | Effect |
-|---|---|
-| `--game-dir FOLDER` | Use `FOLDER`, the one containing `RGFX.EXE`, as the game folder. Nothing is searched, asked or remembered, and a folder that does not hold a recognized game is an error (exit code 1) instead of a question. |
-| `--choose-game-dir` | Ask for the game folder (a folder dialog on Windows, a prompt in the terminal on Linux) instead of using the remembered one. Cannot be combined with `--game-dir`. |
-| `--user-dir FOLDER` | Keep the game's saves and settings in `FOLDER` instead of the game folder; the first run copies the existing ones there. |
-| `--cd-image PATH` | Where the movies and CD music come from instead of the installed `game.gog` or the Redguard disc: a disc image (`game.gog`, an ISO or a raw 2352-byte `.bin`), its cue sheet (`.cue`, needed for the music; one `.bin` for the disc or one per track), or a folder holding the disc's files and perhaps a rip of it. |
-| `--fullscreen` | Borderless fullscreen at your desktop resolution. |
-| `--window-size WIDTHxHEIGHT` | A window of this size, from 320x240 to 8192x8192, for example `--window-size 1600x1200`. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. Without either window option the window has the game's own size. |
-| `--skip-intro` | New Game starts on the ship without the intro movie. |
-| `--skip-outro` | Quitting from the book skips the book-closing animation. |
-| `--texture-filter MODE` | How textures are filtered. `original` (the default) does what the game asks: bilinear filtering, the soft look of the 3dfx original, with point sampling where the game requests it. `smooth` filters every texture bilinearly; `sharp` point-samples every texture for crisp pixels. The launcher offers the same choice under **Textures**. |
-| `--load-save N` | Load save slot `N` (0 to 999; the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message if that save does not exist. |
-
-The renderer picks a graphics backend by itself. To choose one, set **Renderer** in the launcher's Game Options, or set the `WGPU_BACKEND` environment variable to `vulkan`, `dx12` (Windows), `metal` (macOS) or `gl` before starting `redguard-native`. The log names the backend and graphics driver in use (`Renderer: …`).
-
-Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.
-
-The program also reads `REDGUARD_DIR`, the game folder; `--game-dir` takes precedence over it. Two variables help when reporting problems: `RG_FLASH_LOG=1` makes the program log every frame that is a single flat colour, and `RG_CAPTURE_DIR=FOLDER` makes it save a still of the game picture there from time to time. They are not needed to play.
+For direct game-executable usage, see [Advanced use](#advanced-use). The command-line options there do not apply to the launcher.
 
 ## Game controllers
 
@@ -75,11 +47,7 @@ Versions before 1.0 kept saves and settings in a `user-data` folder next to the 
 
 ## If something goes wrong
 
-If the game cannot start, it shows a message. To see everything it prints, start it from a Command Prompt in its folder and keep the output:
-
-```bat
-redguard-native.exe > maiko-log.txt 2>&1
-```
+If the game cannot start, it shows a message. When launched through the launcher, use its crash-report prompt or **Technical Support › Create report**. See [Reporting problems](#reporting-problems) for the report contents and log locations.
 
 Typical causes:
 
@@ -106,7 +74,7 @@ settings, your INI files and your newest save; never any game files. **Technical
 Create report** makes the same ZIP at any time. A game that stops drawing for 15 seconds logs
 `event=stall` with where it was, so a freeze leaves evidence too.
 
-Open an issue and attach the report, or the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your Windows version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
+Open an issue and attach the report, or the newest session log. Say what you were doing, which Redguard release you own (GOG, CD, other) and your operating system version. A short description of where in the game it happened, such as "opening ship" or "tavern, after talking to the barman", makes bugs much easier to find.
 
 ## Known limitations
 
@@ -128,3 +96,49 @@ The 1998 demo ships a later build of `RGFX.EXE`: version 1.0, build 5.0, where t
 The demo's island lock, its `[RTX_PATCH]` table and its debug overlay are not included.
 
 If you have the build 5.0 `RGFX.EXE` itself, Maiko accepts it directly. It runs with the full game's data, where the island lock stays off, and the option is not offered because the fixes are already in it. Maiko translates it through `metadata/build5/addresses.sci`, which gives the build 5.0 address of every build 1.0 address its patches use. The [Redguard Preservation demo page](https://michidk.github.io/redguard-preservation/demo.html#executable) describes every change; each patch is documented in `metadata/native/v5_fixes.sci`.
+
+## Advanced use
+
+### Command-line options
+
+```
+redguard-native [--game-dir FOLDER | --choose-game-dir] [--user-dir FOLDER] [--cd-image PATH]
+                [--fullscreen | --window-size WIDTHxHEIGHT]
+                [--skip-intro] [--skip-outro] [--load-save N]
+                [--texture-filter original|smooth|sharp]
+```
+
+These options apply only to the game executable, `redguard-native` on Linux and macOS or `redguard-native.exe` on Windows. They do not work on the launcher. For normal play, use the launcher's **Game Options** instead.
+
+Every option is optional. With none, the program finds the game and starts the original book menu. An unknown option, or a missing or invalid value, makes the program print this usage line and exit with code 1. On Windows, to use options without a terminal, make a shortcut to `redguard-native.exe` and add them after the path in the shortcut's **Target**; from a terminal, add them to the command, for example:
+
+```bat
+redguard-native.exe --fullscreen --skip-intro --load-save 1
+```
+
+| Option | Effect |
+|---|---|
+| `--game-dir FOLDER` | Use `FOLDER`, the one containing `RGFX.EXE`, as the game folder. Nothing is searched, asked or remembered, and a folder that does not hold a recognized game is an error (exit code 1) instead of a question. |
+| `--choose-game-dir` | Ask for the game folder (a folder dialog on Windows, a prompt in the terminal on Linux) instead of using the remembered one. Cannot be combined with `--game-dir`. |
+| `--user-dir FOLDER` | Keep the game's saves and settings in `FOLDER` instead of the game folder; the first run copies the existing ones there. |
+| `--cd-image PATH` | Where the movies and CD music come from instead of the installed `game.gog` or the Redguard disc: a disc image (`game.gog`, an ISO or a raw 2352-byte `.bin`), its cue sheet (`.cue`, needed for the music; one `.bin` for the disc or one per track), or a folder holding the disc's files and perhaps a rip of it. |
+| `--fullscreen` | Borderless fullscreen at your desktop resolution. |
+| `--window-size WIDTHxHEIGHT` | A window of this size, from 320x240 to 8192x8192, for example `--window-size 1600x1200`. The game still renders at its own resolution and is scaled to the window, and the mouse follows the scaling. Without either window option the window has the game's own size. |
+| `--skip-intro` | New Game starts on the ship without the intro movie. |
+| `--skip-outro` | Quitting from the book skips the book-closing animation. |
+| `--texture-filter MODE` | How textures are filtered. `original` (the default) does what the game asks: bilinear filtering, the soft look of the 3dfx original, with point sampling where the game requests it. `smooth` filters every texture bilinearly; `sharp` point-samples every texture for crisp pixels. The launcher offers the same choice under **Textures**. |
+| `--load-save N` | Load save slot `N` (0 to 999; the three-digit `SAVEGAME\SAVEGAME.NNN` folder in your saves, for example `SAVEGAME.001` for slot 1) instead of showing the book at startup. Startup stops with a message if that save does not exist. |
+
+The renderer picks a graphics backend by itself. To choose one, set **Renderer** in the launcher's Game Options, or set the `WGPU_BACKEND` environment variable to `vulkan`, `dx12` (Windows), `metal` (macOS) or `gl` before starting `redguard-native`. The log names the backend and graphics driver in use (`Renderer: …`).
+
+Nothing is written to your game files. If your `RGFX.EXE` is the second recognized build, the outro is always skipped because that file already contains that change.
+
+The program also reads `REDGUARD_DIR`, the game folder; `--game-dir` takes precedence over it. Two variables help when reporting problems: `RG_FLASH_LOG=1` makes the program log every frame that is a single flat colour, and `RG_CAPTURE_DIR=FOLDER` makes it save a still of the game picture there from time to time. They are not needed to play.
+
+### Capture terminal output
+
+Session logs are written automatically. To also capture the game executable's terminal output on Windows, open a Command Prompt in the extracted package folder and run:
+
+```bat
+redguard-native.exe > maiko-log.txt 2>&1
+```

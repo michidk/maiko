@@ -1,6 +1,6 @@
 # Runtime structure
 
-Maiko provides native Windows and Linux services for an owned Redguard installation. The runtime reads game assets from that installation and, like the original, writes the game's own files (INI files, saves, the logbook and map states) back into it.
+Maiko provides native Windows, Linux and macOS services for an owned Redguard installation. The runtime reads game assets from that installation and, like the original, writes the game's own files (INI files, saves, the logbook and map states) back into it.
 
 ## Rust workspace
 
@@ -52,10 +52,7 @@ stay in `crates/runtime/`; `crates/runtime/host/llasm.rs` and `crates/runtime/ru
 the CPU-state backend selected by Cargo's `llasm` feature. Linux can exercise that
 backend as well as the native assembly backend.
 
-Without an explicit game-directory argument, startup checks `game/RGFX.EXE`
-beside the executable, then `RGFX.EXE` directly beside it, before requesting a
-folder. Explicit `--game-dir` and `--choose-game-dir` keep precedence. Image hash
-validation still applies to every selected installation.
+Installation discovery is shared with the launcher in [locate.rs](../crates/launcher/src/locate.rs). It considers an explicit path, the remembered installation, nearby folders and conventional GOG, Wine, Heroic and Lutris locations. The launcher asks for a folder when discovery fails. Direct executable options are documented in the [command-line reference](playing.md#command-line-options); selected installations still undergo image hash validation.
 
 ## Session diagnostics
 

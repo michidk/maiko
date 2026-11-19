@@ -9,7 +9,7 @@ You must supply your own copy of Redguard.
 
 1. Extract the whole runtime ZIP. Keep `maiko`, `redguard-native` and
    `Frameworks/` together.
-2. If macOS blocks this trusted test build, dismiss the warning with **Done**
+2. If macOS blocks the downloaded package, dismiss the warning with **Done**
    and run this in Terminal, adjusting the extracted folder path:
 
    ```sh
@@ -25,11 +25,8 @@ You must supply your own copy of Redguard.
    the intro; **Play Redguard** starts the game. You can also open
    `redguard-native` directly.
 
-The executable runs natively on both Mac architectures. It checks `game/`
-beside itself, then its own directory, then the remembered installation before
-opening the picker. Only recognized original `RGFX.EXE` images are accepted.
-Use `--choose-game-dir` to choose a different installation, or
-`--game-dir /path/to/Redguard` to select one explicitly.
+The executable runs natively on both Mac architectures. It uses the shared installation search and opens a folder picker when needed. Only recognized original `RGFX.EXE` images are accepted.
+For direct executable options, see [Advanced use](#advanced-use).
 
 The game keeps its saves and settings in the game folder, shared with the
 GOG/DOSBox version. The selected game folder is remembered under
@@ -53,16 +50,24 @@ exit; `BLOCKED` or `event=panic` indicates a fatal failure. A clean exit can sti
 be unintended, so include what you were doing. Pressing Escape/F10 or requesting
 a window close is logged to help establish that sequence.
 
-To try without the intro, run `./redguard-native --skip-intro` in the package
-folder. If Terminal reports `permission denied`, use `chmod +x redguard-native`.
+Use the launcher's **Game Options** to skip the intro.
 If a `dyld` error occurs before Maiko starts, no session log may be created;
 include that loader error and ensure the complete framework directories and
 symlinks were extracted.
 
-## Verification
+## Advanced use
 
-Both architectures cross-link. The same CPU-state backend has rendered the menu
-and opening ship on Linux with software OpenGL and dummy audio. The owner has
-also supplied Mac runtime output showing movie/audio activity and a clean exit
-path. That output alone does not establish hardware quality or full-game
-completion. The longer Linux movie probe still times out at its final Quit step.
+From Terminal in the extracted package folder, run the game executable directly when you need command-line options:
+
+```sh
+./redguard-native --choose-game-dir
+```
+
+Use `--game-dir /path/to/Redguard` to select a folder explicitly, or `--skip-intro` to skip the intro. These arguments belong to `redguard-native`, not `maiko`, the launcher. If Terminal reports `permission denied` for the game executable, use `chmod +x redguard-native`.
+
+See the [full command-line reference](../../docs/playing.md#command-line-options).
+
+<a id="verification"></a>
+## Developer reference
+
+Backend build instructions and the scope of platform verification belong in the [macOS backend guide](README.md).

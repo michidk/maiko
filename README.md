@@ -1,16 +1,30 @@
-# Maiko
+<h1 align="center">Maiko</h1>
 
-Maiko runs *The Elder Scrolls Adventures: Redguard* (1998) natively on Windows, Linux and macOS, without DOSBox. You build it from your own copy of the game; Maiko contains no game files.
+<p align="center">
+  Run <em>The Elder Scrolls Adventures: Redguard</em> natively on Windows, Linux and macOS, without DOSBox.<br>
+  Built from your own copy of the game. No game files included.
+</p>
 
-![Cyrus on the docks of Stros M'Kai, running natively in Maiko on Windows](docs/images/screenshot.png)
+<p align="center">
+  <a href="#setup">Get started</a> ·
+  <a href="https://michidk.github.io/maiko/">Browser builder</a> ·
+  <a href="docs/playing.md">Playing guide</a> ·
+  <a href="#for-developers">Development</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/michidk/maiko/releases/latest"><img src="https://img.shields.io/github/v/release/michidk/maiko?color=green" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4a1a2a" alt="MIT license"></a>
+  <a href="https://discord.com/invite/xjCCyqbxkp"><img src="https://img.shields.io/badge/Discord-Redguard%20community-5865F2?logo=discord&amp;logoColor=white" alt="Redguard community on Discord"></a>
+</p>
+
+<p align="center">
+  <img src="docs/images/screenshot.png" width="642" alt="Cyrus on the docks of Stros M'Kai, running natively in Maiko on Windows">
+</p>
 
 Join the [Discord](https://discord.com/invite/xjCCyqbxkp) and discuss Maiko in `#redguard-maiko-recomp`.
 
 **Disclaimer:** AI was used heavily in this reverse engineering project; without AI it would not have been possible.
-
-## Name
-
-Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the cartographer in *Redguard*. The name reflects how the project maps the original DOS executable to native code for modern systems.
 
 ## Features
 
@@ -24,13 +38,15 @@ Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the carto
 
 ## Setup
 
-Watch the video guide first: it shows building, installing and playing.
-
-[![Video guide: playing Redguard with Maiko on Windows, Mac and Linux](https://img.youtube.com/vi/EP6OcLl9wWo/hqdefault.jpg)](https://www.youtube.com/watch?v=EP6OcLl9wWo)
-
 You need the **GOG release** of Redguard (or the original CD): its `RGFX.EXE` is the Glide executable Maiko is built from. The Steam release ships only the software-rendered `RG.EXE` and does not work. Maiko recognizes three builds of `RGFX.EXE` and refuses any other.
 
 **In the browser (easiest):** open the [Maiko builder](https://michidk.github.io/maiko/), select your `RGFX.EXE` and wait a few minutes. The build runs in your browser; nothing is uploaded.
+
+[Watch the video guide](https://www.youtube.com/watch?v=EP6OcLl9wWo) for building, installing and playing on Windows, Mac and Linux.
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=EP6OcLl9wWo"><img src="docs/images/video-guide.webp" width="640" alt="Play the video guide: build and play Redguard with Maiko"></a>
+</p>
 
 **On the command line:** download `maiko-patcher` and the runtime kit for your system from the [latest release](https://github.com/michidk/maiko/releases/latest), install [Wasmtime](https://wasmtime.dev/), then:
 
@@ -49,7 +65,7 @@ Extract the ZIP into **its own writable folder** (not the game folder) and start
 - **Linux:** x86-64 with glibc 2.36 or newer, Wayland or X11, and a Vulkan or OpenGL driver.
 - **macOS:** 11 or newer, Intel or Apple Silicon. Follow the [launch instructions](platforms/macos/LAUNCH.md) for the quarantine warning.
 
-The game can also be started directly as `redguard-native` with options such as `--fullscreen`, `--skip-intro` or `--load-save 1`. [docs/playing.md](docs/playing.md) lists every option, the controller layout, movies, saves and logs.
+Use **Game Options** in the launcher to configure fullscreen, window size, renderer, textures and skipping movies. The [playing guide](docs/playing.md) covers controllers, movies, saves and logs.
 
 ## Problems
 
@@ -64,6 +80,20 @@ If the screen stays black, choose another **Renderer** in the launcher's Game Op
 ## For developers
 
 [docs/building.md](docs/building.md) (source checks), [docs/architecture.md](docs/architecture.md) (runtime structure) and [AGENTS.md](AGENTS.md) (workflow and rules for contributors and coding agents).
+
+## Name
+
+Maiko is named after [Maiko](https://en.uesp.net/wiki/Redguard:Maiko), the cartographer in *Redguard*. The name reflects how the project maps the original DOS executable to native code for modern systems.
+
+## Advanced use
+
+To start the game directly, run `redguard-native` on Linux or macOS, or `redguard-native.exe` on Windows. Command-line options apply to this game executable, **not the launcher**. For example, on Windows:
+
+```bat
+redguard-native.exe --fullscreen --skip-intro --load-save 1
+```
+
+See the [command-line reference](docs/playing.md#command-line-options) for all options and environment variables. For normal play, configure the game through the launcher's **Game Options**.
 
 ## Legal
 

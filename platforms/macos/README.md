@@ -1,4 +1,6 @@
-# macOS backend work
+<a id="macos-backend-work"></a>
+
+# macOS backend development
 
 The [browser builder](https://michidk.github.io/maiko/) can compile a universal
 Mac runtime ZIP from your owned `RGFX.EXE`. It keeps the executable on your
@@ -7,6 +9,10 @@ for the toolchain and maintainer commands.
 
 For the runtime ZIP, follow [Launching Maiko on macOS](LAUNCH.md), including
 the package-specific quarantine command if macOS blocks opening it.
+
+## Backend checks
+
+Run these commands when developing the compiler or runtime backend. For a playable package, use the browser builder linked above.
 
 M-HT/SR's [Albion build configuration](https://github.com/M-HT/SR/blob/ac690ddf3010bc3d2c875cb1b5e8da4f53a8d5b3/games/Albion/SR-Main/SConstruct#L259) selects llasm/LLVM for both Intel and ARM64 Macs. Apple Silicon can use native ARM code through that route. Our Redguard macOS game port is incomplete.
 
@@ -37,12 +43,15 @@ Both complete engine binaries have cross-linked. The same CPU-state/offset backe
 
 With the original disc image present, the Linux offset backend decodes movie PCM, skips the intro's configured frame points, detects CD music tracks and reaches initialized ship gameplay. A missing zero-flag producer for absent Smacker audio tracks previously sent a zero sample rate to the audio service; the flag metadata now preserves that producer at the shared branch. The longer movie probe still times out at its final Quit step, which also reproduces on the existing native Linux backend. It does not pass the complete movie acceptance check.
 
+## Package a diagnostic runtime
+
+This developer packager has a different input contract from the browser runtime kits, which include the launcher.
+
 Full-game builds stage `runtime/redguard-native` as a universal executable
 and launch instructions. No command launcher,
 original installation, disc image, SDK or compiler belongs in that runtime ZIP.
 The executable discovers an adjacent or remembered owned installation and uses
-macOS's built-in folder picker when necessary. Saves and logs use the user's
-standard directories. See [launch instructions](LAUNCH.md).
+macOS's built-in folder picker when necessary. Saves remain in the game folder; logs use the user's standard log directory. See [launch instructions](LAUNCH.md).
 
 After adding complete `LICENSES.txt` notices for Maiko, SR
 and Rust dependencies, package the runtime with:
